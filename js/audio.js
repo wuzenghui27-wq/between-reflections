@@ -2,7 +2,7 @@
 // 一段轻柔循环音乐 + 湖水环境声 + 反馈音；梦境时音色更亮、带回声。
 (function () {
   const KEY = 'between-reflections:sound';
-  let ctx = null, master, musicBus, musicLP, delay, delayFb, delayWet, sfxBus, ambGain, ambBP;
+  let ctx = null, reverb, reverbWet, master, musicBus, musicLP, delay, delayFb, delayWet, sfxBus, ambGain, ambBP;
   let enabled = true;
   try { enabled = localStorage.getItem(KEY) !== 'off'; } catch (e) { /* 无痕模式等 */ }
 
@@ -36,7 +36,21 @@
     musicBus.connect(delay); delay.connect(delayFb); delayFb.connect(delay); delay.connect(delayWet); delayWet.connect(musicLP);
     musicLP.connect(master);
 
+    // 空灵的混响：用衰减噪声生成脉冲响应
+    reverb = ctx.createConvolver();
+    const irLen = Math.floor(ctx.sampleRate * 3.2);
+    const ir = ctx.createBuffer(2, irLen, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      for (let i = 0; i < irLen; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 2.6);
+    }
+    reverb.buffer = ir;
+    reverbWet = ctx.createGain(); reverbWet.gain.value = 0.42;
+    reverb.connect(reverbWet); reverbWet.connect(master);
+    musicLP.connect(reverb);
+
     sfxBus = ctx.createGain(); sfxBus.gain.value = 0.55; sfxBus.connect(master);
+    const sfxSend = ctx.createGain(); sfxSend.gain.value = 0.35; sfxBus.connect(sfxSend); sfxSend.connect(reverb);
 
     // 湖水环境声：滤波噪声 + 慢速起伏
     const len = ctx.sampleRate * 3;
@@ -121,6 +135,7 @@
       if (!ctx) return;
       const t = ctx.currentTime;
       musicLP.frequency.setTargetAtTime(on ? 2800 : 1700, t, 0.15);
+      reverbWet.gain.setTargetAtTime(on ? 0.62 : 0.42, t, 0.2);
       delayWet.gain.setTargetAtTime(on ? 0.34 : 0.12, t, 0.15);
       ambBP.frequency.setTargetAtTime(on ? 1100 : 600, t, 0.3);
     },

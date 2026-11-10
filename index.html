@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1d3f">
 <title>倒影之间 · Between Reflections</title>
 <meta name="description" content="一次按键，走进湖面的另一场梦。Game Off 2026 · 主题 SHIFT">
 <link rel="stylesheet" href="css/style.css">
@@ -11,81 +12,111 @@
 <div id="stage">
   <canvas id="game" tabindex="0" aria-label="游戏画面：按 Shift 或空格在湖岸与梦境之间切换"></canvas>
 
+  <!-- 行走中的极简 HUD -->
   <div id="hud" class="hidden">
-    <div id="worldPill" data-world="real"><span class="dot"></span><span id="worldName">湖岸</span></div>
-    <button class="icon" data-act="pause" aria-label="暂停 (Esc)" title="暂停 (Esc)">❙❙</button>
+    <div id="worldPill" class="glass" data-world="real">
+      <svg class="ico sun" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="4"/><g stroke-linecap="round"><path d="M10 1.8v2.2M10 16v2.2M1.8 10H4M16 10h2.2M4.2 4.2l1.5 1.5M14.3 14.3l1.5 1.5M4.2 15.8l1.5-1.5M14.3 5.7l1.5-1.5"/></g></svg>
+      <svg class="ico moon" viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 12.6A6.5 6.5 0 0 1 7.4 4.5a6.5 6.5 0 1 0 8.1 8.1z"/></svg>
+      <span id="worldName">湖岸</span>
+    </div>
+    <button class="glass round" data-act="pause" aria-label="暂停 (Esc)" title="暂停 (Esc)">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5.5" y="4.5" width="3" height="11" rx="1.2"/><rect x="11.5" y="4.5" width="3" height="11" rx="1.2"/></svg>
+    </button>
   </div>
 
   <div id="chapterCard" aria-live="polite"><div class="ch-no"></div><div class="ch-name"></div></div>
-  <div id="hint" aria-live="polite"></div>
-  <div id="reason" aria-live="assertive"><div class="r-main"></div><div class="r-tip"></div></div>
+  <div id="hint" class="glass" aria-live="polite"></div>
+  <div id="reason" class="glass" aria-live="assertive"><div class="r-main"></div><div class="r-tip"></div></div>
   <div id="introLine">沿着湖岸走吧。<br>另一边，也有通往远方的路。</div>
 
-  <!-- 标题页 -->
+  <!-- 标题 -->
   <section id="titleScreen" class="panel show" aria-label="标题">
-    <div class="card title-card">
+    <div class="title-block">
+      <p class="eyebrow">GAME OFF 2026 · SHIFT</p>
       <h1>倒影之间</h1>
       <p class="sub">Between Reflections</p>
       <p class="tagline">一次按键，走进湖面的另一场梦。</p>
-      <button id="btnStart" class="primary" data-act="start">开始旅行</button>
+      <button id="btnStart" class="pill primary" data-act="start">开始旅行</button>
       <div class="row">
-        <button data-act="sound" aria-pressed="true">声音：开</button>
-        <button data-act="help">操作说明</button>
-        <button data-act="credits">制作与署名</button>
-      </div>
-      <div id="help" class="help hidden">
-        <dl>
-          <dt><kbd>Shift</kbd> / <kbd>空格</kbd> / 点击画面</dt><dd>瞬间走到另一个世界（每次新按下切换一次）</dd>
-          <dt><kbd>R</kbd></dt><dd>回到最近的检查点</dd>
-          <dt><kbd>Esc</kbd></dt><dd>暂停 / 继续</dd>
-        </dl>
-        <p>旅人会自己向前走。踩过发光石板，另一个世界里带同样记号的桥会展开；桥变成实线后再切换过去。</p>
-        <p class="muted">检查点只保存在本次游玩中，刷新页面会从标题开始。</p>
+        <button class="pill ghost" data-act="sound" aria-pressed="true">声音 开</button>
+        <button class="pill ghost" data-act="help">操作说明</button>
+        <button class="pill ghost" data-act="credits">制作与署名</button>
       </div>
     </div>
   </section>
 
+  <!-- 操作说明 -->
+  <section id="helpScreen" class="panel dim" aria-label="操作说明">
+    <div class="sheet glass">
+      <h2>操作说明</h2>
+      <ul class="list">
+        <li><span class="keys"><kbd>Shift</kbd><kbd>空格</kbd><kbd>点击</kbd></span><span>瞬间走到另一个世界</span></li>
+        <li><span class="keys"><kbd>R</kbd></span><span>回到最近的检查点</span></li>
+        <li><span class="keys"><kbd>Esc</kbd></span><span>暂停 / 继续</span></li>
+      </ul>
+      <p class="note">旅人会自己向前走。踩过发光的石板，另一边带同样记号的桥会展开；桥完整亮起后再切换过去。人物脚下的圆圈表示另一边此刻能站，叉号表示危险。</p>
+      <p class="note muted">检查点只保存在本次游玩中，刷新页面会回到标题。</p>
+      <button class="pill primary" data-act="back">好的</button>
+    </div>
+  </section>
+
   <!-- 暂停 -->
-  <section id="pauseScreen" class="panel" aria-label="暂停">
-    <div class="card">
+  <section id="pauseScreen" class="panel dim" aria-label="暂停">
+    <div class="sheet glass">
       <h2>暂停</h2>
-      <button id="btnResume" class="primary" data-act="resume">继续</button>
-      <button data-act="retry">重试本段</button>
-      <button data-act="sound" aria-pressed="true">声音：开</button>
-      <button data-act="reduce" aria-pressed="false">减少装饰动画：关</button>
-      <button data-act="title">返回标题</button>
+      <div class="group">
+        <button id="btnResume" class="row-btn strong" data-act="resume">继续旅行</button>
+        <button class="row-btn" data-act="retry">重试本段</button>
+      </div>
+      <div class="group">
+        <button class="row-btn toggle" data-act="sound" aria-pressed="true"><span>声音</span><i class="switch"></i></button>
+        <button class="row-btn toggle" data-act="reduce" aria-pressed="false"><span>减少装饰动画</span><i class="switch"></i></button>
+      </div>
+      <div class="group">
+        <button class="row-btn danger" data-act="title">返回标题</button>
+      </div>
     </div>
   </section>
 
   <!-- 抵达 -->
   <section id="endScreen" class="panel" aria-label="抵达">
-    <div class="card end-card">
-      <h2>旅程已抵达</h2>
-      <p class="muted">月亮与光轮，在湖面两侧对齐了。</p>
-      <button id="btnAgain" class="primary" data-act="again">再走一次</button>
+    <div class="end-block">
+      <h2 class="big">旅程已抵达</h2>
+      <p class="tagline">月亮与光轮，在湖面两侧对齐了。</p>
+      <button id="btnAgain" class="pill primary" data-act="again">再走一次</button>
       <div class="row">
-        <button data-act="title">返回标题</button>
-        <button data-act="credits">制作与署名</button>
+        <button class="pill ghost" data-act="title">返回标题</button>
+        <button class="pill ghost" data-act="credits">制作与署名</button>
       </div>
     </div>
   </section>
 
   <!-- 制作与署名 -->
-  <section id="creditsScreen" class="panel" aria-label="制作与署名">
-    <div class="card">
+  <section id="creditsScreen" class="panel dim" aria-label="制作与署名">
+    <div class="sheet glass">
       <h2>制作与署名</h2>
-      <p>《倒影之间》· Game Off 2026 参赛作品，主题 SHIFT。</p>
-      <p>策划：meter<br>程序、图形与声音：在 AI 辅助下原创编写</p>
-      <p class="muted">画面全部由代码实时绘制，音乐和音效由 Web Audio 实时合成，未使用第三方素材、字体或游戏引擎。</p>
-      <button id="btnCreditsBack" class="primary" data-act="creditsBack">返回</button>
+      <p class="note">《倒影之间》· Game Off 2026 参赛作品，主题 SHIFT。</p>
+      <ul class="list plain">
+        <li><span>策划</span><span>meter</span></li>
+        <li><span>程序、画面与声音</span><span>AI 辅助原创编写</span></li>
+      </ul>
+      <p class="note muted">画面全部由代码实时绘制，音乐与音效由 Web Audio 实时合成。没有使用第三方素材、字体或游戏引擎。</p>
+      <button id="btnCreditsBack" class="pill primary" data-act="back">返回</button>
     </div>
   </section>
 </div>
 
 <script src="js/config.js"></script>
+<script src="js/util.js"></script>
 <script src="js/level.js"></script>
 <script src="js/audio.js"></script>
-<script src="js/render.js"></script>
 <script src="js/game.js"></script>
+<script src="js/gfx/fx.js"></script>
+<script src="js/gfx/palette.js"></script>
+<script src="js/gfx/scenery.js"></script>
+<script src="js/gfx/props.js"></script>
+<script src="js/gfx/traveler.js"></script>
+<script src="js/gfx/renderer.js"></script>
+<script src="js/ui.js"></script>
 </body>
 </html>
