@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>倒影之间 · Between Reflections</title>
+<meta name="description" content="一次按键，走进湖面的另一场梦。Game Off 2026 · 主题 SHIFT">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="game" tabindex="0" aria-label="游戏画面：按 Shift 或空格在湖岸与梦境之间切换"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="worldPill" data-world="real"><span class="dot"></span><span id="worldName">湖岸</span></div>
+    <button class="icon" data-act="pause" aria-label="暂停 (Esc)" title="暂停 (Esc)">❙❙</button>
+  </div>
+
+  <div id="chapterCard" aria-live="polite"><div class="ch-no"></div><div class="ch-name"></div></div>
+  <div id="hint" aria-live="polite"></div>
+  <div id="reason" aria-live="assertive"><div class="r-main"></div><div class="r-tip"></div></div>
+  <div id="introLine">沿着湖岸走吧。<br>另一边，也有通往远方的路。</div>
+
+  <!-- 标题页 -->
+  <section id="titleScreen" class="panel show" aria-label="标题">
+    <div class="card title-card">
+      <h1>倒影之间</h1>
+      <p class="sub">Between Reflections</p>
+      <p class="tagline">一次按键，走进湖面的另一场梦。</p>
+      <button id="btnStart" class="primary" data-act="start">开始旅行</button>
+      <div class="row">
+        <button data-act="sound" aria-pressed="true">声音：开</button>
+        <button data-act="help">操作说明</button>
+        <button data-act="credits">制作与署名</button>
+      </div>
+      <div id="help" class="help hidden">
+        <dl>
+          <dt><kbd>Shift</kbd> / <kbd>空格</kbd> / 点击画面</dt><dd>瞬间走到另一个世界（每次新按下切换一次）</dd>
+          <dt><kbd>R</kbd></dt><dd>回到最近的检查点</dd>
+          <dt><kbd>Esc</kbd></dt><dd>暂停 / 继续</dd>
+        </dl>
+        <p>旅人会自己向前走。踩过发光石板，另一个世界里带同样记号的桥会展开；桥变成实线后再切换过去。</p>
+        <p class="muted">检查点只保存在本次游玩中，刷新页面会从标题开始。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 暂停 -->
+  <section id="pauseScreen" class="panel" aria-label="暂停">
+    <div class="card">
+      <h2>暂停</h2>
+      <button id="btnResume" class="primary" data-act="resume">继续</button>
+      <button data-act="retry">重试本段</button>
+      <button data-act="sound" aria-pressed="true">声音：开</button>
+      <button data-act="reduce" aria-pressed="false">减少装饰动画：关</button>
+      <button data-act="title">返回标题</button>
+    </div>
+  </section>
+
+  <!-- 抵达 -->
+  <section id="endScreen" class="panel" aria-label="抵达">
+    <div class="card end-card">
+      <h2>旅程已抵达</h2>
+      <p class="muted">月亮与光轮，在湖面两侧对齐了。</p>
+      <button id="btnAgain" class="primary" data-act="again">再走一次</button>
+      <div class="row">
+        <button data-act="title">返回标题</button>
+        <button data-act="credits">制作与署名</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 制作与署名 -->
+  <section id="creditsScreen" class="panel" aria-label="制作与署名">
+    <div class="card">
+      <h2>制作与署名</h2>
+      <p>《倒影之间》· Game Off 2026 参赛作品，主题 SHIFT。</p>
+      <p>策划：meter<br>程序、图形与声音：在 AI 辅助下原创编写</p>
+      <p class="muted">画面全部由代码实时绘制，音乐和音效由 Web Audio 实时合成，未使用第三方素材、字体或游戏引擎。</p>
+      <button id="btnCreditsBack" class="primary" data-act="creditsBack">返回</button>
+    </div>
+  </section>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/level.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/render.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
