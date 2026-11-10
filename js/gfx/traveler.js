@@ -1,16 +1,15 @@
 // 旅人：披斗篷、背小包的剪影，一条会发光、随风飘动的长围巾。
-// 以“现实坐标”作画，脚底在 y=540；梦境里自动倒立。
+// sx, foot 为屏幕坐标；o.air 为空中姿态。
 (function () {
-  const C = RF.CFG, U = RF.U, X = RF.FX;
-  const FOOT = C.REAL_FOOT;
+  const U = RF.U, X = RF.FX;
   const rgb = U.rgb;
 
-  // o: { phase, still, alpha, ink, rim, scarf, glow, t, ghost }
-  function draw(sx, o) {
+  // o: { phase, still, air, alpha, ink, rim, scarf, glow, t }
+  function draw(sx, foot, o) {
     const ctx = X.ctx;
     const a = o.alpha === undefined ? 1 : o.alpha;
     if (a <= 0.01) return;
-    const f = FOOT;
+    const f = foot;
     const sw = o.still ? 0 : Math.sin(o.phase);
     const bob = o.still ? 0 : Math.abs(Math.cos(o.phase)) * 1.5;
     const top = f - 58 - bob;
@@ -40,8 +39,13 @@
     // 腿
     ctx.strokeStyle = rgb(o.ink); ctx.lineWidth = 3.6; ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(sx - 2, f - 16); ctx.lineTo(sx - 2 + sw * 6, f - 1);
-    ctx.moveTo(sx + 2, f - 16); ctx.lineTo(sx + 2 - sw * 6, f - 1);
+    if (o.air) {
+      ctx.moveTo(sx - 2, f - 16); ctx.lineTo(sx - 7, f - 7); ctx.lineTo(sx - 3, f - 2);
+      ctx.moveTo(sx + 2, f - 16); ctx.lineTo(sx + 8, f - 9); ctx.lineTo(sx + 5, f - 3);
+    } else {
+      ctx.moveTo(sx - 2, f - 16); ctx.lineTo(sx - 2 + sw * 6, f - 1);
+      ctx.moveTo(sx + 2, f - 16); ctx.lineTo(sx + 2 - sw * 6, f - 1);
+    }
     ctx.stroke();
 
     // 背包

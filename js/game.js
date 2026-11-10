@@ -1,265 +1,317 @@
-// 游戏逻辑（不碰 DOM、不发声音）：状态机、通行判定、机关、检查点。
-// 界面、声音通过事件订阅：G.on('fail', fn) 等。
+// 游戏逻辑（不碰 DOM、不发声音）：奔跑、跳跃、昼夜切换、碰撞、铃铛与门、灯、检查点。
+// 界面与声音通过事件订阅：G.on('fail', fn) 等。逻辑是确定性的，test/solve.js 用它验证关卡可通。
 (function () {
   const C = RF.CFG, LV = RF.LEVEL, U = RF.U;
-  const other = w => (w === 'real' ? 'dream' : 'real');
+  const other = w => (w === 'day' ? 'night' : 'day');
+  const active = (o, w) => o.w === 'both' || o.w === w;
 
   RF.REASONS = {
-    deploying: '桥还在展开',
-    gap: '这边的路还没接上',
-    blocked: '前方被挡住了'
+    fall: '脚下没有路了',
+    wall: '撞上了台阶',
+    stuck: '另一面这里是实心的',
+    gate: '门还锁着',
+    hazard: '被挡住了'
   };
   RF.TIPS = {
-    deploying: '等桥完整亮起、听到清脆的提示音，再切换。',
-    gap: '先看另一边的路是否完整；发光石板会让对面的桥展开。',
-    blocked: '在碰到障碍之前，按 Shift 走到另一边。'
+    fall: '留意前方淡色的轮廓，那是另一面的路，提前切过去。缺口可以按空格跳过。',
+    wall: '按空格（或 ↑）跳上去。',
+    stuck: '等走过那一段再切换。',
+    gate: '先切到另一面，碰响铃铛，门就会打开。',
+    hazard: '另一面这里没有它，切过去；矮的障碍可以跳过。'
   };
+
+  // ------------------------------------------------------------ 几何查询（纯函数，供逻辑与画面共用）
+  const Q = {
+    // 与角色身体横向重叠、在某一面存在的地面
+    supportY(world, x, foot, tol) {
+      let best = null;
+      for (const s of LV.solids) {
+        if (s.x0 > x + C.HALF_W) break;
+        if (s.x1 < x - C.HALF_W || !active(s, world)) continue;
+        if (s.y >= foot - tol && s.y <= foot + 1) { if (best === null || s.y < best) best = s.y; }
+      }
+      return best;
+    },
+    // 实心地面是否插进身体（薄平台不算）
+    solidInBody(world, x, foot) {
+      for (const s of LV.solids) {
+        if (s.x0 > x + C.HALF_W - 1) break;
+        if (s.thin || s.x1 < x - C.HALF_W + 1 || !active(s, world)) continue;
+        if (s.y < foot - 0.5) return s;
+      }
+      return null;
+    },
+    hazardHit(world, x, foot, gates) {
+      const l = x - C.HALF_W + 3, r = x + C.HALF_W - 3, top = foot - C.BODY_H + 4, bot = foot - 2;
+      for (const h of LV.hazards) {
+        if (h.x0 > r) break;
+        if (h.x1 < l || !active(h, world)) continue;
+        if (h.gate && gates[h.gate]) continue;
+        if (top < h.y1 && bot > h.y0) return h;
+      }
+      return null;
+    },
+    groundAt(world, x) {  // 某处最高的地面（用于检查点落脚）
+      let best = null;
+      for (const s of LV.solids) if (active(s, world) && x >= s.x0 && x <= s.x1 && (best === null || s.y < best)) best = s.y;
+      return best;
+    }
+  };
+  RF.Q = Q;
 
   function createGame() {
     const handlers = {};
     const G = {
-      // 状态：title | intro | walking | failing | ready | paused | arrived | ended
+      // title | intro | running | failing | ready | paused | arrived | ended
       state: 'title', prevState: null,
-      px: 0, world: 'real', phase: 0, speedNow: 0,
+      px: 0, foot: C.GROUND, vy: 0, onGround: true, coyote: 0, jumpBuf: 0,
+      world: 'day', phase: 0, airT: 0,
+      gates: {}, got: {}, cpIndex: 0, regionIndex: 0,
       animT: 0, timer: 0, readyDur: 0,
-      cpIndex: 0,
-      bridges: {}, firedPlates: new Set(),
-      // 表现用状态
-      links: [], afterimage: null, switchFx: 0, fade: 0, playerAlpha: 1, alignExtra: 0, flashes: {},
-      pendingSwitch: false, failReason: null, failStreak: 0, lastFail: null,
-      shown: new Set(), tutorialDone: false,
-      reduceMotion: false,
-      stats: { fails: 0, switches: 0, retries: 0, time: 0 },
-
+      pendingSwitch: false, failReason: null, failKind: null, failStreak: 0, lastFail: null,
+      wipe: null, fade: 0, playerAlpha: 1, flashes: {}, onBeatFx: 0,
+      shown: {}, reduceMotion: false, lowFx: false,
+      stats: { fails: 0, switches: 0, time: 0 },
       on(ev, fn) { (handlers[ev] = handlers[ev] || []).push(fn); },
       emit(ev, ...a) { (handlers[ev] || []).forEach(fn => fn(...a)); }
     };
+    G.beat = () => G.px / C.BEAT_PX;
 
-    // ------------------------------------------------------------ 通行判定
-    G.hazardAt = function (world, x) {
-      for (const h of LV.holes[world]) {
-        if (x > h.x0 && x < h.x1) {
-          if (h.bridge) {
-            const s = G.bridges[h.bridge];
-            if (s.state === 'open') return null;
-            if (s.state === 'deploying') return 'deploying';
-          }
-          return 'gap';
-        }
-      }
-      for (const o of LV.obstacles) {
-        if (o.world === world && x + C.HALF_W > o.x && x - C.HALF_W < o.x + o.w) return 'blocked';
-      }
-      return null;
-    };
-
-    function setWorld(w, silent) {
-      G.world = w;
-      G.emit('world', w, !!silent);
-    }
+    function setWorld(w, silent) { G.world = w; G.emit('world', w, !!silent); }
 
     G.loadCheckpoint = function (i) {
       const cp = LV.checkpoints[i];
       G.cpIndex = i;
       G.px = cp.x;
       setWorld(cp.world, true);
-      for (const b of LV.bridges) {
-        if (cp.preopen.includes(b.id)) G.bridges[b.id] = { state: 'open', t: C.BRIDGE_DEPLOY };
-        else if (b.x1 > cp.x) G.bridges[b.id] = { state: 'closed', t: 0 };
-        else G.bridges[b.id] = { state: 'open', t: C.BRIDGE_DEPLOY };
-      }
-      for (const p of LV.plates) {
-        if (p.x >= cp.x) G.firedPlates.delete(p.id); else G.firedPlates.add(p.id);
-      }
-      G.links = []; G.afterimage = null; G.switchFx = 0; G.flashes = {};
-      G.playerAlpha = 1; G.pendingSwitch = false;
+      G.foot = Q.groundAt(cp.world, cp.x) || C.GROUND;
+      G.vy = 0; G.onGround = true; G.coyote = 0; G.jumpBuf = 0; G.airT = 0;
+      for (const b of LV.bells) { if (b.x >= cp.x) delete G.gates[b.id]; else G.gates[b.id] = true; }
+      for (const l of LV.lanterns) { if (l.x >= cp.x) delete G.got[l.i]; }
+      G.wipe = null; G.playerAlpha = 1; G.pendingSwitch = false; G.flashes = {};
+      G.regionIndex = LV.regionAt(G.px);
     };
 
     G.reset = function () {
-      G.shown.clear(); G.tutorialDone = false;
-      G.failStreak = 0; G.lastFail = null; G.alignExtra = 0;
-      G.stats = { fails: 0, switches: 0, retries: 0, time: 0 };
+      G.shown = {}; G.got = {}; G.gates = {};
+      G.failStreak = 0; G.lastFail = null;
+      G.stats = { fails: 0, switches: 0, time: 0 };
       G.loadCheckpoint(0);
       G.phase = 0;
     };
+    G.lanternCount = () => Object.keys(G.got).length;
 
     // ------------------------------------------------------------ 流程
-    G.start = function () {
-      G.reset();
-      G.state = 'intro'; G.timer = 0;
-      G.emit('intro');
-    };
-    function beginWalking() { G.state = 'walking'; G.emit('walk'); }
+    G.start = function () { G.reset(); G.state = 'intro'; G.timer = 0; G.emit('intro'); };
+    function beginRunning() { G.state = 'running'; G.emit('run'); }
+    function enterReady(dur, label, tip) { G.state = 'ready'; G.timer = 0; G.readyDur = dur; G.emit('ready', label, tip); }
+    function endReady() { G.fade = 0; G.state = 'running'; G.emit('readyEnd'); }
 
-    function enterReady(dur, label, tip) {
-      G.state = 'ready'; G.timer = 0; G.readyDur = dur;
-      G.emit('ready', label, tip);
-    }
-    function endReady() { G.fade = 0; G.state = 'walking'; G.emit('readyEnd'); }
-
-    function fail(reason) {
+    function fail(reason, kind) {
       G.state = 'failing'; G.timer = 0;
-      G.failReason = reason;
+      G.failReason = reason; G.failKind = kind || null;
       G.stats.fails++;
       G.failStreak = G.lastFail === reason ? G.failStreak + 1 : 1;
       G.lastFail = reason;
       G.emit('fail', reason);
     }
-
     G.retry = function () {
-      G.stats.retries++;
       G.loadCheckpoint(G.cpIndex);
       G.fade = 0.6;
       enterReady(C.READY, '回到最近的检查点', '');
     };
-
     G.pause = function () {
-      if (!['walking', 'ready', 'intro', 'failing'].includes(G.state)) return false;
-      G.prevState = G.state; G.state = 'paused';
-      G.emit('paused');
-      return true;
+      if (!['running', 'ready', 'intro', 'failing'].includes(G.state)) return false;
+      G.prevState = G.state; G.state = 'paused'; G.emit('paused'); return true;
     };
     G.resume = function () {
       if (G.state !== 'paused') return;
       const prev = G.prevState;
       G.emit('resumed');
-      if (prev === 'walking' || prev === 'ready') enterReady(C.RESUME_READY, '准备', '');
+      if (prev === 'running' || prev === 'ready') enterReady(C.RESUME_READY, '准备', '');
       else G.state = prev;
     };
 
-    // 输入（由界面层调用）
+    // ------------------------------------------------------------ 输入
     G.inputSwitch = function () {
-      switch (G.state) {
-        case 'intro': beginWalking(); break;
-        case 'walking': G.pendingSwitch = true; break;
-        case 'ready': if (G.timer > 0.15) endReady(); break;   // 跳过失误说明，不切换
-      }
-    };
-    G.inputRetry = function () {
-      if (G.state === 'walking') G.retry();
+      if (G.state === 'intro') beginRunning();
+      else if (G.state === 'running') G.pendingSwitch = true;
       else if (G.state === 'ready' && G.timer > 0.15) endReady();
     };
+    G.inputJump = function () {
+      if (G.state === 'intro') beginRunning();
+      else if (G.state === 'running') G.jumpBuf = C.JUMP_BUFFER;
+      else if (G.state === 'ready' && G.timer > 0.15) endReady();
+    };
+    G.inputRetry = function () {
+      if (G.state === 'running') G.retry();
+      else if (G.state === 'ready' && G.timer > 0.15) endReady();
+    };
+
+    // 另一面此刻能不能站（脚下记号用）
+    G.otherSafe = function () {
+      const w = other(G.world);
+      if (Q.solidInBody(w, G.px, G.foot - C.STEP_UP)) return false;
+      if (Q.hazardHit(w, G.px, G.foot, G.gates)) return false;
+      if (!G.onGround) return true;
+      return Q.supportY(w, G.px, G.foot, C.STEP_UP) !== null;
+    };
+
+    // ------------------------------------------------------------ 物理一步
+    function physics(dt) {
+      // 1) 切换：瞬间翻面，再按新的一面判定
+      if (G.pendingSwitch) {
+        G.pendingSwitch = false;
+        const from = G.world;
+        setWorld(other(G.world));
+        G.stats.switches++;
+        const ph = G.beat() % 1, off = Math.min(ph, 1 - ph);
+        G.wipe = { from, t: 0, onBeat: off < 0.14 };
+        if (off < 0.14) G.onBeatFx = 1;
+        G.emit('switched', G.world, off < 0.14);
+        const s = Q.solidInBody(G.world, G.px, G.foot);
+        if (s) {
+          if (G.foot - s.y <= C.STEP_UP && !Q.solidInBody(G.world, G.px, s.y)) { G.foot = s.y; G.vy = 0; G.onGround = true; }
+          else return fail('stuck');
+        }
+      }
+      // 2) 跳
+      if (G.jumpBuf > 0) {
+        G.jumpBuf -= dt;
+        if (G.onGround || G.coyote > 0) {
+          G.vy = -C.JUMP_V; G.onGround = false; G.coyote = 0; G.jumpBuf = 0; G.airT = 0;
+          G.emit('jump');
+        }
+      }
+      // 3) 前进 + 撞墙 / 迈上小台阶
+      let sp = C.SPEED;
+      const toEnd = LV.endX - G.px;
+      if (toEnd < 300) sp = C.SPEED * Math.max(0.05, toEnd / 300);
+      G.px = Math.min(LV.endX, G.px + sp * dt);
+      G.phase += sp * dt * 0.075;
+      const s = Q.solidInBody(G.world, G.px, G.foot);
+      if (s) {
+        if (G.foot - s.y <= C.STEP_UP && G.vy >= 0) { G.foot = s.y; G.onGround = true; G.vy = 0; }
+        else return fail('wall');
+      }
+      // 4) 竖直
+      if (G.onGround) {
+        const sy = Q.supportY(G.world, G.px, G.foot, C.STEP_UP);
+        if (sy === null) {
+          // 地面略低一点就贴下去（走下小台阶），否则开始下落
+          const low = Q.supportY(G.world, G.px, G.foot + C.STEP_UP, C.STEP_UP);
+          if (low !== null) G.foot = low;
+          else { G.onGround = false; G.coyote = C.COYOTE; G.vy = 0; G.airT = 0; }
+        } else G.foot = sy;
+      } else {
+        G.coyote = Math.max(0, G.coyote - dt);
+        G.airT += dt;
+        G.vy += C.GRAVITY * dt;
+        const nf = G.foot + G.vy * dt;
+        if (G.vy > 0) {
+          let land = null;
+          for (const t of LV.solids) {
+            if (t.x0 > G.px + C.HALF_W) break;
+            if (t.x1 < G.px - C.HALF_W || !active(t, G.world)) continue;
+            if (t.y >= G.foot - 0.01 && t.y <= nf && (land === null || t.y < land)) land = t.y;
+          }
+          if (land !== null) { G.foot = land; G.vy = 0; G.onGround = true; G.emit('land'); }
+          else G.foot = nf;
+        } else G.foot = nf;
+      }
+      if (G.foot > C.FALL_LIMIT) return fail('fall');
+      // 5) 障碍 / 门
+      const h = Q.hazardHit(G.world, G.px, G.foot, G.gates);
+      if (h) return fail(h.gate ? 'gate' : 'hazard', h.kind);
+      // 6) 铃铛
+      for (const b of LV.bells) {
+        if (G.gates[b.id] || !active(b, G.world)) continue;
+        if (Math.abs(b.x - G.px) < C.HALF_W + 16 && G.foot - C.BODY_H - 10 < b.y && G.foot + 4 > b.y - 20) {
+          G.gates[b.id] = true; G.flashes[b.id] = 1.2; G.emit('bell', b);
+        }
+      }
+      // 7) 灯
+      for (const l of LV.lanterns) {
+        if (G.got[l.i] || !active(l, G.world)) continue;
+        if (Math.abs(l.x - G.px) < C.HALF_W + 14 && l.y > G.foot - C.BODY_H - 16 && l.y < G.foot + 10) {
+          G.got[l.i] = true; G.flashes['l' + l.i] = 1; G.emit('lantern', l);
+        }
+      }
+    }
 
     // ------------------------------------------------------------ 更新
     G.update = function (dt) {
       if (G.state === 'paused') return;
       G.animT += dt;
+      if (G.wipe) { G.wipe.t += dt; if (G.wipe.t >= C.SWITCH_WIPE) G.wipe = null; }
+      if (G.onBeatFx > 0) G.onBeatFx = Math.max(0, G.onBeatFx - dt * 2.5);
+      for (const k in G.flashes) { G.flashes[k] -= dt; if (G.flashes[k] <= 0) delete G.flashes[k]; }
       if (G.state === 'title' || G.state === 'ended') return;
       G.stats.time += dt;
-      if (G.switchFx > 0) G.switchFx = Math.max(0, G.switchFx - dt);
-      if (G.afterimage) { G.afterimage.t -= dt; if (G.afterimage.t <= 0) G.afterimage = null; }
-      for (const ln of G.links) ln.t -= dt;
-      G.links = G.links.filter(l => l.t > 0);
-      for (const k in G.flashes) { G.flashes[k] -= dt; if (G.flashes[k] <= 0) delete G.flashes[k]; }
-
-      // 桥展开计时（暂停时冻结）
-      for (const b of LV.bridges) {
-        const s = G.bridges[b.id];
-        if (s.state === 'deploying') {
-          s.t += dt;
-          if (s.t >= C.BRIDGE_DEPLOY) {
-            s.state = 'open'; s.t = C.BRIDGE_DEPLOY;
-            G.flashes[b.id] = 1.0;
-            G.emit('bridgeOpen', b);
-            if (b.hint && !G.shown.has('bh:' + b.id)) { G.shown.add('bh:' + b.id); G.emit('hint', b.hint, 3); }
-          }
-        }
-      }
 
       switch (G.state) {
         case 'intro':
-          G.speedNow = 0;
           G.timer += dt;
-          if (G.timer >= C.INTRO_TIME) beginWalking();
+          if (G.timer >= C.INTRO_TIME) beginRunning();
           break;
-
-        case 'walking': {
-          // 1) 先应用有效切换，再按切换后的世界检查危险
-          if (G.pendingSwitch) {
-            G.pendingSwitch = false;
-            G.afterimage = { world: G.world, t: 0.45 };
-            setWorld(other(G.world));
-            G.switchFx = 0.6;
-            G.stats.switches++;
-            if (!G.tutorialDone) { G.tutorialDone = true; G.emit('hideHint', 'tutorial'); }
-          }
-          // 2) 前进（终点前缓缓停下）
-          const prev = G.px;
-          let sp = C.SPEED;
-          const toEnd = LV.endX - G.px;
-          if (toEnd < 320) sp = C.SPEED * Math.max(0.06, toEnd / 320);
-          G.speedNow = sp;
-          G.px = Math.min(LV.endX, G.px + sp * dt);
-          G.phase += sp * dt * 0.085;
-
-          // 3) 石板
-          for (const p of LV.plates) {
-            if (p.world === G.world && !G.firedPlates.has(p.id) && prev < p.x && G.px >= p.x) {
-              G.firedPlates.add(p.id);
-              G.flashes[p.id] = 1.0;
-              const s = G.bridges[p.bridge];
-              if (s.state === 'closed') { s.state = 'deploying'; s.t = 0; G.emit('deploy'); }
-              G.links.push({ plate: p, bridge: LV.bridges.find(b => b.id === p.bridge), t: 1.4 });
-              G.emit('plate', p);
-            }
-          }
-          // 4) 检查点（切换世界本身不创建检查点）
+        case 'running': {
+          physics(dt);
+          if (G.state !== 'running') break;
           for (let i = G.cpIndex + 1; i < LV.checkpoints.length; i++) {
-            if (G.px >= LV.checkpoints[i].x) { G.cpIndex = i; G.failStreak = 0; G.flashes['cp' + i] = 1.2; G.emit('checkpoint', i); }
+            if (G.px >= LV.checkpoints[i].x && G.onGround) { G.cpIndex = i; G.failStreak = 0; G.emit('checkpoint', i); }
           }
-          // 5) 章节与提示
-          for (const ch of LV.chapters) {
-            const key = 'ch:' + ch.x;
-            if (!G.shown.has(key) && G.px >= ch.x) { G.shown.add(key); G.emit('chapter', ch); }
+          const ri = LV.regionAt(G.px);
+          if (ri !== G.regionIndex) { G.regionIndex = ri; }
+          for (let i = 0; i < LV.regions.length; i++) {
+            const k = 'r' + i;
+            if (!G.shown[k] && G.px >= LV.regions[i].x0) { G.shown[k] = 1; G.emit('region', LV.regions[i], i); }
           }
-          for (const t of LV.texts) {
-            const key = 'tx:' + t.x;
-            if (G.shown.has(key) || G.px < t.x || G.px > t.x + 600) continue;
-            G.shown.add(key);
-            if (t.tutorial && G.tutorialDone) continue;
-            G.emit('hint', t.text, t.dur, t.tutorial ? 'tutorial' : null);
+          for (let i = 0; i < LV.texts.length; i++) {
+            const t = LV.texts[i], k = 't' + i;
+            if (G.shown[k] || G.px < t.x || G.px > t.x + 500) continue;
+            G.shown[k] = 1; G.emit('hint', t.text, t.dur, t.tag);
           }
-          // 6) 通行检查
-          const hz = G.hazardAt(G.world, G.px);
-          if (hz) { fail(hz); break; }
-          // 7) 抵达
-          if (G.px >= LV.endX - 1) { G.state = 'arrived'; G.timer = 0; G.speedNow = 0; G.emit('arrive'); }
+          if (G.px >= LV.endX - 1) { G.state = 'arrived'; G.timer = 0; G.emit('arrive'); }
           break;
         }
-
         case 'failing':
-          G.speedNow = 0;
           G.timer += dt;
           G.fade = U.clamp(G.timer / C.FAIL_FADE, 0, 1);
           G.playerAlpha = 1 - G.fade * 0.8;
-          G.px -= 30 * dt; // 短暂退回
+          if (G.failReason === 'fall') { G.vy += C.GRAVITY * dt * 0.5; G.foot += G.vy * dt * 0.5; }
           if (G.timer >= C.FAIL_FADE) {
             G.loadCheckpoint(G.cpIndex);
             G.fade = 1;
             enterReady(C.READY, RF.REASONS[G.failReason], G.failStreak >= 2 ? RF.TIPS[G.failReason] : '');
           }
           break;
-
         case 'ready':
-          G.speedNow = 0;
           G.timer += dt;
-          G.fade = Math.max(0, G.fade - dt / 0.4);
+          G.fade = Math.max(0, G.fade - dt / 0.35);
           if (G.timer >= G.readyDur) endReady();
           break;
-
         case 'arrived':
           G.timer += dt;
-          G.alignExtra = U.clamp(G.timer / 2.5, 0, 1);
-          if (G.timer > 3.8) { G.state = 'ended'; G.emit('ended'); }
+          if (G.timer > 4.2) { G.state = 'ended'; G.emit('ended'); }
           break;
       }
     };
 
-    // 自动化试玩：按固定步长快速模拟
-    G.simulate = function (sec, policy) {
-      const n = Math.round(sec / C.STEP);
-      for (let i = 0; i < n; i++) { if (policy) policy(G); G.update(C.STEP); if (G.state === 'ended') return i * C.STEP; }
-      return n * C.STEP;
+    // ------------------------------------------------------------ 供自动验证使用的快照
+    const KEYS = ['state', 'px', 'foot', 'vy', 'onGround', 'coyote', 'jumpBuf', 'world', 'cpIndex', 'pendingSwitch', 'airT'];
+    G.snapshot = function () {
+      const s = {}; for (const k of KEYS) s[k] = G[k];
+      s.gates = Object.assign({}, G.gates); s.got = Object.assign({}, G.got);
+      return s;
+    };
+    G.restore = function (s) {
+      for (const k of KEYS) G[k] = s[k];
+      G.gates = Object.assign({}, s.gates); G.got = Object.assign({}, s.got);
+    };
+    G.physicsOnly = function (dt) {   // 不触发界面事件的快速模拟
+      if (G.state !== 'running') return;
+      physics(dt);
+      if (G.state === 'running' && G.px >= LV.endX - 1) G.state = 'arrived';
     };
 
     G.reset();

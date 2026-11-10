@@ -8,6 +8,11 @@
     mod: (a, n) => ((a % n) + n) % n,
     // 确定性哈希：同一位置永远画出同样的景物
     hash(i, s) { const x = Math.sin(i * 127.1 + (s || 0) * 311.7) * 43758.5453; return x - Math.floor(x); },
+    // 平滑一维噪声（0..1）
+    noise(x, s) {
+      const i = Math.floor(x), f = x - i, t = f * f * (3 - 2 * f);
+      return U.hash(i, s) * (1 - t) + U.hash(i + 1, s) * t;
+    },
 
     hex(h) {
       h = h.replace('#', '');
@@ -18,7 +23,7 @@
       if (al === undefined || al >= 1) return `rgb(${a[0] | 0},${a[1] | 0},${a[2] | 0})`;
       return `rgba(${a[0] | 0},${a[1] | 0},${a[2] | 0},${al < 0 ? 0 : al.toFixed(3)})`;
     },
-    palette(obj) { const p = {}; for (const k in obj) p[k] = U.hex(obj[k]); return p; },
+    palette(obj) { const p = {}; for (const k in obj) p[k] = typeof obj[k] === 'string' ? U.hex(obj[k]) : obj[k]; return p; },
     mixPalette(p, q, t) { const r = {}; for (const k in p) r[k] = U.mix(p[k], q[k], t); return r; },
     // 按权重混合多套色板：[[palette, weight], ...]
     blendPalettes(list) {

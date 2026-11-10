@@ -22,18 +22,12 @@
     },
     setScale(kx, ky) { X.k = [kx, ky]; },
 
-    // 把主画布与光层都设为某个世界的坐标系（梦境以 y=360 镜像）
-    worldTransform(world) {
+    screenTransform() {
       const [kx, ky] = X.k;
-      if (world === 'dream') {
-        X.ctx.setTransform(kx, 0, 0, -ky, 0, 720 * ky);
-        X.g.setTransform(GS, 0, 0, -GS, 0, 720 * GS);
-      } else {
-        X.ctx.setTransform(kx, 0, 0, ky, 0, 0);
-        X.g.setTransform(GS, 0, 0, GS, 0, 0);
-      }
+      X.ctx.setTransform(kx, 0, 0, ky, 0, 0);
+      X.g.setTransform(GS, 0, 0, GS, 0, 0);
     },
-    screenTransform() { X.worldTransform('real'); },
+    mute: false,
 
     beginGlow() {
       X.g.setTransform(1, 0, 0, 1, 0, 0);
@@ -45,7 +39,7 @@
 
     // 在光层上画一团柔光
     glow(x, y, r, col, a) {
-      if (a <= 0.003 || r <= 0) return;
+      if (X.mute || a <= 0.003 || r <= 0) return;
       const g = X.g;
       const gr = g.createRadialGradient(x, y, 0, x, y, r);
       gr.addColorStop(0, U.rgb(col, a));

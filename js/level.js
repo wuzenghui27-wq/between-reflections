@@ -1,122 +1,301 @@
-// 关卡数据：一条连续的湖畔路线，三章，六个景观点。
-// 所有坐标为世界横向坐标（逻辑像素）。速度 100 时，100 像素 = 1 秒。
-// 数据与逻辑分开：机关数据不负责换景，景色数据不负责开桥。
+// 关卡数据：六个地貌区域连成一条路线。
+// 单位：拍（beat）。一拍 = CFG.BEAT_PX 像素 ≈ 0.625 秒，所以机关天然落在音乐节拍上。
+// 每段地面、障碍、铃铛、灯都标明属于哪一面：day（白天）、night（夜晚）或 both（两面都有）。
 (function () {
-  const R = 'real', D = 'dream';
+  const C = RF.CFG, B = C.BEAT_PX, G0 = C.GROUND;
 
   const L = {
-    holes: { real: [], dream: [] },   // 路面缺口 {world,x0,x1,bridge}
-    bridges: [],                      // {id,world,x0,x1,shape,hint}
-    plates: [],                       // {id,world,x,bridge,shape}
-    obstacles: [],                    // {world,x,w}
-    checkpoints: [],                  // {x,world,preopen:[]}
-    texts: [],                        // {x,text,dur,tutorial}
-    chapters: [],                     // {x,no,name}
-    scenes: [],                       // {id,x,mood,name}
-    endX: 18300
+    solids: [], hazards: [], bells: [], lanterns: [], mirages: [],
+    checkpoints: [], regions: [], texts: [], endX: 0
   };
+  let x = 0, gy = G0, gateN = 0;
 
-  let bridgeSeq = 0;
-  function hole(world, x0, x1, bridge) {
-    L.holes[world].push({ world, x0, x1, bridge: bridge || null });
+  // ------------------------------------------------------------ 地形
+  const THIN = { boat: 1, firefly: 1, ice: 1, plank: 1 };
+  function seg(beats, w, kind, y) {
+    const s = { x0: x, x1: x + beats * B, y: y === undefined ? gy : y, w, kind };
+    if (THIN[kind]) s.thin = true;
+    L.solids.push(s);
+    return s;
   }
-  function bridgeOver(world, x0, x1, shape, hint) {
-    const id = 'B' + (++bridgeSeq);
-    hole(world, x0, x1, id);
-    L.bridges.push({ id, world, x0, x1, shape, hint: hint || null });
-    return id;
+  const walk = (beats, kind) => { seg(beats, 'both', kind || 'ground'); x += beats * B; };
+  const only = (beats, w, kind, y) => { seg(beats, w, kind, y); x += beats * B; };
+  const split = (beats, day, night) => {
+    if (day) seg(beats, 'day', day.kind || 'ground', day.y);
+    if (night) seg(beats, 'night', night.kind || 'ground', night.y);
+    x += beats * B;
+  };
+  const gap = beats => { x += beats * B; };
+  const height = y => { gy = y; };
+  const at = o => x + o * B;
+
+  // ------------------------------------------------------------ 物件
+  const HZ = {
+    stall: [56, 100], door: [40, 132], gate: [36, 140], lion: [62, 94], rack: [44, 112],
+    crate: [34, 30], rock: [40, 34], thorn: [42, 28], mani: [46, 34], whirl: [42, 124], yak: [70, 80]
+  };
+  function haz(o, w, kind, y) {
+    const [wd, ht] = HZ[kind];
+    const cx = at(o), base = y === undefined ? gy : y;
+    const h = { x0: cx - wd / 2, x1: cx + wd / 2, y0: base - ht, y1: base, w, kind };
+    L.hazards.push(h);
+    return h;
   }
-  function plate(world, x, bridge, shape) {
-    L.plates.push({ id: 'P' + (L.plates.length + 1), world, x, bridge, shape });
+  // 门（两面都关着）+ 铃铛（只在一面）：碰响铃铛，门在两面都打开
+  function bellGate(oBell, wBell, oGate, kind) {
+    const id = 'g' + (++gateN);
+    L.bells.push({ id, x: at(oBell), y: gy - 34, w: wBell, kind: kind || 'bell' });
+    const g = haz(oGate, 'both', 'gate'); g.gate = id; g.style = kind || 'bell';
   }
-  function obstacle(world, x, w) { L.obstacles.push({ world, x, w: w || 44 }); }
-  function cp(x, world, preopen) { L.checkpoints.push({ x, world, preopen: preopen || [] }); }
-  function text(x, t, dur, extra) { L.texts.push(Object.assign({ x, text: t, dur: dur || 4 }, extra || {})); }
-  function chapter(x, no, name) { L.chapters.push({ x, no, name }); }
-  function scene(id, x, mood, name) { L.scenes.push({ id, x, mood, name }); }
+  const lantern = (o, w, dy) => L.lanterns.push({ i: L.lanterns.length, x: at(o), y: gy - 30 - (dy || 0), w: w || 'both' });
+  const mirage = beats => L.mirages.push({ x0: x, x1: x + beats * B, y: gy });
+  const cp = world => L.checkpoints.push({ x: x + 40, world, region: L.regions.length - 1 });
+  const text = (o, t, dur, tag) => L.texts.push({ x: at(o), text: t, dur: dur || 4, tag });
+  function region(id, no, name, line) {
+    if (L.regions.length) L.regions[L.regions.length - 1].x1 = x;
+    L.regions.push({ id, no, name, line, x0: x, x1: Infinity });
+  }
 
-  // ---------------------------------------------------------------- 景观点
-  scene('V01', 0,     'A', '初入梦境');
-  scene('V02', 2700,  'A', '发光的树冠');
-  scene('V03', 5000,  'B', '远山离开湖面');
-  scene('V04', 7200,  'B', '天上的鱼群');
-  scene('V05', 11000, 'C', '湖面连接星河');
-  scene('V06', 15600, 'C', '月亮与光轮');
+  // ============================================================ 1 江南水乡：切换 + 水位
+  region('jiangnan', '第一站', '江南水乡', '白天水涨，夜里落潮');
+  height(G0);
+  cp('day');
+  walk(9);
+  text(-5, '前面的石阶只在夜里露出水面。按 Shift 切到夜晚。', 6, 'switch');
+  only(3, 'night', 'steps', G0 + 6);
+  lantern(-1.5, 'night', 30);
+  walk(4);
+  text(-3.5, '白天水高，乌篷船才浮得起来。再按 Shift 回到白天。', 5, 'switch2');
+  only(3, 'day', 'boat', G0 + 2);
+  walk(4);
+  lantern(-2, 'night');                           // 只在夜里亮的灯：多留一会儿夜里才拿得到
+  only(3, 'night', 'steps', G0 + 6);
+  walk(3);
+  only(2.5, 'day', 'boat', G0 + 2);
+  lantern(-1.2, 'day', 40);
+  walk(3);
+  only(3, 'night', 'steps', G0 + 6);
+  walk(3);
+  cp('night');
+  text(-2, '看前方淡淡的轮廓：那是另一面的路。', 4);
+  only(2, 'day', 'boat', G0 + 2);
+  walk(2);
+  only(2, 'night', 'steps', G0 + 6);
+  walk(1.5);
+  only(2, 'day', 'boat', G0 + 2);
+  lantern(-1, 'day', 30);
+  walk(1.5);
+  only(3, 'night', 'steps', G0 + 6);
+  walk(1);
+  only(2, 'day', 'boat', G0 + 2);
+  walk(1);
+  split(3, { kind: 'boat', y: G0 + 2 }, { kind: 'steps', y: G0 + 6 });   // 两面都能走：喘口气
+  lantern(-1.5, 'night', 30);
+  walk(5);
 
-  // ================================================================ 第一章
-  chapter(0, '第一章', '湖面另一边');
-  cp(0, R);
-  text(150, '按 Shift 走进另一边', 99, { tutorial: true });
+  // ============================================================ 2 徽派与晋派古建：门与铃
+  region('huizhou', '第二站', '徽州与晋地的老宅', '白天货摊挡路，夜里宅门紧闭');
+  cp('day');
+  walk(7);
+  text(-6, '白天街上摆着货摊，夜里收了摊，但宅门会关上。', 5);
+  haz(-1, 'day', 'stall');
+  walk(4);
+  haz(-1, 'night', 'door');
+  walk(3);
+  haz(-1, 'day', 'stall');
+  lantern(-2.5, 'night', 50);
+  walk(3);
+  haz(-1, 'night', 'door');
+  walk(5);
+  text(-4.5, '院门上了锁。去另一面碰响铜铃，门就开了。', 5, 'bell');
+  bellGate(-2.5, 'night', -0.5);
+  walk(4);
+  cp('day');
+  bellGate(-3, 'day', -0.6);
+  walk(3);
+  haz(-1.2, 'day', 'stall');
+  walk(3);
+  haz(-1.5, 'night', 'door');
+  walk(2.5);
+  haz(-1, 'day', 'stall');
+  lantern(-1, 'night', 0);
+  walk(3);
+  bellGate(-2.4, 'night', -0.4);
+  walk(2);
+  haz(-1, 'night', 'door');
+  walk(2);
+  haz(-1, 'day', 'stall');
+  walk(2.5);
+  bellGate(-2.2, 'day', -0.4);
+  walk(5);
 
-  // 宽松换路：湖岸断开，梦境完整
-  hole(R, 1500, 1900);
-  text(1050, '湖岸的路断了，去另一边走吧', 4);
-  // 梦境被挡，回到湖岸
-  obstacle(D, 2500);
-  text(2020, '那边被挡住了，回到湖岸', 4);
+  // ============================================================ 3 喀斯特峰林与梯田：跳跃 + 萤火
+  region('karst', '第三站', '峰林与梯田', '一层一层，往云里走');
+  cp('day');
+  walk(6);
+  text(-5, '梯田一层比一层高。按空格（或 ↑）跳上去。', 5, 'jump');
+  height(G0 - 60); walk(3);
+  height(G0 - 120); walk(3);
+  lantern(-1.5, 'both', 70);
+  height(G0 - 60); walk(2);
+  height(G0); walk(3);
+  text(-2.5, '缺口也能跳过去。', 3);
+  gap(0.7); walk(3);
+  gap(0.8); walk(2);
+  text(-1.5, '夜里，萤火会连成一条路。', 4);
+  walk(1);
+  only(4, 'night', 'firefly', G0);
+  walk(3);
+  cp('night');
+  haz(-1.5, 'both', 'rock');
+  walk(3);
+  height(G0 - 60); walk(2);
+  only(3, 'night', 'firefly', G0 - 110);       // 先跳，在空中切到夜里落上萤火
+  lantern(-1.5, 'night', 40);
+  walk(2.5);
+  height(G0); walk(1.5);
+  haz(-0.7, 'both', 'rock');
+  walk(2);
+  gap(0.75);
+  walk(1.5);
+  only(3, 'night', 'firefly', G0);
+  walk(1.5);
+  height(G0 - 60); only(2.5, 'day', 'ground');   // 只在白天的梯田：跳之前先切回白天
+  walk(1);
+  gap(0.6);
+  height(G0 - 120); split(3, { y: G0 - 120 }, { kind: 'firefly', y: G0 - 60 });
+  lantern(-1.5, 'day', 40);
+  height(G0 - 60); walk(2);
+  height(G0); walk(5);
 
-  // 第一次石板开桥：现实石板 → 梦境荷叶桥
-  cp(2800, R);
-  text(2880, '踩过发光石板，另一边的桥会展开', 4);
-  const b1 = bridgeOver(D, 3200, 4000, 'ring', '桥连成实线了，现在可以过去');
-  plate(R, 3300, b1, 'ring');
-  obstacle(R, 3760);
-  // V02 观景，然后安全返回
-  text(4400, '看够了，就回到湖岸', 4);
-  obstacle(D, 4900);
+  // ============================================================ 4 岭南骑楼与客家围屋：节奏段
+  region('lingnan', '第四站', '骑楼与围屋', '跟着鼓点走');
+  cp('day');
+  walk(6);
+  text(-5, '鼓点响起时，障碍正好落在拍子上。在两拍之间切换。', 5);
+  haz(-1, 'day', 'lion');
+  walk(2);
+  haz(-1, 'night', 'rack');
+  walk(2);
+  haz(-1, 'day', 'lion');
+  walk(2);
+  haz(-1, 'night', 'rack');
+  walk(2);
+  haz(-1, 'both', 'crate');
+  walk(2);
+  haz(-1, 'day', 'lion');
+  lantern(-1, 'night', 60);
+  walk(2);
+  haz(-1, 'night', 'rack');
+  walk(3);
+  cp('day');
+  haz(-1, 'day', 'lion');
+  walk(1.5);
+  haz(-0.75, 'night', 'rack');
+  walk(1.5);
+  haz(-0.75, 'day', 'lion');
+  walk(1.5);
+  haz(-0.75, 'both', 'crate');
+  walk(1.5);
+  haz(-0.75, 'night', 'rack');
+  walk(1.5);
+  haz(-0.75, 'day', 'lion');
+  walk(2);
+  haz(-1, 'both', 'crate');
+  lantern(-1, 'both', 70);
+  walk(2);
+  bellGate(-1.6, 'night', -0.3, 'gong');
+  walk(2);
+  haz(-1, 'night', 'rack');
+  walk(1.5);
+  haz(-0.75, 'day', 'lion');
+  walk(1.5);
+  haz(-0.75, 'night', 'rack');
+  walk(5);
 
-  // ================================================================ 第二章
-  chapter(5200, '第二章', '漂浮的远方');
-  cp(5200, R);
-  hole(R, 5600, 6000);
-  text(5280, '去梦里看看', 3);
+  // ============================================================ 5 丹霞与雅丹：海市蜃楼
+  region('danxia', '第五站', '丹霞与雅丹', '烈日下，有些路是幻影');
+  cp('day');
+  walk(6);
+  text(-5, '烈日下看见的桥，可能只是海市蜃楼。夜里才看得清真正的石柱。', 6, 'mirage');
+  mirage(4);
+  only(1.2, 'night', 'pillar', G0);
+  gap(0.5);
+  only(1.1, 'night', 'pillar', G0 - 30);
+  gap(0.4);
+  only(0.8, 'night', 'pillar', G0);
+  walk(4);
+  haz(-1.5, 'night', 'whirl');
+  walk(3);
+  lantern(-1, 'day', 0);
+  haz(-0.8, 'both', 'thorn');
+  walk(3);
+  cp('day');
+  mirage(3);
+  only(1.4, 'night', 'pillar', G0 - 50);
+  gap(0.5);
+  only(1.1, 'night', 'pillar', G0 - 50);
+  walk(2);
+  haz(-1, 'night', 'whirl');
+  walk(2);
+  split(3, { y: G0 }, null);
+  haz(-1.5, 'both', 'thorn');
+  walk(1);
+  mirage(2);
+  only(2, 'night', 'pillar', G0);
+  lantern(-1, 'night', 60);
+  walk(1.5);
+  haz(-0.7, 'night', 'whirl');
+  walk(2);
+  haz(-1, 'both', 'thorn');
+  walk(5);
 
-  // 梦境石板 → 现实木桥
-  cp(6100, D);
-  text(6160, '梦里的石板，也能接上湖岸的路', 4);
-  const b2 = bridgeOver(R, 6400, 7200, 'leaf');
-  plate(D, 6500, b2, 'leaf');
-  obstacle(D, 6960);
+  // ============================================================ 6 青藏高原与雪域圣湖：终章
+  region('tibet', '终点', '雪域圣湖', '天上的星，落进湖里');
+  cp('day');
+  walk(6);
+  text(-5, '夜里湖面结冰，可以踩着走。', 4);
+  only(3, 'night', 'ice', G0 + 4);
+  walk(2);
+  bellGate(-1.5, 'day', -0.3, 'wheel');
+  walk(2);
+  haz(-1, 'both', 'mani');
+  walk(2);
+  height(G0 - 60); walk(2);
+  only(2.5, 'night', 'ice', G0 + 4);
+  walk(0);
+  height(G0); walk(2);
+  lantern(-1, 'both', 70);
+  cp('day');
+  haz(-1, 'day', 'yak');
+  walk(1.5);
+  only(2, 'night', 'ice', G0 + 4);
+  walk(1.5);
+  bellGate(-1.2, 'night', -0.2, 'wheel');
+  walk(1.5);
+  haz(-0.7, 'both', 'mani');
+  walk(1.5);
+  gap(0.7);
+  walk(1.5);
+  only(2, 'night', 'ice', G0 + 4);
+  lantern(-1, 'night', 50);
+  walk(1.5);
+  haz(-0.8, 'day', 'yak');
+  walk(1.5);
+  height(G0 - 60); walk(2);
+  height(G0); walk(1.5);
+  only(3, 'night', 'ice', G0 + 4);
+  walk(12, 'shore');
+  L.endX = x - 5 * B;
+  L.regions[L.regions.length - 1].x1 = x;
+  L.totalX = x;
 
-  // V04 鱼群观景（两个世界均安全，约 12 秒）
-  text(7450, '慢一点也没关系，看看天上', 4);
-
-  // 需要等待的机关：梦境缺口从更早处开始
-  cp(8400, R);
-  obstacle(D, 8650);
-  text(8760, '先别急，等桥完全展开', 4);
-  const b3 = bridgeOver(D, 8800, 9800, 'diamond');
-  plate(R, 9100, b3, 'diamond');
-  obstacle(R, 9560);
-  obstacle(D, 10500);
-
-  // ================================================================ 第三章
-  chapter(11000, '第三章', '星河的尽头');
-  cp(11100, R);
-  text(11200, '两组石板，一前一后', 4);
-  // 组合：现实石板开梦境桥，再由梦境石板开现实桥
-  const b4 = bridgeOver(D, 11600, 12500, 'ring');
-  plate(R, 11700, b4, 'ring');
-  obstacle(R, 12160);
-  const b5 = bridgeOver(R, 12500, 13300, 'leaf');
-  plate(D, 12600, b5, 'leaf');
-  obstacle(D, 13060);
-
-  // 安全观景，然后最后一组
-  cp(14300, R);
-  hole(R, 14800, 15100);
-  const b6 = bridgeOver(R, 15300, 16100, 'star');
-  plate(D, 15400, b6, 'star');
-  obstacle(D, 15860);
-  cp(15980, R, [b6]);
-  const b7 = bridgeOver(D, 16100, 16900, 'diamond');
-  plate(R, 16200, b7, 'diamond');
-  obstacle(R, 16660);
-  // 之后两个世界都安全，直到观景台
-
-  // 预计算：缺口按坐标排序
-  L.holes.real.sort((a, b) => a.x0 - b.x0);
-  L.holes.dream.sort((a, b) => a.x0 - b.x0);
-
+  // 按位置排好，便于查找
+  L.solids.sort((a, b) => a.x0 - b.x0);
+  L.hazards.sort((a, b) => a.x0 - b.x0);
+  L.regionAt = function (px) {
+    for (let i = L.regions.length - 1; i >= 0; i--) if (px >= L.regions[i].x0) return i;
+    return 0;
+  };
   RF.LEVEL = L;
 })();

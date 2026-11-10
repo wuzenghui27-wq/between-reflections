@@ -1,6 +1,6 @@
 // 界面层：输入、面板、文字、声音挂接、缩放与主循环。
 (function () {
-  const C = RF.CFG, A = RF.Audio;
+  const C = RF.CFG, A = RF.Audio, LV = RF.LEVEL;
   const $ = id => document.getElementById(id);
   const G = RF.createGame();
   RF.G = G;
@@ -23,15 +23,9 @@
   function back() { const prev = panelStack.pop(); if (prev) showPanel(prev); else hidePanels(); }
 
   // ---------------------------------------------------------------- 文字
-  let hintT = 0, hintTag = null, chapterTimer = null;
-  function showHint(text, dur, tag) {
-    const h = $('hint'); h.textContent = text; h.classList.add('show');
-    hintT = dur; hintTag = tag || null;
-  }
-  function hideHint(tag) {
-    if (tag && hintTag !== tag) return;
-    $('hint').classList.remove('show'); hintT = 0; hintTag = null;
-  }
+  let hintT = 0, chapterTimer = null;
+  function showHint(text, dur) { const h = $('hint'); h.textContent = text; h.classList.add('show'); hintT = dur; }
+  function hideHint() { $('hint').classList.remove('show'); hintT = 0; }
   function showReason(main, tip) {
     const r = $('reason');
     r.querySelector('.r-main').textContent = main;
@@ -40,55 +34,59 @@
     r.classList.add('show');
   }
   function hideReason() { $('reason').classList.remove('show'); }
-  function showChapter(ch) {
-    clearTimeout(chapterTimer);
-    chapterTimer = setTimeout(() => showChapterNow(ch), 500);
-  }
-  function showChapterNow(ch) {
+  function showChapter(reg) {
     const c = $('chapterCard');
-    c.querySelector('.ch-no').textContent = ch.no;
-    c.querySelector('.ch-name').textContent = ch.name;
+    c.querySelector('.ch-no').textContent = reg.no;
+    c.querySelector('.ch-name').textContent = reg.name;
+    c.querySelector('.ch-line').textContent = reg.line;
     c.classList.add('show');
     clearTimeout(chapterTimer);
-    chapterTimer = setTimeout(() => c.classList.remove('show'), 3400);
+    chapterTimer = setTimeout(() => c.classList.remove('show'), 3200);
   }
+  function setLanterns() { $('lanternCount').textContent = G.lanternCount() + ' / ' + LV.lanterns.length; }
 
   // ---------------------------------------------------------------- 事件 → 界面 / 声音
-  G.on('world', (w, silent) => {
-    A.setDream(w === 'dream');
+  G.on('world', w => {
+    A.setNight(w === 'night');
     $('worldPill').dataset.world = w;
-    $('worldName').textContent = w === 'dream' ? '梦境' : '湖岸';
-    if (!silent) A.sfx('switch', w === 'dream');
+    $('worldName').textContent = w === 'night' ? '夜晚' : '白天';
   });
+  G.on('switched', (w, onBeat) => A.sfx('switch', { night: w === 'night', onBeat }));
   G.on('intro', () => $('introLine').classList.add('show'));
-  G.on('walk', () => $('introLine').classList.remove('show'));
-  G.on('plate', () => A.sfx('plate'));
-  G.on('deploy', () => A.sfx('deploy'));
-  G.on('bridgeOpen', () => A.sfx('bridge'));
+  G.on('run', () => $('introLine').classList.remove('show'));
+  G.on('jump', () => A.sfx('jump'));
+  G.on('land', () => A.sfx('land'));
+  G.on('bell', () => A.sfx('bell'));
+  G.on('lantern', () => { A.sfx('lantern'); setLanterns(); });
   G.on('checkpoint', () => A.sfx('checkpoint'));
-  G.on('chapter', ch => { showChapter(ch); A.sfx('chapter'); });
-  G.on('hint', (t, d, tag) => showHint(t, d, tag));
-  G.on('hideHint', tag => hideHint(tag));
-  G.on('fail', () => {
-    A.sfx('fail');
-    if (hintTag !== 'tutorial') hideHint();
-    $('chapterCard').classList.remove('show');
-  });
-  G.on('ready', (label, tip) => showReason(label, tip));
+  G.on('region', reg => { showChapter(reg); A.sfx('region'); });
+  G.on('hint', (t, d) => showHint(t, d));
+  G.on('fail', () => { A.sfx('fail'); hideHint(); $('chapterCard').classList.remove('show'); });
+  G.on('ready', (label, tip) => { showReason(label, tip); setLanterns(); });
   G.on('readyEnd', () => hideReason());
-  G.on('arrive', () => { A.sfx('arrive'); hideHint(); clearTimeout(chapterTimer); $('chapterCard').classList.remove('show'); });
-  G.on('ended', () => { $('hud').classList.add('hidden'); panelStack = []; showPanel('endScreen'); });
+  G.on('arrive', () => { A.sfx('arrive'); hideHint(); });
+  G.on('ended', () => {
+    $('hud').classList.add('hidden'); panelStack = [];
+    const s = G.stats, m = Math.floor(s.time / 60), sec = Math.round(s.time % 60);
+    $('endLanterns').textContent = G.lanternCount() + ' / ' + LV.lanterns.length;
+    $('endFails').textContent = s.fails;
+    $('endTime').textContent = m + ' 分 ' + String(sec).padStart(2, '0') + ' 秒';
+    showPanel('endScreen');
+  });
   G.on('paused', () => { A.pause(); panelStack = []; showPanel('pauseScreen'); });
   G.on('resumed', () => { A.resume(); A.sfx('ui'); hidePanels(); focusGame(); });
 
   // ---------------------------------------------------------------- 流程
   function startJourney() {
-    A.unlock(); A.startMusic(); A.sfx('ui');
+    A.unlock(); A.sfx('ui');
     hidePanels(); panelStack = [];
     hideReason(); hideHint();
     $('hud').classList.remove('hidden');
     focusGame();
+    G.wipe = null;
     G.start();
+    setLanterns();
+    if (startAt) { jumpTo(startAt); }
   }
   function toTitle() {
     A.resume();
@@ -104,13 +102,22 @@
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     canvas.focus({ preventScroll: true });
   }
+  // 调试：?at=区域序号（1–6）直接从该区域开始
+  const atM = location.search.match(/[?&]at=(\d)/);
+  const startAt = atM ? +atM[1] : 0;
+  function jumpTo(n) {
+    const i = LV.checkpoints.findIndex(c => c.region === n - 1);
+    if (i >= 0) { G.loadCheckpoint(i); G.shown['r' + (n - 1)] = 0; }
+  }
 
   // ---------------------------------------------------------------- 输入
   const inGame = () => !['title', 'paused', 'ended'].includes(G.state);
   window.addEventListener('keydown', e => {
     const k = e.code;
-    if (k === 'ShiftLeft' || k === 'ShiftRight' || k === 'Space' || e.key === 'Shift') {
+    if (k === 'ShiftLeft' || k === 'ShiftRight' || e.key === 'Shift') {
       if (inGame()) { e.preventDefault(); if (!e.repeat) G.inputSwitch(); }
+    } else if (k === 'Space' || k === 'ArrowUp' || k === 'KeyW') {
+      if (inGame()) { e.preventDefault(); if (!e.repeat) G.inputJump(); }
     } else if (k === 'KeyR') {
       if (inGame() && !e.repeat) G.inputRetry();
     } else if (k === 'Escape') {
@@ -122,10 +129,13 @@
       startJourney();
     }
   });
+  // 触屏 / 鼠标：左半屏切换，右半屏跳
   canvas.addEventListener('pointerdown', e => {
-    if (G.state === 'walking' || G.state === 'intro' || G.state === 'ready') { e.preventDefault(); G.inputSwitch(); }
+    if (!inGame()) return;
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    if (e.clientX - r.left < r.width / 2) G.inputSwitch(); else G.inputJump();
   });
-  // 移开浏览器焦点时自动暂停
   window.addEventListener('blur', () => G.pause());
   document.addEventListener('visibilitychange', () => { if (document.hidden) G.pause(); });
 
@@ -140,17 +150,11 @@
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-act]');
     if (!b) return;
-    const act = b.dataset.act;
     A.unlock();
-    switch (act) {
-      case 'start': startJourney(); break;
-      case 'again': startJourney(); break;
+    switch (b.dataset.act) {
+      case 'start': case 'again': startJourney(); break;
       case 'resume': G.resume(); break;
-      case 'retry':
-        A.resume(); hidePanels(); focusGame();
-        G.state = 'walking';  // 从暂停直接重试本段
-        G.retry();
-        break;
+      case 'retry': A.resume(); hidePanels(); focusGame(); G.state = 'running'; G.retry(); break;
       case 'title': A.sfx('ui'); toTitle(); break;
       case 'pause': G.pause(); break;
       case 'sound': A.setEnabled(!A.enabled); refreshToggles(); A.sfx('ui'); break;
@@ -180,27 +184,35 @@
   resize();
 
   // ---------------------------------------------------------------- 主循环（固定步长）
-  let last = performance.now(), acc = 0, frameAvg = 1 / 60;
+  let last = performance.now(), acc = 0, frameAvg = 1 / 60, titleFlip = 0;
+  const dbg = $('debug');
   function frame(now) {
     requestAnimationFrame(frame);
     let dt = (now - last) / 1000; last = now;
-    // 自适应画质：持续掉帧时关闭部分装饰光效
     frameAvg = frameAvg * 0.97 + Math.min(dt, 0.1) * 0.03;
-    if (!G.lowFx && frameAvg > 1 / 42 && G.state === 'walking') G.lowFx = true;
+    if (!G.lowFx && frameAvg > 1 / 40 && G.state === 'running') G.lowFx = true;
     if (dt > 0.25) dt = 0.25;
     acc += dt;
     while (acc >= C.STEP) {
       G.update(C.STEP);
-      if (hintT > 0 && hintTag !== 'tutorial' && G.state !== 'paused') { hintT -= C.STEP; if (hintT <= 0) hideHint(); }
+      if (hintT > 0 && G.state === 'running') { hintT -= C.STEP; if (hintT <= 0) hideHint(); }
+      // 标题页：每隔几秒自己翻一次昼夜
+      if (G.state === 'title' && !G.reduceMotion) {
+        titleFlip += C.STEP;
+        if (titleFlip > 5.5) { titleFlip = 0; const from = G.world; G.world = from === 'day' ? 'night' : 'day'; G.wipe = { from, t: 0 }; }
+      }
       acc -= C.STEP;
     }
-    // 标题页：镜头沿湖岸缓缓移动
-    const camPx = G.state === 'title' ? 700 + Math.sin(G.animT * 0.05) * 400 : G.px;
-    RF.Renderer.draw(G, { camPx });
+    const rid = LV.regions[LV.regionAt(G.px)].id;
+    A.tick(G.beat(), G.state === 'running', rid);
+    const title = G.state === 'title';
+    const camPx = title ? 1400 + Math.sin(G.animT * 0.04) * 900 : G.px;
+    RF.Renderer.draw(G, { camPx, title, noGhost: title });
+    if (G.debug && dbg) dbg.textContent = `x ${Math.round(G.px)} · 拍 ${G.beat().toFixed(2)} · ${G.world} · 脚 ${Math.round(G.foot)} · 检查点 ${G.cpIndex} · ${G.state}`;
   }
+  if (G.debug && dbg) dbg.hidden = false;
   refreshToggles();
   requestAnimationFrame(frame);
 
-  // 供自动化试玩使用
-  RF.debug = { G, start: startJourney, toTitle };
+  RF.debug = { G, start: startJourney, toTitle, jumpTo };
 })();
