@@ -30,6 +30,8 @@ RF.CFG = {
   PREVIEW_AHEAD: 760,   // 另一面预告轮廓显示到角色前方多远
   FAIL_FADE: 0.55,      // 失误淡出
   READY: 0.9,           // 回到检查点后的准备时间
+  REWIND_BEATS: 3,      // 失误后至少往回倒几拍
+  REWIND_TIME: 0.6,     // 倒带画面的时长
   RESUME_READY: 0.8,    // 暂停后继续的准备时间
   INTRO_TIME: 3.0       // 开场文案停留
 };

@@ -85,7 +85,7 @@
   function createGame() {
     const handlers = {};
     const G = {
-      // title | intro | running | failing | ready | paused | arrived | ended
+      // title | intro | running | failing | rewind | ready | paused | arrived | ended
       state: 'title', prevState: null,
       px: 0, foot: C.GROUND, vy: 0, onGround: true, coyote: 0, jumpBuf: 0,
       world: 'day', phase: 0, airT: 0,
@@ -107,10 +107,12 @@
 
     function setWorld(w, silent) { G.world = w; G.emit('world', w, !!silent); }
 
-    G.loadCheckpoint = function (i) {
+    // 把人放到 x 处（白天 / 夜里），按位置还原铃、灯、铜钱、渡船、滚木、残荷
+    G.loadAt = function (x, world) {
       ensureCoins();
-      const cp = LV.checkpoints[i];
-      G.cpIndex = i;
+      const cp = { x, world };
+      G.cpIndex = 0;
+      for (let i = 0; i < LV.checkpoints.length; i++) if (LV.checkpoints[i].x <= x + 1) G.cpIndex = i;
       G.px = cp.x;
       setWorld(cp.world, true);
       G.foot = Q.groundAt(cp.world, cp.x) || C.GROUND;
@@ -129,6 +131,29 @@
       G.wipe = null; G.playerAlpha = 1; G.pendingSwitch = false; G.flashes = {};
       G.regionIndex = LV.regionAt(G.px);
     };
+    G.loadCheckpoint = function (i) { const cp = LV.checkpoints[i]; G.loadAt(cp.x, cp.world); G.cpIndex = i; };
+
+    // 回溯：失误点往回至少 REWIND_BEATS 拍、站在实地上的最近一个落脚点（js/safe.js 或检查点）。
+    // 同一处连着失误，就每次再往回多退一个，最多退两个。
+    let spots = null;
+    function rewindSpots() {
+      if (!spots || spots.v !== LV.version) {
+        const a = (RF.SAFE || []).map(s => ({ x: s[0], world: s[1] ? 'night' : 'day' }));
+        for (const c of LV.checkpoints) a.push({ x: c.x, world: c.world });
+        a.sort((p, q) => p.x - q.x);
+        spots = { v: LV.version, a: a.filter((p, i) => i === 0 || p.x - a[i - 1].x >= C.BEAT_PX * 0.75) };   // 太近的合并
+      }
+      return spots.a;
+    }
+    G.rewindTarget = function (failX) {
+      const S = rewindSpots(), lim = failX - C.REWIND_BEATS * C.BEAT_PX;
+      let k = 0;
+      for (let i = 0; i < S.length; i++) { if (S[i].x <= lim) k = i; else break; }
+      const r = G.lastRewind;
+      const n = r && r.base === k ? Math.min(r.n + 1, 2) : 0;
+      G.lastRewind = { base: k, n };
+      return S[Math.max(0, k - n)];
+    };
 
     // ------------------------------------------------------------ 难度：整体步速，以及另一面轮廓的深浅
     const DIFF = { easy: [0.88, 1.35], normal: [1, 1], hard: [1.12, 0.5] };
@@ -137,7 +162,7 @@
 
     G.reset = function () {
       G.shown = {}; G.got = {}; G.gates = {}; G.cgot = {};
-      G.failStreak = 0; G.lastFail = null;
+      G.failStreak = 0; G.lastFail = null; G.lastRewind = null; G.assistUntil = 0;
       G.stats = { fails: 0, switches: 0, time: 0, bestCombo: 0, reg: LV.regions.map(() => ({ sw: 0, beat: 0, fails: 0 })) };
       G.combo = 0; G.graded = {};
       G.loadCheckpoint(0);
@@ -204,7 +229,7 @@
       enterReady(C.READY, '回到最近的检查点', '');
     };
     G.pause = function () {
-      if (!['running', 'ready', 'intro', 'failing'].includes(G.state)) return false;
+      if (!['running', 'ready', 'intro', 'failing', 'rewind'].includes(G.state)) return false;
       G.prevState = G.state; G.state = 'paused'; G.emit('paused'); return true;
     };
     G.resume = function () {
@@ -420,11 +445,30 @@
           G.playerAlpha = 1 - G.fade * 0.8;
           if (G.failReason === 'fall') { G.vy += C.GRAVITY * dt * 0.5; G.foot += G.vy * dt * 0.5; }
           if (G.timer >= C.FAIL_FADE) {
-            G.loadCheckpoint(G.cpIndex);
-            G.fade = 1;
+            // 倒带：镜头和人一起往回滑到落脚点
+            const t = G.rewindTarget(G.px);
+            G.rw = { fromX: G.px, fromFoot: G.foot, to: t, toFoot: Q.groundAt(t.world, t.x) || C.GROUND };
+            G.state = 'rewind'; G.timer = 0; G.vy = 0;
+            G.emit('rewind', G.rw);
+          }
+          break;
+        case 'rewind': {
+          G.timer += dt;
+          const rw = G.rw, k = U.smooth(U.clamp(G.timer / C.REWIND_TIME, 0, 1));
+          G.px = rw.fromX + (rw.to.x - rw.fromX) * k;
+          G.foot = rw.fromFoot + (rw.toFoot - rw.fromFoot) * k;
+          G.fade = 0.45 * (1 - k) + 0.15;
+          G.playerAlpha = 0.35 + 0.5 * k;
+          for (const h of LV.rollers) placeRoller(h, G.px);
+          if (G.timer >= C.REWIND_TIME) {
+            G.loadAt(rw.to.x, rw.to.world);
+            G.fade = 0.3; G.rw = null;
+            // 同一处第三次失误起，到失误点之前另一面的轮廓画得更清楚
+            if (G.lastRewind && G.lastRewind.n >= 2) G.assistUntil = rw.fromX + C.BEAT_PX;
             enterReady(C.READY, RF.REASONS[G.failReason], G.failStreak >= 2 ? RF.TIPS[G.failReason] : '');
           }
           break;
+        }
         case 'ready':
           G.timer += dt;
           G.fade = Math.max(0, G.fade - dt / 0.35);

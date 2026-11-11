@@ -17,7 +17,7 @@
       const d = x0 - px;
       const far = d < A * 0.75 ? 1 : U.clamp(1 - (d - A * 0.75) / (A * 0.4), 0, 1);
       const near = x1 < px ? U.clamp((x1 - (px - 140)) / 140, 0, 1) : 1;
-      return 0.85 * far * near * (e.G.ghostMul || 1);     // 难度：轻松看得更清楚，困难更淡
+      return Math.min(1, 0.85 * far * near * (e.G.ghostMul || 1) * (px < (e.G.assistUntil || 0) ? 1.5 : 1));     // 难度：轻松看得更清楚，困难更淡
     }
   };
 
