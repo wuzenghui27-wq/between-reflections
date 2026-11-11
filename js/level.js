@@ -457,125 +457,14 @@
     L.endX = x - 5 * B;
   }
 
-  // ============================================================ 云游：随机拼接的小路段
-  // 每段都从两面都能走的平地开始、回到平地结束，单独用求解器验证过（tools/chunks.js），
-  // 所以怎么拼都走得通。段名的第一个字母是所属的站。
-  const REG = {
-    jiangnan: ['江南烟雨', '白天水涨，夜里落潮', { rain: 5, fog: 3, clear: 2 }],
-    garden: ['宫苑园林', '白天货摊挡路，夜里宫门紧闭', { clear: 4, snow: 3, rain: 2 }],
-    autumn: ['秋山湖泊', '踏着山石，往高处走', { clear: 4, wind: 4, snow: 2 }],
-    wall: ['长城', '白天战鼓，夜里烽火', { clear: 5, snow: 3, wind: 2 }],
-    glacier: ['雪山冰川', '白天的雪桥，一踩就塌', { clear: 4, fog: 3, snow: 3 }],
-    tibet: ['雪域圣湖', '天上的星，落进湖里', { clear: 6, snow: 4 }]
-  };
-  const CH = {
-    // ---- 江南
-    j_steps() { only(3, 'night', 'steps', G0 + 6); lantern(-1.5, 'night', 30); walk(2); only(2, 'night', 'steps', G0 + 6); },
-    j_ferry() { only(2, 'night', 'steps', G0 + 6); walk(1.5); ferry(2, 2); walk(1); },
-    j_mix() { only(2.5, 'night', 'steps', G0 + 6); walk(1.5); { const f = ferry(1.5, 2); L.lanterns.push({ i: L.lanterns.length, x: f.bx0 + 2.6 * B, y: G0 - 70, w: 'day' }); } },
-    j_bridge() {
-      const f = ferry(1.5, 6.5), x0 = f.bx0;
-      L.hazards.push({ x0: atX(x0, 4.4) - 30, x1: atX(x0, 4.4) + 30, y0: G0 - 150, y1: G0 - 24, w: 'both', kind: 'arch' });
-      L.solids.push({ x0: atX(x0, 3.0), x1: atX(x0, 5.6), y: G0 + 40, w: 'night', kind: 'steps' });
-      walk(1.5);
-    },
-    j_hop() { split(2, { kind: 'boat', y: G0 + 2 }, { kind: 'steps', y: G0 + 6 }); only(2, 'night', 'steps', G0 + 6); walk(1); ferry(1.5, 1.5); },
-    // ---- 宫苑
-    g_stalls() { haz(1, 'day', 'stall'); walk(3); haz(-1, 'night', 'door'); walk(2.5); haz(-1, 'day', 'stall'); lantern(-2.2, 'night', 50); walk(2.5); haz(-1, 'night', 'door'); },
-    g_bell() { walk(1); bellGate(-0.5, 'night', 2); walk(3); haz(-0.8, 'day', 'stall'); walk(1); },
-    g_bell2() { haz(0.8, 'day', 'stall'); walk(2); bellGate(-0.3, 'day', 2.2); walk(3.5); haz(-0.8, 'night', 'door'); lantern(-0.8, 'day', 70); walk(1); },
-    g_gate() { haz(1, 'day', 'stall'); walk(2); haz(-0.5, 'night', 'door'); walk(1.5); moongate(); walk(1.5); haz(-0.6, 'night', 'door'); lantern(-0.6, 'day', 70); walk(2); moongate(); walk(1.2); haz(-0.5, 'day', 'stall'); },
-    g_pregate() { haz(1, 'day', 'stall'); walk(3); moongate(); walk(1.2); haz(-0.4, 'day', 'stall'); walk(1.5); },
-    g_double() { haz(1, 'day', 'stall'); walk(3); moongate(); walk(1); haz(-0.5, 'night', 'door'); walk(1); moongate(); walk(1.2); haz(-0.5, 'night', 'door'); lantern(-0.5, 'day', 70); walk(1); },
-    // ---- 秋山
-    a_climb() { height(G0 - 60); walk(2); height(G0 - 120); walk(2.5); lantern(-1.2, 'both', 70); height(G0 - 60); walk(2); height(G0); },
-    a_gaps() { gap(0.7); walk(2.5); gap(0.8); walk(1.5); only(3, 'night', 'firefly', G0); },
-    a_fly() { height(G0 - 60); walk(2); only(3, 'night', 'firefly', G0 - 110); lantern(-1.5, 'night', 40); walk(2); height(G0); },
-    a_lotus() { gap(0.5); sinker(1, 'lotus', G0 + 28); gap(0.5); sinker(1, 'lotus', G0 + 28); lantern(-0.5, 'both', 40); gap(0.5); sinker(1, 'lotus', G0 + 28); gap(0.5); },
-    a_lotus2() { gap(0.5); sinker(1, 'lotus', G0 + 28); gap(0.5); sinker(1, 'lotus', G0 + 28).w = 'night'; gap(0.5); sinker(1, 'lotus', G0 + 28); gap(0.5); sinker(1, 'lotus', G0 + 28).w = 'day'; gap(0.5); },
-    a_hop() { gap(1.5); lantern(-0.75, 'both', 90); walk(2.5); },
-    // ---- 长城
-    w_drums() { haz(1, 'day', 'drum'); walk(2); haz(-1, 'night', 'beacon'); walk(2); haz(-1, 'day', 'drum'); walk(2); haz(-1, 'night', 'beacon'); },
-    w_fast() { haz(1, 'day', 'drum'); walk(1.5); haz(-0.75, 'night', 'beacon'); walk(1.5); haz(-0.75, 'both', 'block'); walk(1.5); haz(-0.75, 'day', 'drum'); lantern(-0.75, 'night', 60); walk(1.5); haz(-0.75, 'night', 'beacon'); },
-    w_roll() { walk(2); rollAt(-0.5, 'both'); walk(3); rollAt(-0.5, 'day'); walk(2); rollAt(-0.5, 'night'); },
-    w_roll2() { walk(2); rollAt(-0.5, 'day'); haz(-0.5, 'night', 'beacon'); lantern(-0.5, 'day', 80); walk(2); rollAt(-0.5, 'both'); walk(2); rollAt(-0.5, 'night'); haz(-0.5, 'day', 'drum'); },
-    w_gong() { walk(1); bellGate(-0.6, 'night', 1.8, 'gong'); walk(3); haz(-1, 'night', 'beacon'); walk(1.5); haz(-0.75, 'day', 'drum'); },
-    // ---- 冰川
-    c_mirage() { mirage(4); only(1.2, 'night', 'pillar', G0); gap(0.5); only(1.1, 'night', 'pillar', G0 - 30); gap(0.4); only(0.8, 'night', 'pillar', G0); walk(1); },
-    c_gust() { haz(1, 'night', 'gust'); walk(3); lantern(-1, 'day', 0); haz(-0.8, 'both', 'shard'); walk(2); haz(-1, 'night', 'gust'); },
-    c_high() { mirage(3); only(1.4, 'night', 'pillar', G0 - 50); gap(0.5); only(1.1, 'night', 'pillar', G0 - 50); walk(1); },
-    c_slide() { height(G0 - 40); walk(1.5); zone(9, 1.4); height(G0 - 20); walk(3, 'slide'); haz(-0.8, 'both', 'shard'); height(G0); walk(2, 'slide'); gap(1); walk(3, 'slide'); haz(-1.2, 'night', 'gust'); lantern(-1.2, 'day', 20); },
-    // ---- 圣湖
-    t_ice() { only(3, 'night', 'ice', G0 + 4); walk(2); bellGate(-1.5, 'day', 1.7, 'wheel'); walk(2.5); haz(-1, 'both', 'mani'); },
-    t_yak() { haz(1, 'day', 'yak'); walk(1.5); only(2, 'night', 'ice', G0 + 4); lantern(-1, 'night', 50); walk(1.5); haz(-0.8, 'day', 'yak'); },
-    t_floe() { gap(0.5); sinker(1, 'floe', G0 + 18).w = 'day'; gap(0.5); sinker(1, 'floe', G0 + 18).w = 'day'; lantern(-0.5, 'day', 40); gap(0.5); sinker(1, 'floe', G0 + 18).w = 'day'; gap(0.5); },
-    t_gate() { moongate(); walk(0.5); only(3, 'night', 'ice', G0 + 4); walk(3); rollAt(-1, 'both', 'snow'); },
-    t_hop() { gap(1.5); lantern(-0.75, 'both', 100); walk(1.5); height(G0 - 60); walk(2); height(G0); }
-  };
-  const THEME = { j: 'jiangnan', g: 'garden', a: 'autumn', w: 'wall', c: 'glacier', t: 'tibet' };
-  L.chunkIds = Object.keys(CH);
-  function chunk(id) { walk(2.5); CH[id](); height(G0); walk(1.5); }
-
-  // 单独一段（求解器用）：一个检查点 + 这一段 + 收尾
-  function single(id, pace) {
-    const rid = THEME[id[0]], R0 = REG[rid];
-    region(rid, '', R0[0], R0[1], R0[2], pace);
-    cp('day');
-    walk(2);
-    chunk(id);
-    walk(6);
-    L.endX = x - 3 * B;
-  }
-
-  // 云游：一程四段，同一站的机关放在一起；每程换一站，越往后越快
-  function endless(o) {
-    let seed = (o.seed >>> 0) || 1;
-    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-    const range = o.range || {};       // 每段验证能走通的步速范围（tools/chunks.js 生成）
-    const legs = o.legs || 20, NO = '一二三四五六七八九十';
-    const order = Object.keys(REG);
-    let last = null;
-    for (let leg = 0; leg < legs; leg++) {
-      let rid; do { rid = order[Math.floor(rnd() * order.length)]; } while (rid === last && order.length > 1); last = rid;
-      const pace = Math.min(1.36, 1 + leg * 0.03, 1.52 / (L.diff || 1));   // 不超过验证过的最高步速
-      const eff = pace * (L.diff || 1);
-      const pool = L.chunkIds.filter(id => THEME[id[0]] === rid && (!range[id] || (range[id][0] <= eff + 1e-6 && range[id][1] >= eff - 1e-6)));
-      const R0 = REG[rid];
-      const n = leg + 1, no = n <= 10 ? '第' + NO[n - 1] + '程' : '第' + n + '程';
-      region(rid, no, R0[0], R0[1], R0[2], pace);
-      walk(leg ? 3 : 6);
-      const used = {};
-      for (let k = 0; k < 4 && pool.length; k++) {
-        let id, tries = 0;
-        do { id = pool[Math.floor(rnd() * pool.length)]; } while (used[id] && ++tries < 6);
-        used[id] = 1;
-        cp('day');
-        L.checkpoints[L.checkpoints.length - 1].chunk = id;
-        chunk(id);
-      }
-    }
-    walk(12, 'shore');
-    L.endX = x - 5 * B;
-  }
-
   // ------------------------------------------------------------ 搭建
-  L.build = function (mode, o) {
-    o = o || {};
+  L.build = function (mode) {
     clear();
-    if (mode === 'single') single(o.id, o.pace || 1);
-    else if (mode === 'endless') endless(o);
-    else journey();
+    journey();
     // 按位置排好，便于查找
     L.solids.sort((a, b) => a.x0 - b.x0);
     L.hazards.sort((a, b) => a.x0 - b.x0);
     L.mode = mode; L.version++;
-    if (mode === 'endless' && RF.CHUNK_COINS) {     // 云游的铜钱：每段自己的那串，平移到段的位置
-      L.coins = [];
-      for (const c of L.checkpoints) {
-        const cc = RF.CHUNK_COINS[c.chunk]; if (!cc) continue;
-        for (const [dx, y, w] of cc) L.coins.push({ i: L.coins.length, x: c.x + dx, y, w: w ? 'night' : 'day' });
-      }
-    }
     return L;
   };
   // 当前位置的步速倍数：每站自己的步调，速度区再乘上去；交界处 2 拍内平滑过渡；再乘难度

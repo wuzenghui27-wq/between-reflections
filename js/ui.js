@@ -45,31 +45,28 @@
     clearTimeout(chapterTimer);
     chapterTimer = setTimeout(() => c.classList.remove('show'), 3200);
   }
+  // ---------------------------------------------------------------- 唐诗：旅途中随机浮现
   const MT = RF.Meta;
   G.diff = MT.data.diff;
-  const JR = LV.regions.map(r => ({ id: r.id, name: r.name, no: r.no }));     // 旅程六站（启动时关卡就是旅程）
-  const lanternsHere = () => G.mode === 'station' ? LV.lanterns.filter(l => LV.regionAt(l.x) === G.station) : LV.lanterns;
-  function setLanterns() {
-    const ls = lanternsHere(), n = ls.filter(l => G.got[l.i]).length;
-    $('lanternCount').textContent = G.mode === 'endless' ? String(n) : n + ' / ' + ls.length;
+  let poemT = 0, poemUsed = {};
+  const nextPoemIn = () => 16 + Math.random() * 18;          // 每隔十几到三十几秒，在空闲时浮现一联
+  function showPoem() {
+    const rid = LV.regions[LV.regionAt(G.px)].id;
+    const [line, title, author] = MT.pick(rid, poemUsed);
+    const el = $('poemLine');
+    el.querySelector('.pl-text').innerHTML = line.split('，').join('<br>');
+    el.querySelector('.pl-src').innerHTML = '《' + title + '》 ' + author;
+    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   }
-  // 提示条：成就印章、点亮的诗句，排队一条一条出
-  const toastQ = []; let toastBusy = false;
-  function toast(seal, name, sub, kind) { toastQ.push([seal, name, sub, kind]); if (!toastBusy) nextToast(); }
-  function nextToast() {
-    const t = toastQ.shift(); if (!t) { toastBusy = false; return; }
-    toastBusy = true;
-    const el = $('toast');
-    el.querySelector('.t-seal').textContent = t[0]; el.querySelector('.t-name').textContent = t[1]; el.querySelector('.t-sub').textContent = t[2];
-    el.className = t[3] || ''; void el.offsetWidth; el.classList.add('show');
-    setTimeout(nextToast, 3300);
+  function tickPoem(dt) {
+    if (G.state !== 'running') return;
+    poemT -= dt;
+    if (poemT > 0) return;
+    // 有提示、站名卡、印章正在显示时先等一等
+    if ($('hint').classList.contains('show') || $('chapterCard').classList.contains('show') || $('stamp').classList.contains('show')) { poemT = 2; return; }
+    showPoem(); poemT = nextPoemIn();
   }
-  function award(id) {
-    const a = MT.award(id); if (!a) return;
-    toast(a[1], '获得印章 · ' + a[2], a[3], 't-ach');
-    A.sfx('checkpoint');
-  }
-  let hopsRun = 0;
+  function setLanterns() { $('lanternCount').textContent = G.lanternCount() + ' / ' + LV.lanterns.length; }
 
   // ---------------------------------------------------------------- 事件 → 界面 / 声音
   G.on('world', w => {
@@ -91,17 +88,6 @@
   G.on('bell', b => { A.sfx('bell'); if (b) PT.sparks(b.x, b.y + 0, '#ffe08a', 10); });
   G.on('lantern', l => {
     A.sfx('lantern'); setLanterns();
-    if (G.mode !== 'endless') {        // 点亮一句诗
-      const ri = LV.regionAt(l.x), rid = LV.regions[ri].id;
-      const k = LV.lanterns.filter(o => LV.regionAt(o.x) === ri).sort((a, b) => a.x - b.x).indexOf(l);
-      const r = MT.lightLine(rid, k);
-      if (r) {
-        const P = MT.POEMS[rid];
-        toast('诗', r.line, '《' + P.title + '》第' + '一二三四'[k] + '句' + (r.fresh ? ' · 新' : ''), 't-poem');
-        if (r.full) award('poem');
-        if (MT.ORDER.every(id => MT.poemDone(id))) award('poems');
-      }
-    }
     PT.sparks(l.x, l.y, '#ffd27a', 14);
     PT.float(l.x, l.y - 30, '+1', '#ffe8a8');
     setLayer(A.layer + 1);
@@ -114,7 +100,6 @@
     A.sfx('coin', run);
     PT.sparks(c.x, c.y, run >= 4 ? '#fff2b0' : '#ffd27a', run >= 4 ? 6 : 4);
     setCoins();
-    if (G.coinCount() >= 100) award('coins');
   });
   G.on('moongate', () => { A.sfx('switch', { night: G.world === 'night', onBeat: false }); PT.sparks(G.px, G.foot - 40, '#fff6e0', 10); });
   // 上船：木头一响，溅点水
@@ -122,7 +107,6 @@
   // 空中翻面借力
   G.on('hop', () => {
     A.sfx('hop');
-    if (++hopsRun >= 15) award('hop');
     PT.sparks(G.px, G.foot - 10, G.world === 'night' ? '#c8d8ff' : '#ffe0a0', 12);
     PT.dust(G.px, G.foot, 4, ['#ffffff', '#e8e0d0'], 0.5);
   });
@@ -142,7 +126,6 @@
     $('comboNum').textContent = n >= 2 ? '×' + n : '';
     if (n >= 2) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
     if (n > 0 && n % 4 === 0) { PT.float(G.px, G.foot - 110, 'x' + n, '#fff2c0'); setLayer(A.layer + 1); }
-    if (n >= 16) award('combo');
   });
   // 每站结束盖一个印章：甲乙丙丁
   let stampTimer = null;
@@ -155,17 +138,7 @@
     st.classList.remove('show'); void st.offsetWidth; st.classList.add('show');
     A.sfx('checkpoint');
     clearTimeout(stampTimer); stampTimer = setTimeout(() => st.classList.remove('show'), 2600);
-    if (g.fails === 0 && G.mode !== 'endless') award('clean');
   });
-  // 云游：心灯
-  function setLives() {
-    const el = $('livesPill');
-    el.classList.toggle('hidden', G.mode !== 'endless');
-    el.querySelectorAll('.lamp').forEach((p, i) => p.classList.toggle('on', i < G.lives));
-  }
-  G.on('lives', () => { setLives(); const el = $('livesPill'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); });
-  let lastDist = -1;
-  function setDist() { const d = G.dist(); if (d !== lastDist) { lastDist = d; $('distNum').textContent = d + ' 步'; } }
   const WNAME = { clear: '晴', rain: '雨', snow: '雪', fog: '雾', wind: '风' };
   function setWeather() {
     const w = G.weatherAt(G.px);
@@ -187,53 +160,20 @@
   G.on('readyEnd', () => hideReason());
   G.on('arrive', () => { A.sfx('arrive'); hideHint(); });
   G.on('ended', () => {
-    $('hud').classList.add('hidden'); panelStack = []; $('chapterCard').classList.remove('show');
+    $('hud').classList.add('hidden'); panelStack = []; $('chapterCard').classList.remove('show'); $('poemLine').classList.remove('show');
     hideHint(); $('stamp').classList.remove('show'); G.keyTip = null;
     const s = G.stats, m = Math.floor(s.time / 60), sec = Math.round(s.time % 60);
-    const ls = lanternsHere(), lg = ls.filter(l => G.got[l.i]).length;
-    $('endLanterns').textContent = G.mode === 'endless' ? lg : lg + ' / ' + ls.length;
+    $('endLanterns').textContent = G.lanternCount() + ' / ' + LV.lanterns.length;
     $('endFails').textContent = s.fails;
     $('endTime').textContent = m + ' 分 ' + String(sec).padStart(2, '0') + ' 秒';
     $('endCombo').textContent = s.bestCombo || 0;
-    const cs = G.mode === 'station' ? LV.coins.filter(c => LV.regionAt(c.x) === G.station) : LV.coins;
-    $('endCoins').textContent = G.coinCount() + (G.mode === 'endless' ? '' : ' / ' + cs.length);
-    const row = (r, i) => {
+    $('endCoins').textContent = G.coinCount() + ' / ' + LV.coins.length;
+    const rows = LV.regions.map((r, i) => {
       const g = G.grade(i);
       if (!g || !G.graded[i]) return `<li><span class="g-name">${r.name}</span><span class="g-sub">—</span><b class="g-mark off">·</b></li>`;
       return `<li><span class="g-name">${r.name}</span><span class="g-sub">踩拍 ${Math.round(g.beat * 100)}% · 铜钱 ${g.coins}/${g.coinsTotal}</span><b class="g-mark">${g.mark}</b></li>`;
-    };
-    let news = '';
-    $('endScoreBox').hidden = G.mode !== 'endless';
-    if (G.mode === 'endless') {
-      const leg = G.regionIndex + 1, dist = G.dist(), score = G.score();
-      $('endTitle').textContent = G.state === 'ended' && G.px >= LV.endX - 2 ? '云游圆满' : '云游 · ' + LV.regions[G.regionIndex].no;
-      $('endLine').textContent = '走了 ' + dist + ' 步，经过 ' + leg + ' 程。';
-      $('endScore').textContent = score;
-      const best = MT.data.endless.score;
-      news = MT.recordEndless(score, dist, leg) ? '新纪录！' : '最高纪录 ' + best + ' 分';
-      $('endGrades').innerHTML = '';
-      if (dist >= 500) award('cloud');
-      if (leg >= 8) award('leg8');
-      $('btnAgain').textContent = '再云游一次';
-    } else if (G.mode === 'station') {
-      const r = LV.regions[G.station], g = G.grade(G.station);
-      $('endTitle').textContent = r.no + ' · ' + r.name;
-      $('endLine').textContent = r.line;
-      $('endGrades').innerHTML = row(r, G.station);
-      if (g) news = MT.recordStation(r.id, g.mark, g.score) ? '新纪录：「' + g.mark + '」 ' + g.score + ' 分' : '最好成绩：「' + MT.data.station[r.id].mark + '」 ' + MT.data.station[r.id].score + ' 分';
-      $('btnAgain').textContent = '再走这一站';
-    } else {
-      $('endTitle').textContent = '旅程已抵达';
-      $('endLine').textContent = '星星落进了圣湖里。';
-      $('endGrades').innerHTML = LV.regions.map(row).join('');
-      award('arrive');
-      if (LV.regions.every((r, i) => G.graded[i] && G.grade(i).mark === '甲')) award('allJia');
-      if (G.lanternCount() >= LV.lanterns.length) award('lamps');
-      if (G.diff === 'hard') award('hard');
-      LV.regions.forEach((r, i) => { const g = G.grade(i); if (g && G.graded[i]) MT.recordStation(r.id, g.mark, g.score); });
-      $('btnAgain').textContent = '再走一次';
-    }
-    $('endNews').textContent = news;
+    });
+    $('endGrades').innerHTML = rows.join('');
     showPanel('endScreen');
   });
   G.on('paused', () => { A.pause(); panelStack = []; showPanel('pauseScreen'); });
@@ -241,17 +181,10 @@
 
   // ---------------------------------------------------------------- 旅程进度条：六站
   const jr = $('journey');
-  let lastP = -1, jx0 = 0, jx1 = 1;
-  function buildJourney() {      // 旅程：六站；单站：只这一站；云游：每一程一格
-    jx0 = G.mode === 'station' ? LV.regions[G.station].x0 : 0;
-    jx1 = G.mode === 'station' ? LV.endX : LV.totalX;
-    const rs = G.mode === 'station' ? [] : LV.regions;
-    jr.querySelector('.stops').innerHTML = rs.map(r => `<i style="left:${((r.x0 - jx0) / (jx1 - jx0) * 100).toFixed(2)}%" title="${r.name}"></i>`).join('') + '<i class="end" style="left:100%"></i>';
-    lastP = -1;
-  }
-  buildJourney();
+  jr.querySelector('.stops').innerHTML = LV.regions.map(r => `<i style="left:${(r.x0 / LV.totalX * 100).toFixed(2)}%" title="${r.name}"></i>`).join('') + '<i class="end" style="left:100%"></i>';
+  let lastP = -1;
   function setJourney() {
-    const p = Math.max(0, Math.min(1, (G.px - jx0) / (jx1 - jx0)));
+    const p = Math.max(0, Math.min(1, G.px / LV.totalX));
     if (Math.abs(p - lastP) < 0.0008) return;
     lastP = p;
     jr.style.setProperty('--p', (p * 100).toFixed(2) + '%');
@@ -260,15 +193,6 @@
   }
 
   // ---------------------------------------------------------------- 流程
-  let lastMode = ['journey', {}];
-  function startMode(mode, o) {
-    lastMode = [mode, o || {}];
-    G.setup(mode, o);
-    hopsRun = 0; lastDist = -1;
-    buildJourney(); setLives();
-    $('lanternPill').title = mode === 'endless' ? '收集到的灯' : '收集到的灯（每盏点亮一句诗）';
-    startJourney();
-  }
   function startJourney() {
     A.unlock(); A.sfx('ui');
     hidePanels(); panelStack = [];
@@ -278,7 +202,9 @@
     G.wipe = null;
     RF.Particles.clear();
     $('comboNum').textContent = '';
+    G.applyDiff();
     G.start();
+    poemUsed = {}; poemT = 9 + Math.random() * 8; $('poemLine').classList.remove('show');
     setLayer(1, true); setCoins();
     setLanterns();
     if (startAt) { jumpTo(startAt); }
@@ -287,10 +213,8 @@
   function toTitle() {
     A.resume();
     G.state = 'title';
-    if (LV.mode !== 'journey' || G.mode !== 'journey') { G.setup('journey'); buildJourney(); }
     G.reset();
-    refreshTitle();
-    hidePanels(); hideHint(); hideReason(); panelStack = [];
+    hidePanels(); hideHint(); hideReason(); panelStack = []; $('poemLine').classList.remove('show');
     $('stamp').classList.remove('show');
     $('introLine').classList.remove('show');
     $('chapterCard').classList.remove('show');
@@ -325,7 +249,7 @@
       else if (inGame()) G.pause();
       else if (panelStack.length) back();
     } else if (k === 'Enter' && G.state === 'title' && document.activeElement === document.body) {
-      startMode('journey');
+      startJourney();
     }
   });
   // 触屏 / 鼠标：左半屏切换，右半屏跳
@@ -353,16 +277,7 @@
     if (!b) return;
     A.unlock();
     switch (b.dataset.act) {
-      case 'start': startMode('journey'); break;
-      case 'again': startMode(lastMode[0], lastMode[0] === 'endless' ? {} : lastMode[1]); break;
-      case 'endless': startMode('endless'); break;
-      case 'station': startMode('station', { ri: +b.dataset.ri }); break;
-      case 'stations': A.sfx('ui'); fillStations(); openSub('stationScreen'); break;
-      case 'book': A.sfx('ui'); fillBook(); openSub('bookScreen'); break;
-      case 'diff': {
-        const ds = ['easy', 'normal', 'hard'];
-        G.diff = ds[(ds.indexOf(G.diff) + 1) % 3]; MT.setDiff(G.diff); refreshTitle(); A.sfx('ui'); break;
-      }
+      case 'start': case 'again': startJourney(); break;
       case 'resume': G.resume(); break;
       case 'retry': A.resume(); hidePanels(); focusGame(); G.state = 'running'; G.retry(); break;
       case 'title': A.sfx('ui'); toTitle(); break;
@@ -373,33 +288,14 @@
         try { localStorage.setItem('between-reflections:reduce', G.reduceMotion ? 'on' : 'off'); } catch (err) { }
         refreshToggles(); A.sfx('ui'); break;
       case 'help': A.sfx('ui'); openSub('helpScreen'); break;
+      case 'diff': {
+        const ds = ['easy', 'normal', 'hard'];
+        G.diff = ds[(ds.indexOf(G.diff) + 1) % 3]; MT.setDiff(G.diff); refreshDiff(); A.sfx('ui'); break;
+      }
       case 'credits': A.sfx('ui'); openSub('creditsScreen'); break;
       case 'back': A.sfx('ui'); back(); break;
     }
   });
-
-  // ---------------------------------------------------------------- 标题页、单站列表、诗笺
-  const DNAME = { easy: '轻松', normal: '标准', hard: '困难' };
-  function litCount() { return MT.ORDER.reduce((n, id) => n + (MT.data.poems[id] || []).filter(Boolean).length, 0); }
-  function refreshTitle() {
-    $('btnDiff').textContent = '难度 ' + DNAME[G.diff];
-    $('bookSub').textContent = litCount() + ' / 24 句 · 印章 ' + Object.keys(MT.data.ach).length + ' / ' + MT.ACH.length;
-  }
-  function fillStations() {
-    $('stationList').innerHTML = JR.map((r, i) => {
-      const b = MT.data.station[r.id];
-      return `<button class="row-btn" data-act="station" data-ri="${i}"><span class="st-l"><span>${r.no} · ${r.name}</span><small>${b ? '最好 ' + b.score + ' 分' : '还没走过'}</small></span><b class="mk${b ? '' : ' off'}">${b ? b.mark : '·'}</b></button>`;
-    }).join('');
-  }
-  function fillBook() {
-    $('poemGrid').innerHTML = MT.ORDER.map(id => {
-      const P = MT.POEMS[id], lit = MT.data.poems[id] || [];
-      const cols = P.lines.map((l, i) => `<span class="col${lit[i] ? '' : ' off'}">${lit[i] ? l : '〇'.repeat(l.length)}</span>`).join('');
-      return `<div class="poem${MT.poemDone(id) ? ' done' : ''}"><span class="ttl">${P.title}</span>${cols}<span class="au">${P.author}</span></div>`;
-    }).join('');
-    $('achGrid').innerHTML = MT.ACH.map(([id, seal, nm, ds]) => `<div class="ach${MT.data.ach[id] ? ' on' : ''}"><span class="seal">${seal}</span><span><div class="nm">${nm}</div><div class="ds">${ds}</div></span></div>`).join('');
-  }
-  refreshTitle();
 
   // ---------------------------------------------------------------- 缩放
   function resize() {
@@ -430,6 +326,7 @@
       G.update(C.STEP);
       if (G.state !== 'paused') {
         RF.Particles.update(C.STEP);
+        tickPoem(C.STEP);
         // 冰滑道：脚下扬起雪沫
         if (G.state === 'running' && G.onGround && !G.riding && LV.paceAt(G.px) > 1.2 && (slideN = (slideN + 1) % 3) === 0)
           PT.dust(G.px - 6, G.foot, 2, ['#ffffff', '#dfeefa', '#bcd6ec'], 1.6);
@@ -449,10 +346,12 @@
     const camPx = title ? 1400 + Math.sin(G.animT * 0.04) * 900 : G.px;
     RF.Renderer.draw(G, { camPx, title, noGhost: title });
     if (!title) setJourney();
-    if (!title && G.mode === 'endless') setDist();
     if (G.debug && dbg) dbg.textContent = `x ${Math.round(G.px)} · 拍 ${G.beat().toFixed(2)} · ${G.world} · 脚 ${Math.round(G.foot)} · 检查点 ${G.cpIndex} · ${G.state}`;
   }
   if (G.debug && dbg) dbg.hidden = false;
+  const DNAME = { easy: '轻松', normal: '标准', hard: '困难' };
+  function refreshDiff() { $('btnDiff').textContent = '难度 ' + DNAME[G.diff]; }
+  refreshDiff();
   refreshToggles();
   G.rollWeather();
   // 先载入背景与像素素材，再开放“开始”
@@ -461,5 +360,5 @@
   RF.Regions.load(() => { btn.disabled = false; btn.textContent = '开始旅行'; });
   requestAnimationFrame(frame);
 
-  RF.debug = { G, start: startJourney, toTitle, jumpTo };
+  RF.debug = { G, start: startJourney, toTitle, jumpTo, showPoem };
 })();

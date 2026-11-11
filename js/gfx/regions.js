@@ -25,8 +25,7 @@
   const IMG = {}, NIGHT = {};
   let sprites = null, spritesNight = null, spritesDim = null;
   function load(done) {
-    // 夜景是单独画好的一张（tools/night_bg.py 生成），没有时才退回到压暗的白天图
-    const list = ALL_BG.map(id => ['bg/' + id + '.png', id]).concat(ALL_BG.map(id => ['bg/' + id + 'n.png', id + 'n']), [['sprites.png', '__sprites']]);
+    const list = ALL_BG.map(id => ['bg/' + id + '.png', id]).concat([['sprites.png', '__sprites']]);
     let left = list.length;
     list.forEach(([file, id]) => {
       const im = new Image();
@@ -36,8 +35,7 @@
             sprites = im;
             spritesNight = tint(im, '#7684c0');
             spritesDim = tint(im, '#aab2d8');
-          } else if (id.endsWith('n')) NIGHT[id.slice(0, -1)] = im;
-          else { IMG[id] = im; if (!NIGHT[id]) NIGHT[id] = X.nightOf(im); }
+          } else { IMG[id] = im; NIGHT[id] = X.nightOf(im); }
         }
         if (--left === 0) { buildTiles(); RF.Regions.ready = true; done(); }
       };
@@ -136,75 +134,6 @@
     const im = world === 'night' ? NIGHT[id] : IMG[id];
     if (!im) return;
     ctx.globalAlpha = a; ctx.drawImage(im, 0, 0); ctx.globalAlpha = 1;
-    if (world === 'night') nightLights(ctx, id, a);
-  }
-
-  // ------------------------------------------------------------ 夜里的灯火
-  // 古画里的夜：大片冷色，只点几处暖光。每张背景按画面里的建筑、船、城楼摆上会闪的灯。
-  // [x, y, 种类, 参数]：lamp 灯点 / lan 红灯笼 / win 窗光(w,h) / fire 烽火 / boat 渔火（带水中倒影）
-  const NIGHT_FX = {
-    '8535': [['win', 200, 75, 40, 18], ['win', 150, 79, 28, 15], ['lan', 120, 58], ['lan', 252, 60], ['lamp', 210, 104], ['lamp', 240, 104], ['lamp', 175, 104]],
-    '8532': [['lan', 170, 88], ['lan', 200, 88], ['lan', 232, 88], ['lan', 264, 88], ['lan', 296, 88], ['lamp', 98, 66]],
-    '8530': [['fire', 132, 31], ['fire', 201, 29], ['lamp', 140, 95], ['lamp', 152, 125]],
-    '8528': [['fire', 52, 75], ['fire', 170, 63], ['fire', 265, 33]],
-    '8523': [['win', 66, 110, 6, 4], ['win', 84, 110, 5, 4], ['lamp', 100, 112], ['lamp', 200, 129], ['lamp', 60, 122], ['lamp', 74, 122]],
-    '8538': [['boat', 68, 138], ['boat', 116, 134], ['lamp', 150, 86], ['lamp', 150, 94]],
-    '8539': [['boat', 110, 108], ['boat', 160, 108], ['boat', 42, 106], ['boat', 182, 105], ['boat', 257, 105]],
-    '8533': [['lan', 67, 86], ['lamp', 110, 97], ['lamp', 140, 97], ['lamp', 170, 97], ['lamp', 200, 97]],
-    '8534': [['lan', 165, 72], ['lan', 235, 72], ['win', 186, 78, 26, 12], ['lamp', 60, 110], ['lamp', 110, 106]],
-    '8536': [['boat', 208, 104], ['lamp', 40, 92], ['lamp', 92, 95], ['lamp', 135, 96]],
-    '8537': [['lan', 47, 35], ['lan', 47, 52], ['lan', 47, 68], ['boat', 102, 104], ['lamp', 240, 88]],
-    '8531': [['lamp', 120, 128], ['lamp', 200, 128]],
-    '8521': [['boat', 150, 104]],
-    '8519': [['boat', 210, 92]],
-  };
-  // 孔明灯：晴夜、薄云的夜里慢慢往上飘（雨夜不放）
-  const NO_SKYLANTERN = { '8536': 1, '8537': 1, '8532': 1, '8535': 1, '8522': 1 };
-  const now = () => performance.now() / 1000;
-  function nightLights(ctx, id, a) {
-    const t = now(), list = NIGHT_FX[id] || [];
-    const r = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
-    ctx.globalAlpha = a;
-    for (let i = 0; i < list.length; i++) {
-      const [k, x, y, w, h] = list[i];
-      const fl = 0.75 + 0.25 * Math.sin(t * (5 + i) + i * 2.3) * Math.sin(t * 2.1 + i);   // 灯火的颤
-      if (k === 'lamp') {
-        r(x, y, 1, 1, '#ffe2a0'); X.glow(x + 0.5, y + 0.5, 6, [255, 190, 110], 0.5 * fl * a);
-      } else if (k === 'lan') {
-        r(x - 1, y - 1, 3, 1, '#3a1a14'); r(x - 1, y, 3, 3, '#e04a2a'); r(x, y, 1, 3, '#ffb070'); r(x - 1, y + 3, 3, 1, '#3a1a14');
-        X.glow(x + 0.5, y + 1.5, 9, [255, 120, 70], 0.55 * fl * a);
-      } else if (k === 'win') {
-        // 窗棂已经画在夜景图里，这里只加一层随烛火轻轻起伏的光
-        ctx.globalAlpha = a * 0.12 * (1 - fl); r(x, y, w, h, '#2a1408'); ctx.globalAlpha = a;
-        X.glow(x + w / 2, y + h / 2, Math.max(w, h) * 0.9, [255, 180, 100], 0.35 * fl * a);
-      } else if (k === 'fire') {
-        const f = (t * 10 + i * 3) | 0;
-        r(x - 1, y, 3, 2, '#c83818'); r(x - 1 + (f % 2), y - 1, 2, 1, '#ff8a28'); r(x, y - 2 - (f % 3 === 0 ? 1 : 0), 1, 2, '#ffd060');
-        X.glow(x + 0.5, y - 1, 16, [255, 130, 50], 0.6 * fl * a);
-        if (((t * 3 + i) | 0) % 2 === 0) r(x + ((t * 7) | 0) % 3 - 1, y - 4 - (((t * 9) | 0) % 4), 1, 1, '#ffb050');   // 火星
-      } else if (k === 'boat') {
-        r(x, y, 1, 2, '#ffd890'); X.glow(x + 0.5, y + 1, 8, [255, 190, 110], 0.55 * fl * a);
-        for (let k2 = 0; k2 < 4; k2++) {                    // 水里一串摇晃的倒影
-          const yy = y + 4 + k2 * 2, off = Math.round(Math.sin(t * 2 + k2 + i) * 1);
-          ctx.globalAlpha = a * (0.5 - k2 * 0.1); r(x - 1 + off, yy, 3 - (k2 > 1 ? 1 : 0), 1, '#e8b870');
-        }
-        ctx.globalAlpha = a;
-      }
-    }
-    if (!NO_SKYLANTERN[id] && !(RF.G && RF.G.reduceMotion)) {
-      for (let k = 0; k < 3; k++) {
-        const per = 34 + k * 7, ph = ((t + k * 13.7) % per) / per;      // 每盏灯一个周期从下往上
-        const x = Math.round(30 + U.hash(k * 31 + ((t + k * 13.7) / per | 0), 7) * 260 + Math.sin(t * 0.6 + k) * 4);
-        const y = Math.round(150 - ph * 170);
-        if (y < -6) continue;
-        const fade = Math.min(1, ph * 6) * Math.min(1, (1 - ph) * 4);
-        ctx.globalAlpha = a * fade;
-        r(x - 1, y - 2, 3, 1, '#c87a3a'); r(x - 1, y - 1, 3, 2, '#ffc070'); r(x, y + 1, 1, 1, '#ffe4a8');
-        X.glow(x + 0.5, y, 7, [255, 180, 100], 0.45 * fade * a);
-      }
-      ctx.globalAlpha = 1;
-    }
-    ctx.globalAlpha = 1;
   }
   // 区域交界处的过渡
   function regionMix(centre) {

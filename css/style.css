@@ -358,41 +358,10 @@ button.round { width: calc(13 * var(--px)) !important; height: calc(13 * var(--p
 #comboPill .pip.on { background: #ffd27a; }
 #comboPill b:empty { display: none; }
 
-/* v1.0：玩法模式按钮、心灯、单站列表、诗笺、印章、提示条 */
-.row.modes { gap: calc(4 * var(--px)); }
-.pill.mode { display: flex; flex-direction: column; align-items: center; gap: calc(1 * var(--px)); padding: calc(3 * var(--px)) calc(6 * var(--px)) !important; min-width: calc(54 * var(--px)); }
-.pill.mode b { font-size: calc(16 * var(--u)); letter-spacing: 0.12em; }
-.pill.mode small { font-size: calc(11 * var(--u)); opacity: 0.8; }
-#livesPill { display: flex; align-items: center; padding: 0 calc(3 * var(--px)) 0 calc(2 * var(--px)) !important; height: calc(13 * var(--px)) !important; box-sizing: border-box; margin: 0 !important; gap: calc(1.5 * var(--px)) !important; color: #fff2c0; font-weight: 700; font-size: calc(15 * var(--u)); font-variant-numeric: tabular-nums; }
-#livesPill.hidden { display: none; }
-#livesPill .lamp { width: calc(3 * var(--px)); height: calc(4 * var(--px)); background: #3a3250; box-shadow: 0 0 0 calc(0.5 * var(--px)) #1b1720; display: block; }
-#livesPill .lamp.on { background: #ff8a4a; box-shadow: 0 0 0 calc(0.5 * var(--px)) #1b1720, 0 0 calc(3 * var(--px)) rgba(255,160,90,0.8); }
-#livesPill span { margin-left: calc(2 * var(--px)); }
-.sheet.wide { width: calc(980 * var(--u)); max-height: 92%; overflow: auto; }
-#stationList .row-btn b.mk { width: calc(8 * var(--px)); height: calc(8 * var(--px)); display: grid; place-items: center; background: #c8402e; color: #fff2dc; font-size: calc(18 * var(--u)); box-shadow: 0 0 0 var(--px) #f2e8cc; }
-#stationList .row-btn b.mk.off { background: #3a3250; color: #8a84a0; }
-#stationList .row-btn .st-l { display: flex; flex-direction: column; gap: calc(2 * var(--u)); }
-#stationList .row-btn small { font-size: calc(12 * var(--u)); opacity: 0.75; }
-.poems { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: calc(3 * var(--px)); }
-.poem { background: rgba(242,232,204,0.92); color: #2a2030; padding: calc(4 * var(--px)) calc(1.5 * var(--px)); display: flex; flex-direction: row-reverse; justify-content: center; gap: calc(1 * var(--px)); overflow: hidden; min-height: calc(62 * var(--px)); box-shadow: 0 0 0 var(--px) #1b1720, var(--px) var(--px) 0 var(--px) rgba(0,0,0,0.35); position: relative; }
-.poem .col { writing-mode: vertical-rl; font-size: calc(15 * var(--u)); letter-spacing: 0.06em; line-height: 1.15; }
-.poem .col.off { color: rgba(42,32,48,0.18); font-size: calc(10 * var(--u)); letter-spacing: 0.62em; }
-.poem .ttl { writing-mode: vertical-rl; font-weight: 900; font-size: calc(15 * var(--u)); color: #8a2a20; }
-.poem .au { writing-mode: vertical-rl; font-size: calc(11 * var(--u)); opacity: 0.7; align-self: flex-end; }
-.poem.done::after { content: "全"; position: absolute; left: calc(2 * var(--px)); bottom: calc(2 * var(--px)); width: calc(7 * var(--px)); height: calc(7 * var(--px)); display: grid; place-items: center; background: #c8402e; color: #fff2dc; font-size: calc(13 * var(--u)); transform: rotate(-8deg); }
-.achs { display: grid; grid-template-columns: repeat(6, 1fr); gap: calc(3 * var(--px)) calc(2 * var(--px)); margin-top: calc(2 * var(--px)); }
-.ach { display: flex; align-items: center; gap: calc(2 * var(--px)); color: #fff6e0; }
-.ach .seal { flex: none; width: calc(12 * var(--px)); height: calc(12 * var(--px)); display: flex; align-items: center; justify-content: center; background: #3a3250; color: #6a6480; font-weight: 900; font-size: calc(15 * var(--u)); line-height: 1; letter-spacing: 0; box-shadow: 0 0 0 var(--px) #8a84a0; writing-mode: vertical-rl; }
-.ach.on .seal { background: #c8402e; color: #fff2dc; box-shadow: 0 0 0 var(--px) #f2e8cc; transform: rotate(-5deg); }
-.ach .nm { font-size: calc(13 * var(--u)); font-weight: 700; }
-.ach .ds { font-size: calc(11 * var(--u)); opacity: 0.7; }
-.ach:not(.on) .nm { opacity: 0.6; }
-.news { color: #ffe0a0; min-height: 1.2em; margin: 0 0 calc(8 * var(--u)); text-shadow: var(--px) var(--px) 0 rgba(20,14,30,0.8); }
-[hidden] { display: none !important; }
-#toast { position: absolute; left: 50%; bottom: calc(10 * var(--px)); transform: translateX(-50%); display: flex; align-items: center; gap: calc(3 * var(--px)); pointer-events: none; opacity: 0; color: #fff6e0; text-shadow: var(--px) var(--px) 0 rgba(20,14,30,0.85); }
-#toast.show { animation: toastIn 3.2s steps(1) both; }
-@keyframes toastIn { 0% { opacity: 0; } 4% { opacity: 1; } 88% { opacity: 1; } 100% { opacity: 0; } }
-#toast .t-seal { width: calc(14 * var(--px)); height: calc(14 * var(--px)); display: grid; place-items: center; background: #c8402e; color: #fff2dc; font-weight: 900; font-size: calc(16 * var(--u)); writing-mode: vertical-rl; box-shadow: 0 0 0 var(--px) #f2e8cc, 0 0 0 calc(2 * var(--px)) #1b1720; transform: rotate(-6deg); }
-#toast.t-poem .t-seal { background: #f2e8cc; color: #8a2a20; }
-#toast .t-name { font-weight: 900; font-size: calc(20 * var(--u)); letter-spacing: 0.2em; }
-#toast .t-sub { font-size: calc(12 * var(--u)); opacity: 0.9; margin-top: calc(3 * var(--u)); }
+/* 旅途中随机浮现的唐诗：右侧竖排，淡入淡出 */
+#poemLine { position: absolute; right: calc(16 * var(--px)); top: calc(24 * var(--px)); display: flex; flex-direction: row-reverse; align-items: flex-start; gap: calc(3 * var(--px)); pointer-events: none; opacity: 0; color: #fff6e0; text-shadow: var(--px) var(--px) 0 rgba(20,14,30,0.75), 0 0 calc(6 * var(--px)) rgba(20,14,30,0.5); }
+#poemLine.show { animation: poemIn 6.5s ease both; }
+@keyframes poemIn { 0% { opacity: 0; transform: translateY(calc(-3 * var(--px))); } 12% { opacity: 1; transform: none; } 82% { opacity: 1; } 100% { opacity: 0; } }
+#poemLine .pl-text { writing-mode: vertical-rl; font-size: calc(24 * var(--u)); letter-spacing: 0.32em; line-height: 1.6; font-weight: 600; }
+#poemLine .pl-src { writing-mode: vertical-rl; font-size: calc(13 * var(--u)); letter-spacing: 0.2em; opacity: 0.85; margin-top: calc(10 * var(--px)); }
+#poemLine .pl-src b { display: inline-block; background: #c8402e; color: #fff2dc; text-shadow: none; padding: calc(1 * var(--px)) 0; margin-top: calc(2 * var(--px)); }
