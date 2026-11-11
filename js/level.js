@@ -461,6 +461,8 @@
   L.build = function (mode) {
     clear();
     journey();
+    L.regions[L.regions.length - 1].x1 = x;
+    L.totalX = x;
     // 按位置排好，便于查找
     L.solids.sort((a, b) => a.x0 - b.x0);
     L.hazards.sort((a, b) => a.x0 - b.x0);
