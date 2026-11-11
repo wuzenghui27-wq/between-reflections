@@ -19,6 +19,12 @@
     tibet: { bg: { clear: ['8523'], snow: ['8518', '8523'] },
       water: { day: 586, night: 568, frozen: 'night' }, waterCol: ['#3a78a8', '#0c1a3e'], tile: 'snowrock', glow: 0.8 }
   };
+  // 夜景：实拍的中国夜景照片像素化而成（assets/bg/night，来源与署名见 CREDITS.md）；没载入时退回把白天的图压暗
+  const NIGHT_BG = {
+    jiangnan: ['jiangnan1', 'jiangnan2'], garden: ['garden1', 'garden2'], autumn: ['autumn1', 'autumn2', 'autumn3'],
+    wall: ['wall1'], glacier: ['glacier1', 'glacier2'], tibet: ['tibet1', 'tibet2']
+  };
+  const ALL_NIGHT = Object.values(NIGHT_BG).flat();
   const ALL_BG = [...new Set(Object.values(R).flatMap(r => Object.values(r.bg).flat()))];
 
   // ------------------------------------------------------------ 背景色调（js/bgtone.js）：前景往背景的颜色上靠
@@ -40,7 +46,7 @@
   let sprites = null, spritesNight = null, spritesDim = null, curRid = null;
   const spritesReg = {};
   function load(done) {
-    const list = ALL_BG.map(id => ['bg/' + id + '.png', id]).concat([['sprites.png', '__sprites']]);
+    const list = ALL_BG.map(id => ['bg/' + id + '.png', id]).concat(ALL_NIGHT.map(id => ['bg/night/' + id + '.png', 'n:' + id]), [['sprites.png', '__sprites']]);
     let left = list.length;
     list.forEach(([file, id]) => {
       const im = new Image();
@@ -52,7 +58,8 @@
             spritesDim = tint(im, '#aab2d8');
             // 每站的人物与道具带一点这一站背景的色温
             for (const id in R) if (REGTONE[id].hor) spritesReg[id] = mixTint(im, REGTONE[id].hor, 0.14);
-          } else { IMG[id] = im; NIGHT[id] = X.nightOf(im); }
+          } else if (id.startsWith('n:')) NIGHT[id] = im;
+          else { IMG[id] = im; NIGHT[id] = X.nightOf(im); }
         }
         if (--left === 0) { buildTiles(); RF.Regions.ready = true; done(); }
       };
@@ -145,10 +152,11 @@
 
   // ------------------------------------------------------------ 背景
   // 某个横坐标该显示哪张图（以及与下一张的过渡）
-  function bgAt(G, px) {
+  function bgAt(G, px, world) {
     const ri = LV.regionAt(px), reg = LV.regions[ri], rid = reg.id;
     const w = (G.weather && G.weather[ri]) || 'clear';
-    const list = R[rid].bg[w] || R[rid].bg.clear || Object.values(R[rid].bg)[0];
+    let list = R[rid].bg[w] || R[rid].bg.clear || Object.values(R[rid].bg)[0];
+    if (world === 'night') { const nl = (NIGHT_BG[rid] || []).map(id => 'n:' + id).filter(id => NIGHT[id]); if (nl.length) list = nl; }
     const len = Math.max(1, Math.min(reg.x1, LV.totalX || reg.x1) - reg.x0) || 1;
     const t = U.clamp((px - reg.x0) / len, 0, 0.9999) * list.length;
     const k = Math.floor(t), f = t - k;
@@ -172,13 +180,13 @@
   const shownBg = {};     // 每站当前显示的背景图（水面倒影用）
   function backdrop(ctx, G, world, centre) {
     const m = regionMix(centre);
-    const A = bgAt(G, m.b === null ? centre : Math.min(centre, LV.regions[m.b].x0 - 1));
+    const A = bgAt(G, m.b === null ? centre : Math.min(centre, LV.regions[m.b].x0 - 1), world);
     shownBg[A.rid] = A.fade > 0.5 && A.next ? A.next : A.cur;
     curRid = A.rid;
     drawImg(ctx, A.cur, world, 1);
     if (A.next && A.fade > 0) drawImg(ctx, A.next, world, A.fade);
     if (m.b !== null && m.t > 0) {
-      const B = bgAt(G, LV.regions[m.b].x0 + 1);
+      const B = bgAt(G, LV.regions[m.b].x0 + 1, world);
       drawImg(ctx, B.cur, world, m.t);
       shownBg[B.rid] = B.cur;
       if (m.t > 0.5) curRid = B.rid;
