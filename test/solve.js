@@ -8,6 +8,7 @@ for (const f of ['js/config.js', 'js/util.js', 'js/level.js', 'js/game.js'])
   vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f });
 const RF = ctx.RF, C = RF.CFG, LV = RF.LEVEL;
 const G = RF.createGame();
+const di = process.argv.indexOf('--diff'); if (di > 0) LV.diff = +process.argv[di + 1];   // 难度：整体步速倍数
 const DT = C.STEP, K = 3;   // 每 K 帧做一次决定
 const ACTS = [[0, 0], [0, 1], [1, 0], [1, 1]];
 

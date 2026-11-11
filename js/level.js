@@ -4,12 +4,14 @@
 (function () {
   const C = RF.CFG, B = C.BEAT_PX, G0 = C.GROUND;
 
-  const L = {
-    solids: [], hazards: [], bells: [], lanterns: [], mirages: [], ferries: [],
-    moongates: [], rollers: [], sinkers: [], zones: [],
-    checkpoints: [], regions: [], texts: [], endX: 0
-  };
+  const LISTS = ['solids', 'hazards', 'bells', 'lanterns', 'mirages', 'ferries', 'moongates', 'rollers', 'sinkers', 'zones', 'checkpoints', 'regions', 'texts'];
+  const L = { endX: 0, version: 0, mode: 'journey' };
+  LISTS.forEach(k => { L[k] = []; });
   let x = 0, gy = G0, gateN = 0;
+  function clear() {
+    LISTS.forEach(k => { L[k].length = 0; });
+    x = 0; gy = G0; gateN = 0; L.endX = 0; L.coins = null; L.diff = L.diff || 1;
+  }
 
   // ------------------------------------------------------------ 地形
   const THIN = { boat: 1, firefly: 1, ice: 1, plank: 1 };
@@ -87,395 +89,518 @@
     L.regions.push({ id, no, name, line, weathers, pace: pace || 1, x0: x, x1: Infinity });
   }
 
-  // ============================================================ 1 江南水乡：切换 + 水位
-  region('jiangnan', '第一站', '江南烟雨', '白天水涨，夜里落潮', { rain: 5, fog: 3, clear: 2 });
-  height(G0);
-  cp('day');
-  walk(9);
-  text(-5, '前面的石阶只在夜里露出水面。按 Shift 切到夜晚。', 6, 'switch');
-  only(3, 'night', 'steps', G0 + 6);
-  lantern(-1.5, 'night', 30);
-  walk(4);
-  text(-3.5, '白天水高，乌篷船浮在岸边。切回白天跳上船，船就会载你过河。', 6, 'switch2');
-  ferry(2, 2);
-  walk(4);
-  lantern(-2, 'night');                           // 只在夜里亮的灯：多留一会儿夜里才拿得到
-  only(3, 'night', 'steps', G0 + 6);
-  walk(3);
-  { const f = ferry(1.5, 2); L.lanterns.push({ i: L.lanterns.length, x: f.bx0 + 2.6 * B, y: G0 - 70, w: 'day' }); }
-  walk(3);
-  only(3, 'night', 'steps', G0 + 6);
-  walk(3);
-  cp('night');
-  text(-2, '看前方淡淡的轮廓：那是另一面的路。', 4);
-  ferry(1.5, 1.5);
-  walk(2);
-  only(2, 'night', 'steps', G0 + 6);
-  walk(2);
-  // 低桥：白天水涨，站在船上过不去；切到夜里落潮，从桥洞下的石阶走，再跳起来切回白天落回船上
-  text(-1.5, '前面桥洞太低。切到夜里从石阶下走，再跳起来切回白天，落回船上。', 7, 'bridge');
-  {
-    const f = ferry(1.5, 6.5), x0 = f.bx0;
-    L.hazards.push({ x0: atX(x0, 4.4) - 30, x1: atX(x0, 4.4) + 30, y0: G0 - 150, y1: G0 - 24, w: 'both', kind: 'arch' });
-    L.solids.push({ x0: atX(x0, 3.0), x1: atX(x0, 5.6), y: G0 + 40, w: 'night', kind: 'steps' });
-    L.lanterns.push({ i: L.lanterns.length, x: atX(x0, 6.4), y: G0 - 60, w: 'day' });
+  // ============================================================ 旅程：六站连成的一条路线
+  function journey() {
+    // ============================================================ 1 江南水乡：切换 + 水位
+    region('jiangnan', '第一站', '江南烟雨', '白天水涨，夜里落潮', { rain: 5, fog: 3, clear: 2 });
+    height(G0);
+    cp('day');
+    walk(9);
+    text(-5, '前面的石阶只在夜里露出水面。按 Shift 切到夜晚。', 6, 'switch');
+    only(3, 'night', 'steps', G0 + 6);
+    lantern(-1.5, 'night', 30);
+    walk(4);
+    text(-3.5, '白天水高，乌篷船浮在岸边。切回白天跳上船，船就会载你过河。', 6, 'switch2');
+    ferry(2, 2);
+    walk(4);
+    lantern(-2, 'night');                           // 只在夜里亮的灯：多留一会儿夜里才拿得到
+    only(3, 'night', 'steps', G0 + 6);
+    walk(3);
+    { const f = ferry(1.5, 2); L.lanterns.push({ i: L.lanterns.length, x: f.bx0 + 2.6 * B, y: G0 - 70, w: 'day' }); }
+    walk(3);
+    only(3, 'night', 'steps', G0 + 6);
+    walk(3);
+    cp('night');
+    text(-2, '看前方淡淡的轮廓：那是另一面的路。', 4);
+    ferry(1.5, 1.5);
+    walk(2);
+    only(2, 'night', 'steps', G0 + 6);
+    walk(2);
+    // 低桥：白天水涨，站在船上过不去；切到夜里落潮，从桥洞下的石阶走，再跳起来切回白天落回船上
+    text(-1.5, '前面桥洞太低。切到夜里从石阶下走，再跳起来切回白天，落回船上。', 7, 'bridge');
+    {
+      const f = ferry(1.5, 6.5), x0 = f.bx0;
+      L.hazards.push({ x0: atX(x0, 4.4) - 30, x1: atX(x0, 4.4) + 30, y0: G0 - 150, y1: G0 - 24, w: 'both', kind: 'arch' });
+      L.solids.push({ x0: atX(x0, 3.0), x1: atX(x0, 5.6), y: G0 + 40, w: 'night', kind: 'steps' });
+      L.lanterns.push({ i: L.lanterns.length, x: atX(x0, 6.4), y: G0 - 60, w: 'day' });
+    }
+    walk(2);
+    split(3, { kind: 'boat', y: G0 + 2 }, { kind: 'steps', y: G0 + 6 });   // 两面都能走：喘口气
+    walk(5);
+
+    // ============================================================ 2 徽派与晋派古建：门与铃
+    region('garden', '第二站', '宫苑园林', '白天货摊挡路，夜里宫门紧闭', { clear: 4, snow: 3, rain: 2 }, 0.9);
+    cp('day');
+    walk(7);
+    text(-6, '白天游人摆着货摊，夜里收了摊，但宫门会关上。', 5);
+    haz(-1, 'day', 'stall');
+    walk(4);
+    haz(-1, 'night', 'door');
+    walk(3);
+    haz(-1, 'day', 'stall');
+    lantern(-2.5, 'night', 50);
+    walk(3);
+    haz(-1, 'night', 'door');
+    walk(5);
+    lantern(-3.2, 'day', 44);
+    text(-4.5, '院门上了锁。去另一面碰响铜铃，门就开了。', 5, 'bell');
+    bellGate(-2.5, 'night', -0.5);
+    walk(4);
+    // ---- 月洞门：穿过就自动翻面，进门前要先想好出门是哪一面
+    cp('day');
+    walk(3);
+    text(-2.5, '穿过月洞门，天色会自己翻过来。进门前，先想好出门要哪一面。', 6, 'gate2');
+    walk(2);
+    haz(-1, 'night', 'door');
+    walk(1.5);
+    moongate();                       // 白天进 → 夜里出，货摊自己没了
+    walk(1.5);
+    haz(-0.6, 'day', 'stall');
+    lantern(-0.6, 'night', 70);
+    walk(2.5);
+    moongate();                       // 夜里进 → 白天出
+    walk(1.5);
+    haz(-0.6, 'night', 'door');
+    walk(2);
+    haz(-1.2, 'day', 'stall');        // 这里得是夜里……
+    walk(2);
+    moongate();                       // ……可门后又是货摊：进门前一拍切回白天
+    walk(1.2);
+    haz(-0.4, 'day', 'stall');
+    walk(1.8);
+    bellGate(-1.2, 'night', -0.2);
+    walk(3);
+    cp('day');
+    haz(-1.2, 'day', 'stall');
+    walk(2);
+    moongate();                       // 两道门挨着：中间那一拍被翻到另一面
+    walk(1);
+    haz(-0.5, 'night', 'door');
+    walk(1);
+    moongate();
+    walk(1.2);
+    haz(-0.5, 'night', 'door');
+    lantern(-0.5, 'day', 70);
+    walk(2);
+    haz(-1, 'day', 'stall');
+    walk(2);
+    bellGate(-1.6, 'day', -0.3);
+    walk(1);
+    moongate();
+    walk(1.5);
+    haz(-0.6, 'night', 'door');
+    walk(5);
+
+    // ============================================================ 3 喀斯特峰林与梯田：跳跃 + 萤火
+    region('autumn', '第三站', '秋山湖泊', '踏着山石，往高处走', { clear: 4, wind: 4, snow: 2 });
+    cp('day');
+    walk(6);
+    text(-5, '山石一层比一层高。按空格（或 ↑）跳上去。', 5, 'jump');
+    height(G0 - 60); walk(3);
+    height(G0 - 120); walk(3);
+    height(G0 - 60); walk(2);
+    height(G0); walk(3);
+    text(-2.5, '缺口也能跳过去。', 3);
+    gap(0.7); walk(3);
+    gap(0.8); walk(2);
+    text(-1.5, '夜里，萤火会连成一条路。', 4);
+    walk(1);
+    only(4, 'night', 'firefly', G0);
+    walk(3);
+    cp('night');
+    haz(-1.5, 'both', 'rock');
+    walk(3);
+    height(G0 - 60); walk(2);
+    only(3, 'night', 'firefly', G0 - 110);       // 先跳，在空中切到夜里落上萤火
+    lantern(-1.5, 'night', 40);
+    walk(2.5);
+    height(G0); walk(1.5);
+    haz(-0.7, 'both', 'rock');
+    walk(2);
+    gap(0.75);
+    walk(1.5);
+    only(3, 'night', 'firefly', G0);
+    walk(1.5);
+    height(G0 - 60); only(2.5, 'day', 'ground');   // 只在白天的梯田：跳之前先切回白天
+    walk(1);
+    gap(0.6);
+    height(G0 - 120); split(3, { y: G0 - 120 }, { kind: 'firefly', y: G0 - 60 });
+    height(G0 - 60); walk(2);
+    height(G0); walk(3);
+    // ---- 残荷：踩上去半拍就往下沉，只能一拍一跳地过湖
+    cp('day');
+    walk(3);
+    text(-2.5, '湖上的残荷一踩就往下沉。落上去就起跳，一拍一片。', 5, 'lotus');
+    walk(1);
+    { const LY = G0 + 28;
+      gap(0.5); sinker(1, 'lotus', LY);
+      gap(0.5); sinker(1, 'lotus', LY);
+      gap(0.5); sinker(1, 'lotus', LY); lantern(-0.5, 'both', 40);
+      gap(0.5); sinker(1, 'lotus', LY);
+      gap(0.5); }
+    walk(3);
+    text(-2, '有的荷叶只在夜里浮着。', 3);
+    walk(1);
+    { const LY = G0 + 28;
+      gap(0.5); sinker(1, 'lotus', LY);
+      gap(0.5); sinker(1, 'lotus', LY).w = 'night';
+      gap(0.5); sinker(1, 'lotus', LY);
+      gap(0.5); sinker(1, 'lotus', LY).w = 'day'; lantern(-0.5, 'day', 40);
+      gap(0.5); sinker(1, 'lotus', LY);
+      gap(0.5); }
+    walk(3);
+    cp('day');
+    text(-2.5, '跳到空中再切换昼夜，能借力多跳一段。', 5, 'hop');
+    walk(2);
+    gap(1.5);                                     // 一跳够不着：起跳后在空中翻面借力
+    lantern(-0.75, 'both', 90);
+    walk(3);
+    height(G0 - 150); walk(2.5);                 // 高台也要借力
+    height(G0); walk(4);
+
+    // ============================================================ 4 岭南骑楼与客家围屋：节奏段
+    region('wall', '第四站', '长城', '白天战鼓，夜里烽火', { clear: 5, snow: 3, wind: 2 }, 1.08);
+    cp('day');
+    walk(6);
+    text(-5, '鼓点响起时，障碍正好落在拍子上。在两拍之间切换。', 5);
+    haz(-1, 'day', 'drum');
+    walk(2);
+    haz(-1, 'night', 'beacon');
+    walk(2);
+    haz(-1, 'day', 'drum');
+    walk(2);
+    haz(-1, 'night', 'beacon');
+    walk(2);
+    haz(-1, 'both', 'block');
+    walk(2);
+    haz(-1, 'day', 'drum');
+    lantern(-1, 'night', 60);
+    walk(2);
+    haz(-1, 'night', 'beacon');
+    walk(3);
+    cp('day');
+    haz(-1, 'day', 'drum');
+    walk(1.5);
+    haz(-0.75, 'night', 'beacon');
+    walk(1.5);
+    haz(-0.75, 'day', 'drum');
+    walk(1.5);
+    haz(-0.75, 'both', 'block');
+    walk(1.5);
+    haz(-0.75, 'night', 'beacon');
+    walk(1.5);
+    haz(-0.75, 'day', 'drum');
+    walk(2);
+    haz(-1, 'both', 'block');
+    lantern(-1, 'both', 70);
+    walk(2);
+    bellGate(-1.6, 'night', -0.3, 'gong');
+    walk(2);
+    haz(-1, 'night', 'beacon');
+    walk(1.5);
+    haz(-0.75, 'day', 'drum');
+    walk(1.5);
+    haz(-0.75, 'night', 'beacon');
+    walk(2.5);
+    gap(1.4);                                     // 借力跳过城墙缺口
+    walk(4);
+    // ---- 滚木礌石：迎面滚来，正好在鼓点上撞到跟前
+    cp('day');
+    walk(3);
+    text(-2.5, '城头滚下礌木！踩着鼓点跳过去，或者换到没有它的那一面。', 6, 'roll');
+    walk(3);
+    rollAt(-0.5, 'both');
+    walk(3);
+    rollAt(-0.5, 'day');
+    walk(2);
+    rollAt(-0.5, 'night');
+    walk(2);
+    rollAt(-0.5, 'day'); haz(-0.5, 'night', 'beacon');   // 夜里有烽火台：只能在白天跳过去
+    lantern(-0.5, 'day', 80);
+    walk(2);
+    rollAt(-0.5, 'both');
+    walk(1.5);
+    haz(-0.75, 'night', 'beacon');
+    walk(1.5);
+    rollAt(-0.5, 'night'); haz(-0.5, 'day', 'drum');
+    walk(2);
+    rollAt(-0.5, 'both');
+    walk(5);
+    lantern(-3, 'both', 60);
+
+    // ============================================================ 5 丹霞与雅丹：海市蜃楼
+    region('glacier', '第五站', '雪山冰川', '白天的雪桥，一踩就塌', { clear: 4, fog: 3, snow: 3 });
+    cp('day');
+    walk(6);
+    text(-5, '白天看见的雪桥，一踩就会塌。夜里才看得清真正的冰柱。', 6, 'mirage');
+    mirage(4);
+    only(1.2, 'night', 'pillar', G0);
+    gap(0.5);
+    only(1.1, 'night', 'pillar', G0 - 30);
+    gap(0.4);
+    only(0.8, 'night', 'pillar', G0);
+    walk(4);
+    haz(-1.5, 'night', 'gust');
+    walk(3);
+    lantern(-1, 'day', 0);
+    haz(-0.8, 'both', 'shard');
+    walk(3);
+    cp('day');
+    mirage(3);
+    only(1.4, 'night', 'pillar', G0 - 50);
+    gap(0.5);
+    only(1.1, 'night', 'pillar', G0 - 50);
+    walk(2);
+    haz(-1, 'night', 'gust');
+    walk(2);
+    walk(2);
+    // ---- 冰滑道：一路往下冲，速度和鼓点都快起来
+    cp('day');
+    walk(3);
+    text(-2.5, '冰滑道！脚下一快，鼓点也跟着快起来。', 5, 'slide');
+    walk(1);
+    height(G0 - 50); walk(2);
+    zone(15, 1.45);
+    height(G0 - 35); walk(3, 'slide');
+    haz(-0.8, 'both', 'shard');
+    height(G0 - 20); walk(3, 'slide');
+    haz(-1, 'night', 'gust');
+    height(G0); walk(1.5, 'slide');
+    mirage(2);
+    only(2, 'night', 'pillar', G0);
+    walk(3, 'slide');
+    haz(-1, 'both', 'shard');
+    walk(1.5, 'slide');
+    gap(1);
+    walk(3, 'slide');
+    haz(-1.2, 'night', 'gust');
+    lantern(-1.2, 'day', 20);
+    walk(3);
+    cp('day');
+    split(3, { y: G0 }, null);
+    haz(-1.5, 'both', 'shard');
+    walk(1);
+    mirage(2);
+    only(2, 'night', 'pillar', G0);
+    lantern(-1, 'night', 60);
+    walk(1.5);
+    haz(-0.7, 'night', 'gust');
+    walk(2);
+    haz(-1, 'both', 'shard');
+    walk(5);
+    lantern(-3, 'night', 50);
+
+    // ============================================================ 6 青藏高原与雪域圣湖：终章
+    region('tibet', '终点', '雪域圣湖', '天上的星，落进湖里', { clear: 6, snow: 4 }, 0.9);
+    cp('day');
+    walk(6);
+    text(-5, '夜里湖面结冰，可以踩着走。', 4);
+    only(3, 'night', 'ice', G0 + 4);
+    walk(2);
+    bellGate(-1.5, 'day', -0.3, 'wheel');
+    walk(2);
+    haz(-1, 'both', 'mani');
+    walk(2);
+    height(G0 - 60); walk(2);
+    only(2.5, 'night', 'ice', G0 + 4);
+    walk(0);
+    height(G0); walk(2);
+    lantern(-1, 'both', 70);
+    cp('day');
+    haz(-1, 'day', 'yak');
+    walk(1.5);
+    only(2, 'night', 'ice', G0 + 4);
+    walk(1.5);
+    bellGate(-1.2, 'night', -0.2, 'wheel');
+    walk(1.5);
+    haz(-0.7, 'both', 'mani');
+    walk(1.5);
+    gap(0.7);
+    walk(3);
+    // ---- 终章：船、门、浮冰、滚石，一路学的都用上
+    cp('day');
+    walk(3);
+    text(-2.5, '最后一段湖面：把一路学到的都用上。', 5);
+    walk(1);
+    ferry(1.5, 2.5);
+    walk(2);
+    { const FY = G0 + 18;
+      gap(0.5); sinker(1, 'floe', FY).w = 'day';
+      gap(0.5); sinker(1, 'floe', FY).w = 'day'; lantern(-0.5, 'day', 40);
+      gap(0.5); sinker(1, 'floe', FY).w = 'day';
+      gap(0.5); }
+    walk(2);
+    moongate();                       // 经幡门：白天进 → 夜里出，正好踩上冰面
+    walk(0.5);
+    only(3, 'night', 'ice', G0 + 4);
+    walk(3);
+    rollAt(-1, 'both', 'snow');
+    walk(2);
+    rollAt(-0.5, 'night', 'snow'); haz(-0.5, 'day', 'yak');
+    walk(2.5);
+    moongate();
+    walk(1.5);
+    haz(-0.6, 'night', 'mani');
+    walk(2);
+    only(2, 'night', 'ice', G0 + 4);
+    lantern(-1, 'night', 50);
+    walk(1.5);
+    haz(-0.8, 'day', 'yak');
+    walk(1.5);
+    gap(1.5);                                     // 最后一次借力
+    lantern(-0.75, 'both', 100);
+    walk(1.5);
+    height(G0 - 60); walk(2);
+    height(G0); walk(1.5);
+    only(3, 'night', 'ice', G0 + 4);
+    walk(12, 'shore');
+    L.endX = x - 5 * B;
   }
-  walk(2);
-  split(3, { kind: 'boat', y: G0 + 2 }, { kind: 'steps', y: G0 + 6 });   // 两面都能走：喘口气
-  lantern(-1.5, 'night', 30);
-  walk(5);
 
-  // ============================================================ 2 徽派与晋派古建：门与铃
-  region('garden', '第二站', '宫苑园林', '白天货摊挡路，夜里宫门紧闭', { clear: 4, snow: 3, rain: 2 }, 0.9);
-  cp('day');
-  walk(7);
-  text(-6, '白天游人摆着货摊，夜里收了摊，但宫门会关上。', 5);
-  haz(-1, 'day', 'stall');
-  walk(4);
-  haz(-1, 'night', 'door');
-  walk(3);
-  haz(-1, 'day', 'stall');
-  lantern(-2.5, 'night', 50);
-  walk(3);
-  haz(-1, 'night', 'door');
-  walk(5);
-  text(-4.5, '院门上了锁。去另一面碰响铜铃，门就开了。', 5, 'bell');
-  bellGate(-2.5, 'night', -0.5);
-  walk(4);
-  // ---- 月洞门：穿过就自动翻面，进门前要先想好出门是哪一面
-  cp('day');
-  walk(3);
-  text(-2.5, '穿过月洞门，天色会自己翻过来。进门前，先想好出门要哪一面。', 6, 'gate2');
-  walk(2);
-  haz(-1, 'night', 'door');
-  walk(1.5);
-  moongate();                       // 白天进 → 夜里出，货摊自己没了
-  walk(1.5);
-  haz(-0.6, 'day', 'stall');
-  lantern(-0.6, 'night', 70);
-  walk(2.5);
-  moongate();                       // 夜里进 → 白天出
-  walk(1.5);
-  haz(-0.6, 'night', 'door');
-  walk(2);
-  haz(-1.2, 'day', 'stall');        // 这里得是夜里……
-  walk(2);
-  moongate();                       // ……可门后又是货摊：进门前一拍切回白天
-  walk(1.2);
-  haz(-0.4, 'day', 'stall');
-  walk(1.8);
-  bellGate(-1.2, 'night', -0.2);
-  walk(3);
-  cp('day');
-  haz(-1.2, 'day', 'stall');
-  walk(2);
-  moongate();                       // 两道门挨着：中间那一拍被翻到另一面
-  walk(1);
-  haz(-0.5, 'night', 'door');
-  walk(1);
-  moongate();
-  walk(1.2);
-  haz(-0.5, 'night', 'door');
-  lantern(-0.5, 'day', 70);
-  walk(2);
-  haz(-1, 'day', 'stall');
-  walk(2);
-  bellGate(-1.6, 'day', -0.3);
-  walk(1);
-  moongate();
-  walk(1.5);
-  haz(-0.6, 'night', 'door');
-  walk(5);
+  // ============================================================ 云游：随机拼接的小路段
+  // 每段都从两面都能走的平地开始、回到平地结束，单独用求解器验证过（tools/chunks.js），
+  // 所以怎么拼都走得通。段名的第一个字母是所属的站。
+  const REG = {
+    jiangnan: ['江南烟雨', '白天水涨，夜里落潮', { rain: 5, fog: 3, clear: 2 }],
+    garden: ['宫苑园林', '白天货摊挡路，夜里宫门紧闭', { clear: 4, snow: 3, rain: 2 }],
+    autumn: ['秋山湖泊', '踏着山石，往高处走', { clear: 4, wind: 4, snow: 2 }],
+    wall: ['长城', '白天战鼓，夜里烽火', { clear: 5, snow: 3, wind: 2 }],
+    glacier: ['雪山冰川', '白天的雪桥，一踩就塌', { clear: 4, fog: 3, snow: 3 }],
+    tibet: ['雪域圣湖', '天上的星，落进湖里', { clear: 6, snow: 4 }]
+  };
+  const CH = {
+    // ---- 江南
+    j_steps() { only(3, 'night', 'steps', G0 + 6); lantern(-1.5, 'night', 30); walk(2); only(2, 'night', 'steps', G0 + 6); },
+    j_ferry() { only(2, 'night', 'steps', G0 + 6); walk(1.5); ferry(2, 2); walk(1); },
+    j_mix() { only(2.5, 'night', 'steps', G0 + 6); walk(1.5); { const f = ferry(1.5, 2); L.lanterns.push({ i: L.lanterns.length, x: f.bx0 + 2.6 * B, y: G0 - 70, w: 'day' }); } },
+    j_bridge() {
+      const f = ferry(1.5, 6.5), x0 = f.bx0;
+      L.hazards.push({ x0: atX(x0, 4.4) - 30, x1: atX(x0, 4.4) + 30, y0: G0 - 150, y1: G0 - 24, w: 'both', kind: 'arch' });
+      L.solids.push({ x0: atX(x0, 3.0), x1: atX(x0, 5.6), y: G0 + 40, w: 'night', kind: 'steps' });
+      walk(1.5);
+    },
+    j_hop() { split(2, { kind: 'boat', y: G0 + 2 }, { kind: 'steps', y: G0 + 6 }); only(2, 'night', 'steps', G0 + 6); walk(1); ferry(1.5, 1.5); },
+    // ---- 宫苑
+    g_stalls() { haz(1, 'day', 'stall'); walk(3); haz(-1, 'night', 'door'); walk(2.5); haz(-1, 'day', 'stall'); lantern(-2.2, 'night', 50); walk(2.5); haz(-1, 'night', 'door'); },
+    g_bell() { walk(1); bellGate(-0.5, 'night', 2); walk(3); haz(-0.8, 'day', 'stall'); walk(1); },
+    g_bell2() { haz(0.8, 'day', 'stall'); walk(2); bellGate(-0.3, 'day', 2.2); walk(3.5); haz(-0.8, 'night', 'door'); lantern(-0.8, 'day', 70); walk(1); },
+    g_gate() { haz(1, 'day', 'stall'); walk(2); haz(-0.5, 'night', 'door'); walk(1.5); moongate(); walk(1.5); haz(-0.6, 'night', 'door'); lantern(-0.6, 'day', 70); walk(2); moongate(); walk(1.2); haz(-0.5, 'day', 'stall'); },
+    g_pregate() { haz(1, 'day', 'stall'); walk(3); moongate(); walk(1.2); haz(-0.4, 'day', 'stall'); walk(1.5); },
+    g_double() { haz(1, 'day', 'stall'); walk(3); moongate(); walk(1); haz(-0.5, 'night', 'door'); walk(1); moongate(); walk(1.2); haz(-0.5, 'night', 'door'); lantern(-0.5, 'day', 70); walk(1); },
+    // ---- 秋山
+    a_climb() { height(G0 - 60); walk(2); height(G0 - 120); walk(2.5); lantern(-1.2, 'both', 70); height(G0 - 60); walk(2); height(G0); },
+    a_gaps() { gap(0.7); walk(2.5); gap(0.8); walk(1.5); only(3, 'night', 'firefly', G0); },
+    a_fly() { height(G0 - 60); walk(2); only(3, 'night', 'firefly', G0 - 110); lantern(-1.5, 'night', 40); walk(2); height(G0); },
+    a_lotus() { gap(0.5); sinker(1, 'lotus', G0 + 28); gap(0.5); sinker(1, 'lotus', G0 + 28); lantern(-0.5, 'both', 40); gap(0.5); sinker(1, 'lotus', G0 + 28); gap(0.5); },
+    a_lotus2() { gap(0.5); sinker(1, 'lotus', G0 + 28); gap(0.5); sinker(1, 'lotus', G0 + 28).w = 'night'; gap(0.5); sinker(1, 'lotus', G0 + 28); gap(0.5); sinker(1, 'lotus', G0 + 28).w = 'day'; gap(0.5); },
+    a_hop() { gap(1.5); lantern(-0.75, 'both', 90); walk(2.5); },
+    // ---- 长城
+    w_drums() { haz(1, 'day', 'drum'); walk(2); haz(-1, 'night', 'beacon'); walk(2); haz(-1, 'day', 'drum'); walk(2); haz(-1, 'night', 'beacon'); },
+    w_fast() { haz(1, 'day', 'drum'); walk(1.5); haz(-0.75, 'night', 'beacon'); walk(1.5); haz(-0.75, 'both', 'block'); walk(1.5); haz(-0.75, 'day', 'drum'); lantern(-0.75, 'night', 60); walk(1.5); haz(-0.75, 'night', 'beacon'); },
+    w_roll() { walk(2); rollAt(-0.5, 'both'); walk(3); rollAt(-0.5, 'day'); walk(2); rollAt(-0.5, 'night'); },
+    w_roll2() { walk(2); rollAt(-0.5, 'day'); haz(-0.5, 'night', 'beacon'); lantern(-0.5, 'day', 80); walk(2); rollAt(-0.5, 'both'); walk(2); rollAt(-0.5, 'night'); haz(-0.5, 'day', 'drum'); },
+    w_gong() { walk(1); bellGate(-0.6, 'night', 1.8, 'gong'); walk(3); haz(-1, 'night', 'beacon'); walk(1.5); haz(-0.75, 'day', 'drum'); },
+    // ---- 冰川
+    c_mirage() { mirage(4); only(1.2, 'night', 'pillar', G0); gap(0.5); only(1.1, 'night', 'pillar', G0 - 30); gap(0.4); only(0.8, 'night', 'pillar', G0); walk(1); },
+    c_gust() { haz(1, 'night', 'gust'); walk(3); lantern(-1, 'day', 0); haz(-0.8, 'both', 'shard'); walk(2); haz(-1, 'night', 'gust'); },
+    c_high() { mirage(3); only(1.4, 'night', 'pillar', G0 - 50); gap(0.5); only(1.1, 'night', 'pillar', G0 - 50); walk(1); },
+    c_slide() { height(G0 - 40); walk(1.5); zone(9, 1.4); height(G0 - 20); walk(3, 'slide'); haz(-0.8, 'both', 'shard'); height(G0); walk(2, 'slide'); gap(1); walk(3, 'slide'); haz(-1.2, 'night', 'gust'); lantern(-1.2, 'day', 20); },
+    // ---- 圣湖
+    t_ice() { only(3, 'night', 'ice', G0 + 4); walk(2); bellGate(-1.5, 'day', 1.7, 'wheel'); walk(2.5); haz(-1, 'both', 'mani'); },
+    t_yak() { haz(1, 'day', 'yak'); walk(1.5); only(2, 'night', 'ice', G0 + 4); lantern(-1, 'night', 50); walk(1.5); haz(-0.8, 'day', 'yak'); },
+    t_floe() { gap(0.5); sinker(1, 'floe', G0 + 18).w = 'day'; gap(0.5); sinker(1, 'floe', G0 + 18).w = 'day'; lantern(-0.5, 'day', 40); gap(0.5); sinker(1, 'floe', G0 + 18).w = 'day'; gap(0.5); },
+    t_gate() { moongate(); walk(0.5); only(3, 'night', 'ice', G0 + 4); walk(3); rollAt(-1, 'both', 'snow'); },
+    t_hop() { gap(1.5); lantern(-0.75, 'both', 100); walk(1.5); height(G0 - 60); walk(2); height(G0); }
+  };
+  const THEME = { j: 'jiangnan', g: 'garden', a: 'autumn', w: 'wall', c: 'glacier', t: 'tibet' };
+  L.chunkIds = Object.keys(CH);
+  function chunk(id) { walk(2.5); CH[id](); height(G0); walk(1.5); }
 
-  // ============================================================ 3 喀斯特峰林与梯田：跳跃 + 萤火
-  region('autumn', '第三站', '秋山湖泊', '踏着山石，往高处走', { clear: 4, wind: 4, snow: 2 });
-  cp('day');
-  walk(6);
-  text(-5, '山石一层比一层高。按空格（或 ↑）跳上去。', 5, 'jump');
-  height(G0 - 60); walk(3);
-  height(G0 - 120); walk(3);
-  lantern(-1.5, 'both', 70);
-  height(G0 - 60); walk(2);
-  height(G0); walk(3);
-  text(-2.5, '缺口也能跳过去。', 3);
-  gap(0.7); walk(3);
-  gap(0.8); walk(2);
-  text(-1.5, '夜里，萤火会连成一条路。', 4);
-  walk(1);
-  only(4, 'night', 'firefly', G0);
-  walk(3);
-  cp('night');
-  haz(-1.5, 'both', 'rock');
-  walk(3);
-  height(G0 - 60); walk(2);
-  only(3, 'night', 'firefly', G0 - 110);       // 先跳，在空中切到夜里落上萤火
-  lantern(-1.5, 'night', 40);
-  walk(2.5);
-  height(G0); walk(1.5);
-  haz(-0.7, 'both', 'rock');
-  walk(2);
-  gap(0.75);
-  walk(1.5);
-  only(3, 'night', 'firefly', G0);
-  walk(1.5);
-  height(G0 - 60); only(2.5, 'day', 'ground');   // 只在白天的梯田：跳之前先切回白天
-  walk(1);
-  gap(0.6);
-  height(G0 - 120); split(3, { y: G0 - 120 }, { kind: 'firefly', y: G0 - 60 });
-  lantern(-1.5, 'day', 40);
-  height(G0 - 60); walk(2);
-  height(G0); walk(3);
-  // ---- 残荷：踩上去半拍就往下沉，只能一拍一跳地过湖
-  cp('day');
-  walk(3);
-  text(-2.5, '湖上的残荷一踩就往下沉。落上去就起跳，一拍一片。', 5, 'lotus');
-  walk(1);
-  { const LY = G0 + 28;
-    gap(0.5); sinker(1, 'lotus', LY);
-    gap(0.5); sinker(1, 'lotus', LY);
-    gap(0.5); sinker(1, 'lotus', LY); lantern(-0.5, 'both', 40);
-    gap(0.5); sinker(1, 'lotus', LY);
-    gap(0.5); }
-  walk(3);
-  text(-2, '有的荷叶只在夜里浮着。', 3);
-  walk(1);
-  { const LY = G0 + 28;
-    gap(0.5); sinker(1, 'lotus', LY);
-    gap(0.5); sinker(1, 'lotus', LY).w = 'night';
-    gap(0.5); sinker(1, 'lotus', LY);
-    gap(0.5); sinker(1, 'lotus', LY).w = 'day'; lantern(-0.5, 'day', 40);
-    gap(0.5); sinker(1, 'lotus', LY);
-    gap(0.5); }
-  walk(3);
-  cp('day');
-  text(-2.5, '跳到空中再切换昼夜，能借力多跳一段。', 5, 'hop');
-  walk(2);
-  gap(1.5);                                     // 一跳够不着：起跳后在空中翻面借力
-  lantern(-0.75, 'both', 90);
-  walk(3);
-  height(G0 - 150); walk(2.5);                 // 高台也要借力
-  height(G0); walk(4);
+  // 单独一段（求解器用）：一个检查点 + 这一段 + 收尾
+  function single(id, pace) {
+    const rid = THEME[id[0]], R0 = REG[rid];
+    region(rid, '', R0[0], R0[1], R0[2], pace);
+    cp('day');
+    walk(2);
+    chunk(id);
+    walk(6);
+    L.endX = x - 3 * B;
+  }
 
-  // ============================================================ 4 岭南骑楼与客家围屋：节奏段
-  region('wall', '第四站', '长城', '白天战鼓，夜里烽火', { clear: 5, snow: 3, wind: 2 }, 1.08);
-  cp('day');
-  walk(6);
-  text(-5, '鼓点响起时，障碍正好落在拍子上。在两拍之间切换。', 5);
-  haz(-1, 'day', 'drum');
-  walk(2);
-  haz(-1, 'night', 'beacon');
-  walk(2);
-  haz(-1, 'day', 'drum');
-  walk(2);
-  haz(-1, 'night', 'beacon');
-  walk(2);
-  haz(-1, 'both', 'block');
-  walk(2);
-  haz(-1, 'day', 'drum');
-  lantern(-1, 'night', 60);
-  walk(2);
-  haz(-1, 'night', 'beacon');
-  walk(3);
-  cp('day');
-  haz(-1, 'day', 'drum');
-  walk(1.5);
-  haz(-0.75, 'night', 'beacon');
-  walk(1.5);
-  haz(-0.75, 'day', 'drum');
-  walk(1.5);
-  haz(-0.75, 'both', 'block');
-  walk(1.5);
-  haz(-0.75, 'night', 'beacon');
-  walk(1.5);
-  haz(-0.75, 'day', 'drum');
-  walk(2);
-  haz(-1, 'both', 'block');
-  lantern(-1, 'both', 70);
-  walk(2);
-  bellGate(-1.6, 'night', -0.3, 'gong');
-  walk(2);
-  haz(-1, 'night', 'beacon');
-  walk(1.5);
-  haz(-0.75, 'day', 'drum');
-  walk(1.5);
-  haz(-0.75, 'night', 'beacon');
-  walk(2.5);
-  gap(1.4);                                     // 借力跳过城墙缺口
-  walk(4);
-  // ---- 滚木礌石：迎面滚来，正好在鼓点上撞到跟前
-  cp('day');
-  walk(3);
-  text(-2.5, '城头滚下礌木！踩着鼓点跳过去，或者换到没有它的那一面。', 6, 'roll');
-  walk(3);
-  rollAt(-0.5, 'both');
-  walk(3);
-  rollAt(-0.5, 'day');
-  walk(2);
-  rollAt(-0.5, 'night');
-  walk(2);
-  rollAt(-0.5, 'day'); haz(-0.5, 'night', 'beacon');   // 夜里有烽火台：只能在白天跳过去
-  lantern(-0.5, 'day', 80);
-  walk(2);
-  rollAt(-0.5, 'both');
-  walk(1.5);
-  haz(-0.75, 'night', 'beacon');
-  walk(1.5);
-  rollAt(-0.5, 'night'); haz(-0.5, 'day', 'drum');
-  walk(2);
-  rollAt(-0.5, 'both');
-  walk(5);
+  // 云游：一程四段，同一站的机关放在一起；每程换一站，越往后越快
+  function endless(o) {
+    let seed = (o.seed >>> 0) || 1;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    const range = o.range || {};       // 每段验证能走通的步速范围（tools/chunks.js 生成）
+    const legs = o.legs || 20, NO = '一二三四五六七八九十';
+    const order = Object.keys(REG);
+    let last = null;
+    for (let leg = 0; leg < legs; leg++) {
+      let rid; do { rid = order[Math.floor(rnd() * order.length)]; } while (rid === last && order.length > 1); last = rid;
+      const pace = Math.min(1.36, 1 + leg * 0.03, 1.52 / (L.diff || 1));   // 不超过验证过的最高步速
+      const eff = pace * (L.diff || 1);
+      const pool = L.chunkIds.filter(id => THEME[id[0]] === rid && (!range[id] || (range[id][0] <= eff + 1e-6 && range[id][1] >= eff - 1e-6)));
+      const R0 = REG[rid];
+      const n = leg + 1, no = n <= 10 ? '第' + NO[n - 1] + '程' : '第' + n + '程';
+      region(rid, no, R0[0], R0[1], R0[2], pace);
+      walk(leg ? 3 : 6);
+      const used = {};
+      for (let k = 0; k < 4 && pool.length; k++) {
+        let id, tries = 0;
+        do { id = pool[Math.floor(rnd() * pool.length)]; } while (used[id] && ++tries < 6);
+        used[id] = 1;
+        cp('day');
+        L.checkpoints[L.checkpoints.length - 1].chunk = id;
+        chunk(id);
+      }
+    }
+    walk(12, 'shore');
+    L.endX = x - 5 * B;
+  }
 
-  // ============================================================ 5 丹霞与雅丹：海市蜃楼
-  region('glacier', '第五站', '雪山冰川', '白天的雪桥，一踩就塌', { clear: 4, fog: 3, snow: 3 });
-  cp('day');
-  walk(6);
-  text(-5, '白天看见的雪桥，一踩就会塌。夜里才看得清真正的冰柱。', 6, 'mirage');
-  mirage(4);
-  only(1.2, 'night', 'pillar', G0);
-  gap(0.5);
-  only(1.1, 'night', 'pillar', G0 - 30);
-  gap(0.4);
-  only(0.8, 'night', 'pillar', G0);
-  walk(4);
-  haz(-1.5, 'night', 'gust');
-  walk(3);
-  lantern(-1, 'day', 0);
-  haz(-0.8, 'both', 'shard');
-  walk(3);
-  cp('day');
-  mirage(3);
-  only(1.4, 'night', 'pillar', G0 - 50);
-  gap(0.5);
-  only(1.1, 'night', 'pillar', G0 - 50);
-  walk(2);
-  haz(-1, 'night', 'gust');
-  walk(2);
-  walk(2);
-  // ---- 冰滑道：一路往下冲，速度和鼓点都快起来
-  cp('day');
-  walk(3);
-  text(-2.5, '冰滑道！脚下一快，鼓点也跟着快起来。', 5, 'slide');
-  walk(1);
-  height(G0 - 50); walk(2);
-  zone(15, 1.45);
-  height(G0 - 35); walk(3, 'slide');
-  haz(-0.8, 'both', 'shard');
-  height(G0 - 20); walk(3, 'slide');
-  haz(-1, 'night', 'gust');
-  height(G0); walk(1.5, 'slide');
-  mirage(2);
-  only(2, 'night', 'pillar', G0);
-  walk(3, 'slide');
-  haz(-1, 'both', 'shard');
-  walk(1.5, 'slide');
-  gap(1);
-  walk(3, 'slide');
-  haz(-1.2, 'night', 'gust');
-  lantern(-1.2, 'day', 20);
-  walk(3);
-  cp('day');
-  split(3, { y: G0 }, null);
-  haz(-1.5, 'both', 'shard');
-  walk(1);
-  mirage(2);
-  only(2, 'night', 'pillar', G0);
-  lantern(-1, 'night', 60);
-  walk(1.5);
-  haz(-0.7, 'night', 'gust');
-  walk(2);
-  haz(-1, 'both', 'shard');
-  walk(5);
-
-  // ============================================================ 6 青藏高原与雪域圣湖：终章
-  region('tibet', '终点', '雪域圣湖', '天上的星，落进湖里', { clear: 6, snow: 4 }, 0.9);
-  cp('day');
-  walk(6);
-  text(-5, '夜里湖面结冰，可以踩着走。', 4);
-  only(3, 'night', 'ice', G0 + 4);
-  walk(2);
-  bellGate(-1.5, 'day', -0.3, 'wheel');
-  walk(2);
-  haz(-1, 'both', 'mani');
-  walk(2);
-  height(G0 - 60); walk(2);
-  only(2.5, 'night', 'ice', G0 + 4);
-  walk(0);
-  height(G0); walk(2);
-  lantern(-1, 'both', 70);
-  cp('day');
-  haz(-1, 'day', 'yak');
-  walk(1.5);
-  only(2, 'night', 'ice', G0 + 4);
-  walk(1.5);
-  bellGate(-1.2, 'night', -0.2, 'wheel');
-  walk(1.5);
-  haz(-0.7, 'both', 'mani');
-  walk(1.5);
-  gap(0.7);
-  walk(3);
-  // ---- 终章：船、门、浮冰、滚石，一路学的都用上
-  cp('day');
-  walk(3);
-  text(-2.5, '最后一段湖面：把一路学到的都用上。', 5);
-  walk(1);
-  ferry(1.5, 2.5);
-  walk(2);
-  { const FY = G0 + 18;
-    gap(0.5); sinker(1, 'floe', FY).w = 'day';
-    gap(0.5); sinker(1, 'floe', FY).w = 'day'; lantern(-0.5, 'day', 40);
-    gap(0.5); sinker(1, 'floe', FY).w = 'day';
-    gap(0.5); }
-  walk(2);
-  moongate();                       // 经幡门：白天进 → 夜里出，正好踩上冰面
-  walk(0.5);
-  only(3, 'night', 'ice', G0 + 4);
-  walk(3);
-  rollAt(-1, 'both', 'snow');
-  walk(2);
-  rollAt(-0.5, 'night', 'snow'); haz(-0.5, 'day', 'yak');
-  walk(2.5);
-  moongate();
-  walk(1.5);
-  haz(-0.6, 'night', 'mani');
-  walk(2);
-  only(2, 'night', 'ice', G0 + 4);
-  lantern(-1, 'night', 50);
-  walk(1.5);
-  haz(-0.8, 'day', 'yak');
-  walk(1.5);
-  gap(1.5);                                     // 最后一次借力
-  lantern(-0.75, 'both', 100);
-  walk(1.5);
-  height(G0 - 60); walk(2);
-  height(G0); walk(1.5);
-  only(3, 'night', 'ice', G0 + 4);
-  walk(12, 'shore');
-  L.endX = x - 5 * B;
-  L.regions[L.regions.length - 1].x1 = x;
-  L.totalX = x;
-
-  // 按位置排好，便于查找
-  L.solids.sort((a, b) => a.x0 - b.x0);
-  L.hazards.sort((a, b) => a.x0 - b.x0);
-  // 当前位置的步速倍数：每站自己的步调，速度区再乘上去；交界处 2 拍内平滑过渡
+  // ------------------------------------------------------------ 搭建
+  L.build = function (mode, o) {
+    o = o || {};
+    clear();
+    if (mode === 'single') single(o.id, o.pace || 1);
+    else if (mode === 'endless') endless(o);
+    else journey();
+    // 按位置排好，便于查找
+    L.solids.sort((a, b) => a.x0 - b.x0);
+    L.hazards.sort((a, b) => a.x0 - b.x0);
+    L.mode = mode; L.version++;
+    if (mode === 'endless' && RF.CHUNK_COINS) {     // 云游的铜钱：每段自己的那串，平移到段的位置
+      L.coins = [];
+      for (const c of L.checkpoints) {
+        const cc = RF.CHUNK_COINS[c.chunk]; if (!cc) continue;
+        for (const [dx, y, w] of cc) L.coins.push({ i: L.coins.length, x: c.x + dx, y, w: w ? 'night' : 'day' });
+      }
+    }
+    return L;
+  };
+  // 当前位置的步速倍数：每站自己的步调，速度区再乘上去；交界处 2 拍内平滑过渡；再乘难度
   const RAMP = 2 * B;
   L.paceAt = function (px) {
     let p = 1;
     for (let i = 0; i < L.regions.length; i++) {
-      const r = L.regions[i], prev = i ? L.regions[i - 1].pace : 1;
+      const r = L.regions[i];
+      if (r.x0 - RAMP > px) break;
+      const prev = i ? L.regions[i - 1].pace : 1;
       if (px >= r.x0 + RAMP) p = r.pace;
-      else if (px >= r.x0 - RAMP) { const k = (px - r.x0 + RAMP) / (2 * RAMP); p = prev + (r.pace - prev) * k * k * (3 - 2 * k); }
+      else { const k = (px - r.x0 + RAMP) / (2 * RAMP); p = prev + (r.pace - prev) * k * k * (3 - 2 * k); }
     }
     for (const z of L.zones) {
-      if (px < z.x0 - B || px > z.x1 + B) continue;
+      if (z.x0 - B > px) break;
+      if (px > z.x1 + B) continue;
       const k = px < z.x0 ? (px - z.x0 + B) / B : px > z.x1 ? (z.x1 + B - px) / B : 1;
       p *= 1 + (z.mult - 1) * k;
     }
-    return p;
+    return p * (L.diff || 1);
   };
   L.regionAt = function (px) {
     for (let i = L.regions.length - 1; i >= 0; i--) if (px >= L.regions[i].x0) return i;
     return 0;
   };
+  L.build('journey');
   RF.LEVEL = L;
 })();

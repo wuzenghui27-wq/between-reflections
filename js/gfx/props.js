@@ -405,9 +405,9 @@
     glacier: ['crystal', 'pine', 'stones', 'pine'],
     tibet: ['chorten', 'flowers', 'stones', 'tuft']
   };
-  let decos = null;
+  let decos = null, decosV = -1;
   function buildDecos() {
-    decos = [];
+    decos = []; decosV = LV.version;
     const busy = [];
     for (const h of LV.hazards) busy.push([h.x0 - 60, h.x1 + 60]);
     for (const b of LV.bells) busy.push([b.x - 50, b.x + 50]);
@@ -425,7 +425,7 @@
     }
   }
   function decorations(e, x0, x1) {
-    if (!decos) buildDecos();
+    if (!decos || decosV !== LV.version) buildDecos();     // 换了模式，关卡重建过
     const night = e.world === 'night';
     for (const d of decos) {
       if (d.x < x0 || d.x > x1 || !(d.w === 'both' || d.w === e.world)) continue;

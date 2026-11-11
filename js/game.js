@@ -100,12 +100,15 @@
     };
     G.beat = () => G.px / C.BEAT_PX;
     // 引路铜钱（js/coins.js 生成；自动求解时没有）
-    if (!LV.coins) LV.coins = (RF.COINS || []).map((c, i) => ({ i, x: c[0], y: c[1], w: c[2] ? 'night' : 'day' }));
+    // 关卡重建后（换模式）铜钱表会被清空，这里按需补上：旅程用 js/coins.js，云游的在 level.js 里已经摆好
+    const ensureCoins = () => { if (!LV.coins) LV.coins = LV.mode === 'journey' ? (RF.COINS || []).map((c, i) => ({ i, x: c[0], y: c[1], w: c[2] ? 'night' : 'day' })) : []; };
+    ensureCoins();
     G.cgot = {}; G.coinRun = 0; G.lastCoin = -9;
 
     function setWorld(w, silent) { G.world = w; G.emit('world', w, !!silent); }
 
     G.loadCheckpoint = function (i) {
+      ensureCoins();
       const cp = LV.checkpoints[i];
       G.cpIndex = i;
       G.px = cp.x;
@@ -127,12 +130,40 @@
       G.regionIndex = LV.regionAt(G.px);
     };
 
+    // ------------------------------------------------------------ 模式与难度
+    // journey 旅程 / station 单站挑战（从那一站的第一个检查点走到站末）/ endless 云游（随机拼接，三盏心灯）
+    const DIFF = { easy: [0.88, 1.35], normal: [1, 1], hard: [1.12, 0.5] };
+    G.mode = 'journey'; G.diff = 'normal'; G.startCp = 0; G.station = null; G.lives = Infinity; G.maxLives = 3;
+    G.setup = function (mode, o) {
+      o = o || {};
+      G.mode = mode;
+      const d = DIFF[G.diff] || DIFF.normal;
+      LV.diff = d[0]; G.ghostMul = d[1];
+      if (mode === 'endless') LV.build('endless', { seed: o.seed || ((Math.random() * 1e9) | 0), range: RF.CHUNK_RANGE });
+      else LV.build('journey');
+      G.startCp = 0; G.station = null;
+      if (mode === 'station') {
+        G.station = o.ri;
+        G.startCp = Math.max(0, LV.checkpoints.findIndex(c => c.region === o.ri));
+        if (o.ri + 1 < LV.regions.length) LV.endX = LV.regions[o.ri + 1].x0 - 2;
+      }
+      G.lives = mode === 'endless' ? G.maxLives : Infinity;
+      G.emit('setup', mode);
+    };
+    G.startX = () => LV.checkpoints[G.startCp].x;
+    G.dist = () => Math.max(0, Math.floor((G.maxPx - G.startX()) / C.BEAT_PX));   // 走了多少步（拍）
+    G.score = () => G.dist() + G.coinCount() * 5 + G.lanternCount() * 25 + (G.stats.bestCombo || 0) * 10;
+
     G.reset = function () {
       G.shown = {}; G.got = {}; G.gates = {}; G.cgot = {};
       G.failStreak = 0; G.lastFail = null;
       G.stats = { fails: 0, switches: 0, time: 0, bestCombo: 0, reg: LV.regions.map(() => ({ sw: 0, beat: 0, fails: 0 })) };
       G.combo = 0; G.graded = {};
-      G.loadCheckpoint(0);
+      G.loadCheckpoint(G.startCp || 0);
+      G.maxPx = G.px;
+      // 起点之前的站名卡和提示不用再弹
+      for (let i = 0; i < LV.regions.length; i++) if (LV.regions[i].x1 <= G.px) G.shown['r' + i] = 1;
+      for (let i = 0; i < LV.texts.length; i++) if (LV.texts[i].x < G.px - 200) G.shown['t' + i] = 1;
       G.phase = 0;
     };
     G.lanternCount = () => Object.keys(G.got).length;
@@ -184,7 +215,8 @@
       G.state = 'failing'; G.timer = 0;
       G.failReason = reason; G.failKind = kind || null;
       G.stats.fails++;
-      if (G.stats.reg) G.stats.reg[LV.regionAt(G.px)].fails++;
+      if (G.mode === 'endless') { G.lives--; G.emit('lives', G.lives); }
+      { const rs = G.stats.reg && G.stats.reg[LV.regionAt(G.px)]; if (rs) rs.fails++; }
       if (G.combo) { G.combo = 0; G.emit('combo', 0); }
       G.failStreak = G.lastFail === reason ? G.failStreak + 1 : 1;
       G.lastFail = reason;
@@ -244,7 +276,7 @@
         G.wipe = { from, t: 0, onBeat: off < 0.14 };
         if (off < 0.14) G.onBeatFx = 1;
         G.emit('switched', G.world, off < 0.14);
-        if (G.stats.reg) {
+        if (G.stats.reg && G.stats.reg[LV.regionAt(G.px)]) {
           const rs = G.stats.reg[LV.regionAt(G.px)];
           rs.sw++; if (off < 0.14) rs.beat++;
           G.combo = off < 0.14 ? G.combo + 1 : 0;
@@ -382,6 +414,7 @@
           physics(dt);
           if (G.state !== 'running') break;
           coins();
+          if (G.px > G.maxPx) G.maxPx = G.px;
           for (let i = G.cpIndex + 1; i < LV.checkpoints.length; i++) {
             if (G.px >= LV.checkpoints[i].x && G.onGround) { G.cpIndex = i; G.failStreak = 0; G.emit('checkpoint', i); }
           }
@@ -411,6 +444,7 @@
           G.fade = U.clamp(G.timer / C.FAIL_FADE, 0, 1);
           G.playerAlpha = 1 - G.fade * 0.8;
           if (G.failReason === 'fall') { G.vy += C.GRAVITY * dt * 0.5; G.foot += G.vy * dt * 0.5; }
+          if (G.timer >= C.FAIL_FADE && G.mode === 'endless' && G.lives <= 0) { G.state = 'ended'; G.emit('ended'); break; }
           if (G.timer >= C.FAIL_FADE) {
             G.loadCheckpoint(G.cpIndex);
             G.fade = 1;
