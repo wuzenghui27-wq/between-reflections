@@ -102,7 +102,20 @@
     G.lanternCount = () => Object.keys(G.got).length;
 
     // ------------------------------------------------------------ 流程
-    G.start = function () { G.reset(); G.state = 'intro'; G.timer = 0; G.emit('intro'); };
+    // 随机天气：每次开始旅程，为每一站按权重抽一种天气
+    G.rollWeather = function (rnd) {
+      rnd = rnd || Math.random;
+      G.weather = LV.regions.map(r => {
+        const ws = r.weathers || { clear: 1 }; let sum = 0;
+        for (const k in ws) sum += ws[k];
+        let t = rnd() * sum;
+        for (const k in ws) { t -= ws[k]; if (t <= 0) return k; }
+        return Object.keys(ws)[0];
+      });
+    };
+    G.weatherAt = px => G.weather[LV.regionAt(px)];
+    G.rollWeather(() => 0.01);
+    G.start = function () { G.rollWeather(); G.reset(); G.state = 'intro'; G.timer = 0; G.emit('intro'); };
     function beginRunning() { G.state = 'running'; G.emit('run'); }
     function enterReady(dur, label, tip) { G.state = 'ready'; G.timer = 0; G.readyDur = dur; G.emit('ready', label, tip); }
     function endReady() { G.fade = 0; G.state = 'running'; G.emit('readyEnd'); }

@@ -1,96 +1,77 @@
-// 光效基础：主画布 + 低分辨率“光层”。
-// 发光物体在光层上画一次柔光，最后以叠加方式放大合成，得到便宜又柔和的泛光（bloom）。
+// 像素画布：所有画面先画进 320×180 的小画布（一格 = 4 个逻辑像素），再不加平滑地放大到屏幕。
+// 发光单独画在同样大小的光层上，放大时保留柔和，叠在像素画上面。
 (function () {
   const C = RF.CFG, U = RF.U;
-  const W = C.W, H = C.H;
-  const GS = 0.25;          // 光层分辨率比例
-  const BS = 1 / 16;        // 大范围柔光层比例
+  const PW = C.W / C.PIX, PH = C.H / C.PIX;     // 320 × 180
+
+  function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 
   const X = {
-    ctx: null, g: null, k: [1, 1],
-    canvas: null, glowCanvas: null, blurCanvas: null, bctx: null,
+    PW, PH,
+    out: null, outW: 1, outH: 1,
+    buf: null, ctx: null, glowC: null, g: null, blurC: null, bctx: null,
+    mute: false, lowFx: false,
 
-    init(canvas) {
-      X.canvas = canvas;
-      X.ctx = canvas.getContext('2d');
-      X.glowCanvas = document.createElement('canvas');
-      X.glowCanvas.width = Math.round(W * GS); X.glowCanvas.height = Math.round(H * GS);
-      X.g = X.glowCanvas.getContext('2d');
-      X.blurCanvas = document.createElement('canvas');
-      X.blurCanvas.width = Math.round(W * BS); X.blurCanvas.height = Math.round(H * BS);
-      X.bctx = X.blurCanvas.getContext('2d');
+    init(cv) {
+      X.out = cv.getContext('2d');
+      X.buf = canvas(PW, PH); X.ctx = X.buf.getContext('2d');
+      X.glowC = canvas(PW, PH); X.g = X.glowC.getContext('2d');
+      X.blurC = canvas(PW / 4, PH / 4); X.bctx = X.blurC.getContext('2d');
     },
-    setScale(kx, ky) { X.k = [kx, ky]; },
-
-    screenTransform() {
-      const [kx, ky] = X.k;
-      X.ctx.setTransform(kx, 0, 0, ky, 0, 0);
-      X.g.setTransform(GS, 0, 0, GS, 0, 0);
-    },
-    mute: false,
+    setOut(w, h) { X.outW = w; X.outH = h; },
 
     beginGlow() {
-      X.g.setTransform(1, 0, 0, 1, 0, 0);
       X.g.globalCompositeOperation = 'source-over';
-      X.g.clearRect(0, 0, X.glowCanvas.width, X.glowCanvas.height);
+      X.g.clearRect(0, 0, PW, PH);
       X.g.globalCompositeOperation = 'lighter';
-      X.g.setTransform(GS, 0, 0, GS, 0, 0);
     },
-
-    // 在光层上画一团柔光
+    // 柔光（像素坐标）
     glow(x, y, r, col, a) {
       if (X.mute || a <= 0.003 || r <= 0) return;
-      const g = X.g;
-      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      const g = X.g, gr = g.createRadialGradient(x, y, 0, x, y, r);
       gr.addColorStop(0, U.rgb(col, a));
-      gr.addColorStop(0.35, U.rgb(col, a * 0.45));
+      gr.addColorStop(0.4, U.rgb(col, a * 0.4));
       gr.addColorStop(1, U.rgb(col, 0));
       g.fillStyle = gr;
       g.fillRect(x - r, y - r, r * 2, r * 2);
     },
 
-    // 合成泛光
-    composeGlow(strength) {
-      const ctx = X.ctx;
-      X.screenTransform();
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = strength;
-      ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(X.glowCanvas, 0, 0, W, H);
-      X.bctx.clearRect(0, 0, X.blurCanvas.width, X.blurCanvas.height);
-      X.bctx.imageSmoothingEnabled = true;
-      X.bctx.drawImage(X.glowCanvas, 0, 0, X.blurCanvas.width, X.blurCanvas.height);
+    // 放大到屏幕：像素层不平滑，光层平滑叠加
+    present(glowStrength) {
+      const o = X.out;
+      o.setTransform(1, 0, 0, 1, 0, 0);
+      o.globalCompositeOperation = 'source-over'; o.globalAlpha = 1;
+      o.imageSmoothingEnabled = false;
+      o.drawImage(X.buf, 0, 0, X.outW, X.outH);
+      o.imageSmoothingEnabled = true;
+      o.globalCompositeOperation = 'lighter';
+      o.globalAlpha = glowStrength;
+      o.drawImage(X.glowC, 0, 0, X.outW, X.outH);
       if (!X.lowFx) {
-        ctx.globalAlpha = strength * 0.6;
-        ctx.drawImage(X.blurCanvas, 0, 0, W, H);
+        X.bctx.clearRect(0, 0, X.blurC.width, X.blurC.height);
+        X.bctx.drawImage(X.glowC, 0, 0, X.blurC.width, X.blurC.height);
+        o.globalAlpha = glowStrength * 0.7;
+        o.drawImage(X.blurC, 0, 0, X.outW, X.outH);
       }
-      ctx.restore();
+      o.globalAlpha = 1; o.globalCompositeOperation = 'source-over';
     },
 
-    // 倒影：先把 [y0, y0+h) 拷到缓冲画布，再以 axis 为轴翻到另一侧
-    reflect(y0, h, axis, alpha) {
-      const ctx = X.ctx, [kx, ky] = X.k;
-      const bw = Math.round(W * kx), bh = Math.round(h * ky);
-      if (!X.buf) { X.buf = document.createElement('canvas'); X.bufCtx = X.buf.getContext('2d'); }
-      if (X.buf.width !== bw || X.buf.height !== bh) { X.buf.width = bw; X.buf.height = bh; }
-      X.bufCtx.clearRect(0, 0, bw, bh);
-      X.bufCtx.drawImage(X.canvas, 0, Math.round(y0 * ky), bw, bh, 0, 0, bw, bh);
-      ctx.save();
-      ctx.setTransform(kx, 0, 0, -ky, 0, 2 * axis * ky);
-      ctx.globalAlpha = alpha;
-      ctx.drawImage(X.buf, 0, 0, bw, bh, 0, y0, W, h);
-      ctx.restore();
+    // 夜景：把白天的画压暗、偏蓝，亮部保留一点
+    nightOf(img) {
+      const w = img.width, h = img.height, c = canvas(w, h), x = c.getContext('2d');
+      x.drawImage(img, 0, 0);
+      x.globalCompositeOperation = 'multiply';
+      x.fillStyle = '#3a4a8c'; x.fillRect(0, 0, w, h);
+      x.globalCompositeOperation = 'multiply';
+      const g = x.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#5a6aa8'); g.addColorStop(1, '#8a92b8');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+      x.globalCompositeOperation = 'source-over';
+      return c;
     },
+    canvas,
 
-    roundRect(c, x, y, w, h, r) {
-      c.beginPath();
-      if (c.roundRect) { c.roundRect(x, y, w, h, r); return; }
-      if (Array.isArray(r)) r = r[0];
-      r = Math.min(r, w / 2, Math.abs(h) / 2);
-      c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
-      c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
-    }
+    rect(x, y, w, h, col) { X.ctx.fillStyle = col; X.ctx.fillRect(x | 0, y | 0, w | 0, h | 0); }
   };
   RF.FX = X;
 })();

@@ -15,10 +15,10 @@
   // 区域：主音、音色、鼓的力度、是否有木鱼 / 锣
   const STYLE = {
     jiangnan: { root: 62, lead: 'pluck', kick: 0.06, wood: 0, gong: 0, seed: 1 },
-    huizhou: { root: 67, lead: 'pluck', kick: 0.08, wood: 0.05, gong: 0, seed: 2 },
-    karst: { root: 64, lead: 'marimba', kick: 0.08, wood: 0.03, gong: 0, seed: 3 },
-    lingnan: { root: 60, lead: 'pluck', kick: 0.13, wood: 0.07, gong: 0.06, seed: 4 },
-    danxia: { root: 57, lead: 'marimba', kick: 0.09, wood: 0, gong: 0.03, seed: 5 },
+    garden: { root: 67, lead: 'pluck', kick: 0.08, wood: 0.05, gong: 0, seed: 2 },
+    autumn: { root: 64, lead: 'marimba', kick: 0.08, wood: 0.03, gong: 0, seed: 3 },
+    wall: { root: 60, lead: 'pluck', kick: 0.13, wood: 0.07, gong: 0.06, seed: 4 },
+    glacier: { root: 57, lead: 'marimba', kick: 0.09, wood: 0, gong: 0.03, seed: 5 },
     tibet: { root: 65, lead: 'bell', kick: 0.06, wood: 0, gong: 0.04, seed: 6 }
   };
 
@@ -162,6 +162,15 @@
       try { localStorage.setItem(KEY, v ? 'on' : 'off'); } catch (e) { }
       if (ctx) master.gain.setTargetAtTime(v ? 0.8 : 0, ctx.currentTime, 0.05);
     },
+    // 天气：雨声、风声更响
+    setWeather(w) {
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      const g = { rain: 0.2, wind: 0.14, snow: 0.05, fog: 0.06 }[w] || 0.07;
+      const f = { rain: 2600, wind: 1100, snow: 500 }[w] || 700;
+      ambGain.gain.setTargetAtTime(g, t, 0.8);
+      ambLP.frequency.setTargetAtTime(night ? f * 0.6 : f, t, 0.5);
+    },
     setNight(v) {
       night = v;
       if (!ctx) return;
@@ -169,7 +178,6 @@
       musicLP.frequency.setTargetAtTime(v ? 1900 : 3200, t, 0.08);
       reverbWet.gain.setTargetAtTime(v ? 0.55 : 0.3, t, 0.15);
       delayWet.gain.setTargetAtTime(v ? 0.3 : 0.12, t, 0.1);
-      ambLP.frequency.setTargetAtTime(v ? 380 : 700, t, 0.3);
     },
     sfx(name, arg) {
       if (!ctx || ctx.state !== 'running') return;

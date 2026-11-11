@@ -59,10 +59,17 @@
   G.on('bell', () => A.sfx('bell'));
   G.on('lantern', () => { A.sfx('lantern'); setLanterns(); });
   G.on('checkpoint', () => A.sfx('checkpoint'));
-  G.on('region', reg => { showChapter(reg); A.sfx('region'); });
+  const WNAME = { clear: '晴', rain: '雨', snow: '雪', fog: '雾', wind: '风' };
+  function setWeather() {
+    const w = G.weatherAt(G.px);
+    $('weatherName').textContent = WNAME[w] || '晴';
+    $('weatherPill').dataset.weather = w;
+    A.setWeather(w);
+  }
+  G.on('region', reg => { showChapter(reg); A.sfx('region'); setWeather(); });
   G.on('hint', (t, d) => showHint(t, d));
   G.on('fail', () => { A.sfx('fail'); hideHint(); $('chapterCard').classList.remove('show'); });
-  G.on('ready', (label, tip) => { showReason(label, tip); setLanterns(); });
+  G.on('ready', (label, tip) => { showReason(label, tip); setLanterns(); setWeather(); });
   G.on('readyEnd', () => hideReason());
   G.on('arrive', () => { A.sfx('arrive'); hideHint(); });
   G.on('ended', () => {
@@ -87,6 +94,7 @@
     G.start();
     setLanterns();
     if (startAt) { jumpTo(startAt); }
+    setWeather();
   }
   function toTitle() {
     A.resume();
@@ -178,7 +186,7 @@
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-    RF.FX.setScale(canvas.width / C.W, canvas.height / C.H);
+    RF.FX.setOut(canvas.width, canvas.height);
   }
   window.addEventListener('resize', resize);
   resize();
@@ -212,6 +220,11 @@
   }
   if (G.debug && dbg) dbg.hidden = false;
   refreshToggles();
+  G.rollWeather();
+  // 先载入背景与像素素材，再开放“开始”
+  const btn = $('btnStart');
+  btn.disabled = true; btn.textContent = '载入中…';
+  RF.Regions.load(() => { btn.disabled = false; btn.textContent = '开始旅行'; });
   requestAnimationFrame(frame);
 
   RF.debug = { G, start: startJourney, toTitle, jumpTo };

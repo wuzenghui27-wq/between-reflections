@@ -31,8 +31,8 @@
 
   // ------------------------------------------------------------ 物件
   const HZ = {
-    stall: [56, 100], door: [40, 132], gate: [36, 140], lion: [62, 94], rack: [44, 112],
-    crate: [34, 30], rock: [40, 34], thorn: [42, 28], mani: [46, 34], whirl: [42, 124], yak: [70, 80]
+    stall: [56, 100], door: [40, 132], gate: [36, 140], drum: [60, 92], beacon: [40, 112],
+    block: [32, 28], rock: [40, 32], shard: [40, 28], mani: [44, 36], gust: [40, 124], yak: [70, 80]
   };
   function haz(o, w, kind, y) {
     const [wd, ht] = HZ[kind];
@@ -51,13 +51,14 @@
   const mirage = beats => L.mirages.push({ x0: x, x1: x + beats * B, y: gy });
   const cp = world => L.checkpoints.push({ x: x + 40, world, region: L.regions.length - 1 });
   const text = (o, t, dur, tag) => L.texts.push({ x: at(o), text: t, dur: dur || 4, tag });
-  function region(id, no, name, line) {
+  // weathers：这一站可能出现的天气与权重，每次开始旅程随机抽一种
+  function region(id, no, name, line, weathers) {
     if (L.regions.length) L.regions[L.regions.length - 1].x1 = x;
-    L.regions.push({ id, no, name, line, x0: x, x1: Infinity });
+    L.regions.push({ id, no, name, line, weathers, x0: x, x1: Infinity });
   }
 
   // ============================================================ 1 江南水乡：切换 + 水位
-  region('jiangnan', '第一站', '江南水乡', '白天水涨，夜里落潮');
+  region('jiangnan', '第一站', '江南烟雨', '白天水涨，夜里落潮', { rain: 5, fog: 3, clear: 2 });
   height(G0);
   cp('day');
   walk(9);
@@ -94,10 +95,10 @@
   walk(5);
 
   // ============================================================ 2 徽派与晋派古建：门与铃
-  region('huizhou', '第二站', '徽州与晋地的老宅', '白天货摊挡路，夜里宅门紧闭');
+  region('garden', '第二站', '宫苑园林', '白天货摊挡路，夜里宫门紧闭', { clear: 4, snow: 3, rain: 2 });
   cp('day');
   walk(7);
-  text(-6, '白天街上摆着货摊，夜里收了摊，但宅门会关上。', 5);
+  text(-6, '白天游人摆着货摊，夜里收了摊，但宫门会关上。', 5);
   haz(-1, 'day', 'stall');
   walk(4);
   haz(-1, 'night', 'door');
@@ -130,10 +131,10 @@
   walk(5);
 
   // ============================================================ 3 喀斯特峰林与梯田：跳跃 + 萤火
-  region('karst', '第三站', '峰林与梯田', '一层一层，往云里走');
+  region('autumn', '第三站', '秋山湖泊', '踏着山石，往高处走', { clear: 4, wind: 4, snow: 2 });
   cp('day');
   walk(6);
-  text(-5, '梯田一层比一层高。按空格（或 ↑）跳上去。', 5, 'jump');
+  text(-5, '山石一层比一层高。按空格（或 ↑）跳上去。', 5, 'jump');
   height(G0 - 60); walk(3);
   height(G0 - 120); walk(3);
   lantern(-1.5, 'both', 70);
@@ -169,55 +170,55 @@
   height(G0); walk(5);
 
   // ============================================================ 4 岭南骑楼与客家围屋：节奏段
-  region('lingnan', '第四站', '骑楼与围屋', '跟着鼓点走');
+  region('wall', '第四站', '长城', '白天战鼓，夜里烽火', { clear: 5, snow: 3, wind: 2 });
   cp('day');
   walk(6);
   text(-5, '鼓点响起时，障碍正好落在拍子上。在两拍之间切换。', 5);
-  haz(-1, 'day', 'lion');
+  haz(-1, 'day', 'drum');
   walk(2);
-  haz(-1, 'night', 'rack');
+  haz(-1, 'night', 'beacon');
   walk(2);
-  haz(-1, 'day', 'lion');
+  haz(-1, 'day', 'drum');
   walk(2);
-  haz(-1, 'night', 'rack');
+  haz(-1, 'night', 'beacon');
   walk(2);
-  haz(-1, 'both', 'crate');
+  haz(-1, 'both', 'block');
   walk(2);
-  haz(-1, 'day', 'lion');
+  haz(-1, 'day', 'drum');
   lantern(-1, 'night', 60);
   walk(2);
-  haz(-1, 'night', 'rack');
+  haz(-1, 'night', 'beacon');
   walk(3);
   cp('day');
-  haz(-1, 'day', 'lion');
+  haz(-1, 'day', 'drum');
   walk(1.5);
-  haz(-0.75, 'night', 'rack');
+  haz(-0.75, 'night', 'beacon');
   walk(1.5);
-  haz(-0.75, 'day', 'lion');
+  haz(-0.75, 'day', 'drum');
   walk(1.5);
-  haz(-0.75, 'both', 'crate');
+  haz(-0.75, 'both', 'block');
   walk(1.5);
-  haz(-0.75, 'night', 'rack');
+  haz(-0.75, 'night', 'beacon');
   walk(1.5);
-  haz(-0.75, 'day', 'lion');
+  haz(-0.75, 'day', 'drum');
   walk(2);
-  haz(-1, 'both', 'crate');
+  haz(-1, 'both', 'block');
   lantern(-1, 'both', 70);
   walk(2);
   bellGate(-1.6, 'night', -0.3, 'gong');
   walk(2);
-  haz(-1, 'night', 'rack');
+  haz(-1, 'night', 'beacon');
   walk(1.5);
-  haz(-0.75, 'day', 'lion');
+  haz(-0.75, 'day', 'drum');
   walk(1.5);
-  haz(-0.75, 'night', 'rack');
+  haz(-0.75, 'night', 'beacon');
   walk(5);
 
   // ============================================================ 5 丹霞与雅丹：海市蜃楼
-  region('danxia', '第五站', '丹霞与雅丹', '烈日下，有些路是幻影');
+  region('glacier', '第五站', '雪山冰川', '白天的雪桥，一踩就塌', { clear: 4, fog: 3, snow: 3 });
   cp('day');
   walk(6);
-  text(-5, '烈日下看见的桥，可能只是海市蜃楼。夜里才看得清真正的石柱。', 6, 'mirage');
+  text(-5, '白天看见的雪桥，一踩就会塌。夜里才看得清真正的冰柱。', 6, 'mirage');
   mirage(4);
   only(1.2, 'night', 'pillar', G0);
   gap(0.5);
@@ -225,10 +226,10 @@
   gap(0.4);
   only(0.8, 'night', 'pillar', G0);
   walk(4);
-  haz(-1.5, 'night', 'whirl');
+  haz(-1.5, 'night', 'gust');
   walk(3);
   lantern(-1, 'day', 0);
-  haz(-0.8, 'both', 'thorn');
+  haz(-0.8, 'both', 'shard');
   walk(3);
   cp('day');
   mirage(3);
@@ -236,22 +237,22 @@
   gap(0.5);
   only(1.1, 'night', 'pillar', G0 - 50);
   walk(2);
-  haz(-1, 'night', 'whirl');
+  haz(-1, 'night', 'gust');
   walk(2);
   split(3, { y: G0 }, null);
-  haz(-1.5, 'both', 'thorn');
+  haz(-1.5, 'both', 'shard');
   walk(1);
   mirage(2);
   only(2, 'night', 'pillar', G0);
   lantern(-1, 'night', 60);
   walk(1.5);
-  haz(-0.7, 'night', 'whirl');
+  haz(-0.7, 'night', 'gust');
   walk(2);
-  haz(-1, 'both', 'thorn');
+  haz(-1, 'both', 'shard');
   walk(5);
 
   // ============================================================ 6 青藏高原与雪域圣湖：终章
-  region('tibet', '终点', '雪域圣湖', '天上的星，落进湖里');
+  region('tibet', '终点', '雪域圣湖', '天上的星，落进湖里', { clear: 6, snow: 4 });
   cp('day');
   walk(6);
   text(-5, '夜里湖面结冰，可以踩着走。', 4);

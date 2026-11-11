@@ -1,432 +1,251 @@
-// 六个地貌区域的远景：每个区域有白天与夜晚两套配色，同一组形状，只换光。
-// 全部由代码绘制，只参考地貌与建筑的特征，不临摹任何照片或作品。
+// 六个区域的背景（来自 assets/bg 的像素画）、地面花纹、水面 / 深谷、天气粒子。
+// 背景按“区域 × 天气”挑图，走过一个区域时依次淡入下一张；夜里用压暗偏蓝的版本。
 (function () {
-  const C = RF.CFG, U = RF.U, X = RF.FX;
-  const W = C.W, H = C.H, rgb = U.rgb, P = U.palette;
+  const C = RF.CFG, U = RF.U, X = RF.FX, LV = RF.LEVEL;
+  const PW = X.PW, PH = X.PH, P = C.PIX;
 
-  // ------------------------------------------------------------ 公共小件
-  // 在某一视差层上，按固定间距放置景物（同一位置永远画出同样的东西）
-  function items(cam, par, spacing, seed, cb, margin) {
-    const off = cam * par, m = margin || 320;
-    const i0 = Math.floor((off - m) / spacing), i1 = Math.floor((off + W + m) / spacing);
-    for (let i = i0; i <= i1; i++) {
-      const r = U.hash(i, seed);
-      cb(i * spacing + r * spacing * 0.45 - off, i, r);
-    }
-  }
-  function ridge(c, cam, par, base, amp, scale, seed, col, oct) {
-    const off = cam * par;
-    c.beginPath(); c.moveTo(-10, H);
-    for (let sx = -10; sx <= W + 20; sx += 14) {
-      const wx = (sx + off) / scale;
-      let n = U.noise(wx, seed) * 0.65 + U.noise(wx * 2.3, seed + 7) * 0.25;
-      if (oct) n += U.noise(wx * 6, seed + 13) * 0.1;
-      c.lineTo(sx, base - n * amp);
-    }
-    c.lineTo(W + 20, H); c.closePath();
-    c.fillStyle = col; c.fill();
-  }
-  function band(c, y0, y1, col, a0, a1) {
-    const g = c.createLinearGradient(0, y0, 0, y1);
-    g.addColorStop(0, rgb(col, a0)); g.addColorStop(1, rgb(col, a1));
-    c.fillStyle = g; c.fillRect(0, y0, W, y1 - y0);
-  }
-  function sky(c, p) {
-    const g = c.createLinearGradient(0, 0, 0, 620);
-    g.addColorStop(0, rgb(p.top)); g.addColorStop(0.55, rgb(p.mid)); g.addColorStop(1, rgb(p.bot));
-    c.fillStyle = g; c.fillRect(0, 0, W, H);
-  }
-  function stars(c, e, n, seed) {
-    if (e.world !== 'night') return;
-    for (let i = 0; i < n; i++) {
-      const x = U.mod(U.hash(i, seed) * W * 1.3 - e.cam * 0.02, W), y = U.hash(i, seed + 1) * 380;
-      const tw = e.reduce ? 0.8 : 0.55 + 0.45 * Math.sin(e.t * (1 + U.hash(i, seed + 2) * 2) + i);
-      const r = U.hash(i, seed + 3) < 0.08 ? 1.6 : 0.9;
-      c.fillStyle = rgb([255, 250, 235], 0.85 * tw * e.a);
-      c.fillRect(x, y, r, r);
-      if (r > 1) X.glow(x, y, 6, [220, 230, 255], 0.35 * tw * e.a);
-    }
-  }
-  function sunMoon(c, e, x, y) {
-    const p = e.pal;
-    if (e.world === 'day') {
-      X.glow(x, y, 220, p.sun, 0.35 * e.a);
-      c.fillStyle = rgb(p.sun, 0.95); c.beginPath(); c.arc(x, y, 30, 0, 7); c.fill();
-    } else {
-      X.glow(x, y, 160, [200, 215, 255], 0.3 * e.a);
-      c.fillStyle = rgb(p.sun); c.beginPath(); c.arc(x, y, 26, 0, 7); c.fill();
-      c.fillStyle = rgb(p.top, 0.12); c.beginPath(); c.arc(x - 8, y - 4, 7, 0, 7); c.arc(x + 9, y + 8, 4, 0, 7); c.fill();
-    }
-  }
-  function clouds(c, e, y0, col, seed) {
-    items(e.cam, 0.06, 420, seed, (sx, i, r) => {
-      const y = y0 + r * 110, w = 120 + r * 160;
-      c.fillStyle = rgb(col, (e.world === 'day' ? 0.55 : 0.18) * (0.5 + r * 0.5));
-      c.beginPath(); c.ellipse(sx, y, w, 12 + r * 6, 0, 0, 7); c.ellipse(sx + w * 0.3, y - 9, w * 0.5, 11, 0, 0, 7); c.fill();
+  // ------------------------------------------------------------ 区域设定
+  const R = {
+    jiangnan: { bg: { rain: ['8536', '8537'], fog: ['8538', '8539'], clear: ['8539', '8535', '8538'] },
+      water: { day: 584, night: 626 }, waterCol: ['#5d7f88', '#1f2d4a'], tile: 'stone', glow: 0.7 },
+    garden: { bg: { clear: ['8532', '8531', '8535'], snow: ['8534', '8533'], rain: ['8531', '8532'] },
+      water: { day: 600, night: 600 }, waterCol: ['#5a8aa8', '#1a2848'], tile: 'marble', glow: 0.7 },
+    autumn: { bg: { clear: ['8522', '8519', '8521'], wind: ['8520', '8522', '8521'], snow: ['8518', '8519'] },
+      water: { day: 600, night: 600 }, waterCol: ['#2f7a72', '#10283a'], tile: 'earth', glow: 0.8 },
+    wall: { bg: { clear: ['8530'], wind: ['8530'], snow: ['8528'] },
+      abyss: ['#3a3040', '#0c0a18'], tile: 'brick', glow: 0.8 },
+    glacier: { bg: { clear: ['8524', '8525', '8526'], fog: ['8527', '8526'], snow: ['8527', '8524'] },
+      abyss: ['#3a4658', '#0a1020'], tile: 'ice', glow: 0.8 },
+    tibet: { bg: { clear: ['8523'], snow: ['8518', '8523'] },
+      water: { day: 586, night: 568, frozen: 'night' }, waterCol: ['#3a78a8', '#0c1a3e'], tile: 'snowrock', glow: 0.8 }
+  };
+  const ALL_BG = [...new Set(Object.values(R).flatMap(r => Object.values(r.bg).flat()))];
+
+  // ------------------------------------------------------------ 载入
+  const IMG = {}, NIGHT = {};
+  let sprites = null, spritesNight = null, spritesDim = null;
+  function load(done) {
+    const list = ALL_BG.map(id => ['bg/' + id + '.png', id]).concat([['sprites.png', '__sprites']]);
+    let left = list.length;
+    list.forEach(([file, id]) => {
+      const im = new Image();
+      im.onload = im.onerror = () => {
+        if (im.naturalWidth) {
+          if (id === '__sprites') {
+            sprites = im;
+            spritesNight = tint(im, '#7684c0');
+            spritesDim = tint(im, '#aab2d8');
+          } else { IMG[id] = im; NIGHT[id] = X.nightOf(im); }
+        }
+        if (--left === 0) { buildTiles(); RF.Regions.ready = true; done(); }
+      };
+      im.src = 'assets/' + file;
     });
   }
-  // 窗户：白天是深色小格，夜里亮暖灯
-  function windowRect(c, e, x, y, w, h, lit) {
-    if (e.world === 'night' && lit) {
-      c.fillStyle = rgb(e.pal.light, 0.9); c.fillRect(x, y, w, h);
-      X.glow(x + w / 2, y + h / 2, 26, e.pal.light, 0.32 * e.a);
-    } else { c.fillStyle = rgb(e.pal.roof, 0.75); c.fillRect(x, y, w, h); }
-  }
-  function redLantern(c, e, x, y, s) {
-    s = s || 1;
-    const sw = e.reduce ? 0 : Math.sin(e.t * 1.6 + x * 0.01) * 2;
-    c.strokeStyle = rgb(e.pal.roof); c.lineWidth = 1; c.beginPath(); c.moveTo(x, y - 10 * s); c.lineTo(x + sw, y); c.stroke();
-    c.fillStyle = rgb(e.world === 'night' ? [255, 92, 64] : [200, 52, 40]);
-    c.beginPath(); c.ellipse(x + sw, y + 8 * s, 7 * s, 9 * s, 0, 0, 7); c.fill();
-    c.fillStyle = rgb([230, 180, 70]); c.fillRect(x + sw - 3 * s, y - 1, 6 * s, 2); c.fillRect(x + sw - 3 * s, y + 16 * s, 6 * s, 2);
-    if (e.world === 'night') X.glow(x + sw, y + 8 * s, 34 * s, [255, 110, 70], 0.5 * e.a);
-  }
-  // 中式屋顶：两端微微上翘
-  function roof(c, x, y, w, h, col) {
-    c.fillStyle = col;
-    c.beginPath();
-    c.moveTo(x - 10, y + h);
-    c.quadraticCurveTo(x - 4, y + h * 0.6, x + 6, y + h * 0.35);
-    c.lineTo(x + w * 0.5, y);
-    c.lineTo(x + w - 6, y + h * 0.35);
-    c.quadraticCurveTo(x + w + 4, y + h * 0.6, x + w + 10, y + h);
-    c.closePath(); c.fill();
+  function tint(im, col) {
+    const c = X.canvas(im.width, im.height), x = c.getContext('2d');
+    x.drawImage(im, 0, 0);
+    x.globalCompositeOperation = 'multiply'; x.fillStyle = col; x.fillRect(0, 0, c.width, c.height);
+    x.globalCompositeOperation = 'destination-in'; x.drawImage(im, 0, 0);   // 保留原来的透明
+    return c;
   }
 
-  // ------------------------------------------------------------ 配色
-  const TRAV_DAY = { ink: '#2b2833', rim: '#ffe6b5', scarf: '#d8432f', face: '#ffe9d2' };
-  const TRAV_NIGHT = { ink: '#0f1120', rim: '#bcd2ff', scarf: '#ff5a3c', face: '#ffe2c4' };
-  const pal = (o, night) => P(Object.assign({}, night ? TRAV_NIGHT : TRAV_DAY, o));
-
-  const R = {};
-
-  // ============================================================ 1 江南水乡
-  R.jiangnan = {
-    water: { day: 584, night: 626 },
-    day: pal({ top: '#9cc6e0', mid: '#d4e8ee', bot: '#f2ece0', sun: '#fff4da', far: '#b4cad3', far2: '#97b0bb',
-      wall: '#f4f2ec', roof: '#39414a', mist: '#eef3f1', water: '#86afb9', ground: '#7f8580', gtop: '#b8bab2',
-      leaf: '#7a9a5e', light: '#ffd28a', deep: '#5d7f88', glow: 0.45 }),
-    night: pal({ top: '#0b1430', mid: '#1c2b52', bot: '#34466e', sun: '#f2efdc', far: '#22335a', far2: '#1a2846',
-      wall: '#4b5677', roof: '#121829', mist: '#2f4068', water: '#172748', ground: '#283049', gtop: '#465273',
-      leaf: '#22344a', light: '#ffc66e', deep: '#0e1a33', glow: 0.95 }, true),
-    back(c, e) {
-      const p = e.pal;
-      sky(c, p); stars(c, e, 90, 11); sunMoon(c, e, 1010, 130); clouds(c, e, 90, p.mist, 3);
-      ridge(c, e.cam, 0.08, 470, 150, 380, 1, rgb(p.far));
-      band(c, 380, 520, p.mist, 0, 0.6);
-      ridge(c, e.cam, 0.16, 520, 90, 260, 2, rgb(p.far2));
-      band(c, 470, 560, p.mist, 0, 0.7);
-      // 石拱桥
-      items(e.cam, 0.32, 1500, 21, (sx, i, r) => {
-        if (r > 0.6) return;
-        c.fillStyle = rgb(U.mix(p.wall, p.far2, 0.35));
-        c.beginPath(); c.moveTo(sx - 120, 560); c.quadraticCurveTo(sx, 470, sx + 120, 560); c.lineTo(sx + 120, 572); c.lineTo(sx - 120, 572); c.fill();
-        c.fillStyle = rgb(p.water, 0.95); c.beginPath(); c.ellipse(sx, 572, 46, 46, 0, Math.PI, 0); c.fill();
-      });
-      // 白墙黛瓦
-      items(e.cam, 0.45, 210, 5, (sx, i, r) => {
-        const w = 120 + r * 90, h = 62 + U.hash(i, 6) * 40, y = 578 - h;
-        c.fillStyle = rgb(p.wall); c.fillRect(sx, y, w, h);
-        c.fillStyle = rgb(p.roof, 0.18); c.fillRect(sx, y + h - 10, w, 10);
-        roof(c, sx, y - 22, w, 24, rgb(p.roof));
-        const n = Math.floor(w / 46);
-        for (let k = 0; k < n; k++) windowRect(c, e, sx + 18 + k * 46, y + 18, 16, 20, U.hash(i * 7 + k, 8) > 0.35);
-        if (U.hash(i, 9) > 0.55) redLantern(c, e, sx + w - 14, y + 4);
-      });
-      // 柳树
-      items(e.cam, 0.6, 330, 7, (sx, i, r) => {
-        if (r < 0.4) return;
-        const y = 586;
-        c.strokeStyle = rgb(U.mix(p.roof, p.leaf, 0.3)); c.lineWidth = 5;
-        c.beginPath(); c.moveTo(sx, y); c.quadraticCurveTo(sx - 6, y - 60, sx + 4, y - 120); c.stroke();
-        c.strokeStyle = rgb(p.leaf, 0.85); c.lineWidth = 1.4;
-        const sway = e.reduce ? 0 : Math.sin(e.t * 0.9 + i) * 5;
-        for (let k = 0; k < 14; k++) {
-          const ox = -50 + k * 8, len = 50 + U.hash(i * 3 + k, 4) * 50;
-          c.beginPath(); c.moveTo(sx + 4, y - 120); c.quadraticCurveTo(sx + ox, y - 128, sx + ox + sway, y - 120 + len); c.stroke();
+  // ------------------------------------------------------------ 地面花纹（16×72 的图块，横向重复）
+  const TW = 16, TH = 72;
+  const TILE = {}, PAT = {};
+  function makeTile(kind) {
+    const c = X.canvas(TW, TH), x = c.getContext('2d');
+    const r = (px, py, w, h, col) => { x.fillStyle = col; x.fillRect(px, py, w, h); };
+    const h = (i, j) => U.hash(i * 17 + j * 131, kind.length);
+    switch (kind) {
+      case 'stone':      // 江南青石驳岸
+        r(0, 0, TW, TH, '#77797a');
+        for (let y = 2, row = 0; y < TH; y += 5, row++) {
+          r(0, y, TW, 1, '#55585b');
+          const off = row % 2 ? 4 : 12;
+          r(off, y, 1, 5, '#55585b');
+          for (let i = 0; i < 3; i++) r((h(row, i) * TW) | 0, y + 1 + ((h(i, row) * 3) | 0), 1, 1, '#8a8c8c');
         }
-      });
-    }
-  };
-
-  // ============================================================ 2 徽州与晋地的老宅
-  R.huizhou = {
-    day: pal({ top: '#a7c4d6', mid: '#dfe7e6', bot: '#f1ebdf', sun: '#fff1d6', far: '#bac8cb', far2: '#9eb0b4',
-      wall: '#f2efe8', roof: '#2f3338', brick: '#9a9289', mist: '#edf0ee', ground: '#6f716f', gtop: '#a7a9a3',
-      leaf: '#6f8e5a', light: '#ffd28a', deep: '#5c6a6e', glow: 0.45 }),
-    night: pal({ top: '#0d1228', mid: '#1f2747', bot: '#3a3f62', sun: '#f4efd8', far: '#252d4c', far2: '#1d2440',
-      wall: '#4e5472', roof: '#10131f', brick: '#33374e', mist: '#30375a', ground: '#252a40', gtop: '#424966',
-      leaf: '#1f2c3c', light: '#ffc46a', deep: '#0d1226', glow: 0.95 }, true),
-    back(c, e) {
-      const p = e.pal;
-      sky(c, p); stars(c, e, 80, 12); sunMoon(c, e, 300, 120); clouds(c, e, 80, p.mist, 4);
-      // 黄山般的尖峰
-      items(e.cam, 0.07, 160, 31, (sx, i, r) => {
-        const h = 160 + r * 170, w = 50 + r * 40;
-        c.fillStyle = rgb(p.far);
-        c.beginPath(); c.moveTo(sx - w * 1.6, 520); c.lineTo(sx - w * 0.3, 520 - h * 0.85); c.lineTo(sx, 520 - h); c.lineTo(sx + w * 0.4, 520 - h * 0.8); c.lineTo(sx + w * 1.6, 520); c.fill();
-      });
-      band(c, 380, 540, p.mist, 0, 0.8);
-      ridge(c, e.cam, 0.18, 540, 60, 240, 32, rgb(p.far2));
-      band(c, 500, 570, p.mist, 0, 0.6);
-      // 马头墙（徽派）与灰砖院墙（晋派）交替
-      items(e.cam, 0.45, 250, 33, (sx, i, r) => {
-        const jin = U.hash(Math.floor(i / 4), 34) > 0.55;
-        const w = 150 + r * 80, h = 80 + U.hash(i, 35) * 50, base = 590, y = base - h;
-        if (!jin) {
-          // 阶梯状马头墙：白墙一级级升高，每级压一道黑瓦
-          const sw = Math.min(24, w / 7), st = 16, n = 3;
-          c.fillStyle = rgb(p.wall);
-          for (let k = 0; k < n; k++) c.fillRect(sx + k * sw, y - k * st, w - 2 * k * sw, h + k * st);
-          c.fillStyle = rgb(p.roof);
-          for (let k = 0; k < n; k++) {
-            const top = y - k * st - 6;
-            if (k < n - 1) { c.fillRect(sx + k * sw - 4, top, sw + 8, 6); c.fillRect(sx + w - (k + 1) * sw - 4, top, sw + 8, 6); }
-            else c.fillRect(sx + k * sw - 4, top, w - 2 * k * sw + 8, 6);
-          }
-          windowRect(c, e, sx + w * 0.45, y + 24, 14, 18, U.hash(i, 36) > 0.3);
-          c.fillStyle = rgb(p.roof, 0.85); c.fillRect(sx + w * 0.45 - 6, y + h - 46, 26, 46);
-        } else {
-          c.fillStyle = rgb(p.brick); c.fillRect(sx, y + 10, w, h - 10);
-          c.strokeStyle = rgb(p.roof, 0.15); c.lineWidth = 1;
-          for (let yy = y + 18; yy < base; yy += 9) { c.beginPath(); c.moveTo(sx, yy); c.lineTo(sx + w, yy); c.stroke(); }
-          roof(c, sx - 4, y - 10, w + 8, 22, rgb(p.roof));
-          // 窑洞式拱窗
-          for (let k = 0; k < 2; k++) {
-            const ax = sx + w * (0.28 + k * 0.44);
-            if (e.world === 'night' && U.hash(i * 2 + k, 37) > 0.3) { c.fillStyle = rgb(p.light, 0.85); X.glow(ax, y + 46, 30, p.light, 0.3 * e.a); }
-            else c.fillStyle = rgb(p.roof, 0.7);
-            c.beginPath(); c.moveTo(ax - 12, y + 62); c.lineTo(ax - 12, y + 40); c.arc(ax, y + 40, 12, Math.PI, 0); c.lineTo(ax + 12, y + 62); c.fill();
-          }
-          if (U.hash(i, 38) > 0.5) redLantern(c, e, sx + 16, y + 12);
+        r(0, 0, TW, 2, '#b5b7b0'); r(0, 2, TW, 1, '#5d6b52');
+        r(3, 3, 2, 1, '#6f8a58'); r(11, 3, 1, 1, '#6f8a58');
+        break;
+      case 'marble':     // 汉白玉台基
+        r(0, 0, TW, TH, '#d8d4ca');
+        r(0, 0, TW, 1, '#f4f1ea'); r(0, 3, TW, 1, '#a9a49a');
+        for (let y = 4; y < TH; y += 8) { r(0, y + 7, TW, 1, '#b4afa4'); r(0, y, 1, 8, '#b4afa4'); r(2, y + 2, 12, 4, '#cbc6bb'); r(3, y + 3, 10, 2, '#e2ded4'); }
+        break;
+      case 'earth':      // 秋山：草皮 + 泥土 + 落叶
+        r(0, 0, TW, TH, '#6a4a30');
+        for (let i = 0; i < 18; i++) r((h(i, 1) * TW) | 0, 3 + ((h(i, 2) * (TH - 3)) | 0), 1 + (i % 2), 1, i % 3 ? '#57391f' : '#7d5a3a');
+        r(0, 0, TW, 2, '#8a9a3a'); r(0, 2, TW, 1, '#5a6a2a');
+        r(2, 0, 2, 1, '#d0682a'); r(9, 1, 1, 1, '#e0a030'); r(13, 0, 1, 1, '#b8402a');
+        break;
+      case 'brick':      // 长城城砖
+        r(0, 0, TW, TH, '#8a6a4c');
+        r(0, 0, TW, 2, '#a89478'); r(0, 2, TW, 1, '#5a4430');
+        for (let y = 3, row = 0; y < TH; y += 4, row++) {
+          r(0, y + 3, TW, 1, '#5a4430');
+          const off = row % 2 ? 0 : 4;
+          r(off, y, 1, 3, '#5a4430'); r(off + 8, y, 1, 3, '#5a4430');
+          if (h(row, 3) > 0.6) r(off + 2, y + 1, 3, 1, '#9a7a5a');
         }
-      });
-      // 牌坊
-      items(e.cam, 0.62, 1300, 39, (sx, i, r) => {
-        if (r > 0.55) return;
-        const col = rgb(U.mix(p.wall, p.brick, 0.4));
-        c.fillStyle = col;
-        for (const dx of [-70, -26, 26, 70]) c.fillRect(sx + dx - 6, 450, 12, 140);
-        c.fillRect(sx - 84, 470, 168, 14); c.fillRect(sx - 60, 438, 120, 12);
-        roof(c, sx - 92, 452, 184, 18, rgb(p.roof)); roof(c, sx - 52, 420, 104, 18, rgb(p.roof));
-      });
+        break;
+      case 'ice':        // 冰川：积雪 + 冰 + 岩
+        r(0, 0, TW, TH, '#4a4e5a');
+        for (let i = 0; i < 10; i++) r((h(i, 4) * TW) | 0, 6 + ((h(i, 5) * (TH - 6)) | 0), 2, 1, '#5e6878');
+        r(0, 0, TW, 2, '#f2f6fa'); r(0, 2, TW, 2, '#a8d4ec'); r(0, 4, TW, 1, '#6aa0c4');
+        r(4, 4, 2, 2, '#a8d4ec'); r(12, 4, 1, 3, '#a8d4ec');
+        break;
+      case 'snowrock':   // 雪域：岩石 + 厚雪
+        r(0, 0, TW, TH, '#6a645e');
+        for (let i = 0; i < 12; i++) r((h(i, 6) * TW) | 0, 4 + ((h(i, 7) * (TH - 4)) | 0), 2, 1, '#57514c');
+        r(0, 0, TW, 3, '#f4f6fa'); r(0, 3, TW, 1, '#c8d0dc');
+        r(3, 3, 3, 1, '#f4f6fa'); r(10, 3, 2, 2, '#f4f6fa');
+        break;
     }
-  };
+    return c;
+  }
+  function buildTiles() {
+    for (const id in R) {
+      const k = R[id].tile;
+      if (!TILE[k]) { const d = makeTile(k); TILE[k] = { day: d, night: tint(d, '#6a78b4') }; }
+    }
+  }
+  function pattern(ctx, rid, world) {
+    const key = rid + world;
+    if (!PAT[key]) PAT[key] = ctx.createPattern(TILE[R[rid].tile][world], 'repeat');
+    return PAT[key];
+  }
 
-  // ============================================================ 3 峰林与梯田
-  R.karst = {
-    day: pal({ top: '#8fc2dc', mid: '#cfe6e4', bot: '#eef0dc', sun: '#fff6df', far: '#9fc0bf', far2: '#7fa79e',
-      near: '#5f8e6c', mist: '#f1f5ef', ground: '#7a5d43', gtop: '#86b25d', paddy: '#bfe0e4', roof: '#3a4a40',
-      leaf: '#5e8b4d', light: '#ffe08a', deep: '#5f8478', glow: 0.45 }),
-    night: pal({ top: '#07122a', mid: '#13284a', bot: '#24456a', sun: '#eef2dc', far: '#173052', far2: '#132845',
-      near: '#0f2238', mist: '#25426a', ground: '#2a2a3a', gtop: '#2c4a4a', paddy: '#2c4f7a', roof: '#0c1622',
-      leaf: '#13283a', light: '#d4ff8a', deep: '#0a1628', glow: 1.0 }, true),
-    back(c, e) {
-      const p = e.pal;
-      sky(c, p); stars(c, e, 110, 13); sunMoon(c, e, 860, 110); clouds(c, e, 120, p.mist, 5);
-      // 层层峰林：圆润的馒头峰
-      const layer = (par, spacing, seed, base, hMin, hVar, col) => items(e.cam, par, spacing, seed, (sx, i, r) => {
-        const h = hMin + r * hVar, w = 34 + U.hash(i, seed + 1) * 30;
-        c.fillStyle = col;
-        c.beginPath(); c.moveTo(sx - w * 1.5, base);
-        c.bezierCurveTo(sx - w * 1.1, base - h * 0.5, sx - w, base - h, sx, base - h);
-        c.bezierCurveTo(sx + w, base - h, sx + w * 1.1, base - h * 0.5, sx + w * 1.5, base);
-        c.fill();
-      });
-      layer(0.06, 90, 41, 500, 120, 160, rgb(p.far));
-      band(c, 340, 520, p.mist, 0, 0.75);
-      layer(0.14, 120, 42, 540, 110, 140, rgb(p.far2));
-      band(c, 430, 560, p.mist, 0, 0.7);
-      layer(0.26, 170, 43, 590, 90, 120, rgb(p.near));
-      // 远处梯田的等高线
-      c.strokeStyle = rgb(p.paddy, e.world === 'day' ? 0.5 : 0.35); c.lineWidth = 1.2;
-      for (let k = 0; k < 7; k++) {
-        const y = 560 + k * 9, off = e.cam * 0.32;
-        c.beginPath();
-        for (let sx = 0; sx <= W; sx += 20) c.lineTo(sx, y + Math.sin((sx + off) / 90 + k) * 4);
-        c.stroke();
+  // ------------------------------------------------------------ 背景
+  // 某个横坐标该显示哪张图（以及与下一张的过渡）
+  function bgAt(G, px) {
+    const ri = LV.regionAt(px), reg = LV.regions[ri], rid = reg.id;
+    const w = (G.weather && G.weather[ri]) || 'clear';
+    const list = R[rid].bg[w] || R[rid].bg.clear || Object.values(R[rid].bg)[0];
+    const len = Math.min(reg.x1, LV.totalX) - reg.x0;
+    const t = U.clamp((px - reg.x0) / len, 0, 0.9999) * list.length;
+    const k = Math.floor(t), f = t - k;
+    const cur = list[k], next = list[k + 1];
+    const fade = next && f > 0.82 ? U.smooth((f - 0.82) / 0.18) : 0;
+    return { cur, next, fade, rid, weather: w };
+  }
+  function drawImg(ctx, id, world, a) {
+    const im = world === 'night' ? NIGHT[id] : IMG[id];
+    if (!im) return;
+    ctx.globalAlpha = a; ctx.drawImage(im, 0, 0); ctx.globalAlpha = 1;
+  }
+  // 区域交界处的过渡
+  function regionMix(centre) {
+    for (let k = 1; k < LV.regions.length; k++) {
+      const bx = LV.regions[k].x0;
+      if (Math.abs(centre - bx) < 420) return { a: k - 1, b: k, t: U.smooth((centre - bx + 420) / 840) };
+    }
+    return { a: LV.regionAt(centre), b: null, t: 0 };
+  }
+  function backdrop(ctx, G, world, centre) {
+    const m = regionMix(centre);
+    const A = bgAt(G, m.b === null ? centre : Math.min(centre, LV.regions[m.b].x0 - 1));
+    drawImg(ctx, A.cur, world, 1);
+    if (A.next && A.fade > 0) drawImg(ctx, A.next, world, A.fade);
+    if (m.b !== null && m.t > 0) {
+      const B = bgAt(G, LV.regions[m.b].x0 + 1);
+      drawImg(ctx, B.cur, world, m.t);
+    }
+    return m;
+  }
+
+  // ------------------------------------------------------------ 水面 / 深谷（缺口处看到的东西）
+  function lowland(ctx, rid, world, t, camPix, a) {
+    const cfg = R[rid];
+    ctx.globalAlpha = a;
+    if (cfg.water) {
+      const wy = Math.round(cfg.water[world] / P);
+      const col = cfg.waterCol[world === 'day' ? 0 : 1];
+      ctx.fillStyle = col; ctx.fillRect(0, wy, PW, PH - wy);
+      ctx.fillStyle = 'rgba(0,0,10,0.25)'; ctx.fillRect(0, wy + 12, PW, PH);
+      if (cfg.water.frozen === world) {
+        ctx.fillStyle = '#c8e0f4'; ctx.fillRect(0, wy, PW, 1);
+        ctx.fillStyle = 'rgba(200,224,244,0.35)'; ctx.fillRect(0, wy + 1, PW, 2);
+      } else {
+        ctx.fillStyle = world === 'day' ? 'rgba(255,255,255,0.45)' : 'rgba(255,214,140,0.35)';
+        for (let k = 0; k < 18; k++) {
+          const yy = wy + 1 + (k % 6) * 3, xx = U.mod(Math.floor(U.hash(k, 9) * PW - camPix * (0.7 + (k % 6) * 0.05) + t * 6), PW + 20) - 10;
+          ctx.fillRect(xx, yy, 4 + (k % 4) * 2, 1);
+        }
       }
-      band(c, 520, 720, p.deep, 0, 0.85);
-    }
-  };
-
-  // ============================================================ 4 骑楼与围屋
-  const FACADES = ['#e7b77a', '#a9cbbd', '#e9d6b0', '#d99c86', '#c9b6d8', '#b8d0a5'];
-  R.lingnan = {
-    day: pal({ top: '#7fb8e2', mid: '#c9e2ec', bot: '#f6ead6', sun: '#fff0cf', far: '#a9c3c6', far2: '#c7a98a',
-      roof: '#4a3a34', wall: '#efe2c9', mist: '#f4ece0', ground: '#9c6b52', gtop: '#d9b48f', tile2: '#6f8f7f',
-      light: '#ffd07a', deep: '#6b5a52', glow: 0.5 }),
-    night: pal({ top: '#120f2c', mid: '#2a1f4a', bot: '#4d3560', sun: '#f6ecd8', far: '#2a2b4f', far2: '#3b2f4a',
-      roof: '#140f1c', wall: '#4b3f5c', mist: '#3a2e55', ground: '#3a2a33', gtop: '#6a4a4e', tile2: '#2c3c48',
-      light: '#ffc35e', deep: '#140f22', glow: 1.0 }, true),
-    back(c, e) {
-      const p = e.pal;
-      sky(c, p); stars(c, e, 50, 14); sunMoon(c, e, 1080, 150); clouds(c, e, 70, p.mist, 6);
-      ridge(c, e.cam, 0.06, 470, 90, 300, 51, rgb(p.far));
-      // 客家围屋：圆形土楼
-      items(e.cam, 0.16, 520, 52, (sx, i, r) => {
-        const rw = 110 + r * 60, rh = 22, top = 470 - r * 10, bot = 540;
-        c.fillStyle = rgb(p.far2);
-        c.beginPath(); c.ellipse(sx, bot, rw, rh, 0, 0, Math.PI); c.lineTo(sx - rw, top); c.ellipse(sx, top, rw, rh, 0, Math.PI, 0, true); c.closePath(); c.fill();
-        c.fillStyle = rgb(p.roof, 0.85); c.beginPath(); c.ellipse(sx, top, rw + 6, rh + 4, 0, Math.PI, 0); c.ellipse(sx, top + 3, rw - 16, rh - 6, 0, 0, Math.PI, true); c.fill();
-        for (let k = 0; k < 9; k++) {
-          const a = Math.PI * (0.12 + k * 0.095), wx = sx - Math.cos(a) * rw * 0.92, wy = top + 22 + Math.sin(a) * 6;
-          windowRect(c, e, wx - 2, wy, 4, 6, U.hash(i * 9 + k, 53) > 0.4);
-          windowRect(c, e, wx - 2, wy + 22, 4, 6, U.hash(i * 9 + k, 54) > 0.5);
-        }
-      });
-      band(c, 430, 560, p.mist, 0, 0.6);
-      // 骑楼街：底层连续拱廊，上层满洲窗
-      items(e.cam, 0.5, 190, 55, (sx, i, r) => {
-        const w = 186, h = 170 + r * 50, base = 592, y = base - h;
-        const col = U.hex(FACADES[Math.floor(U.hash(i, 56) * FACADES.length)]);
-        const fc = e.world === 'day' ? col : U.mix(col, p.wall, 0.75);
-        c.fillStyle = rgb(fc); c.fillRect(sx, y, w, h);
-        c.fillStyle = rgb(U.mix(fc, p.roof, 0.25)); c.fillRect(sx - 3, y - 6, w + 6, 10);
-        // 山花
-        c.beginPath(); c.moveTo(sx + w * 0.3, y - 6); c.quadraticCurveTo(sx + w / 2, y - 30, sx + w * 0.7, y - 6); c.fill();
-        // 拱廊
-        c.fillStyle = rgb(p.roof, 0.8);
-        for (let k = 0; k < 3; k++) {
-          const ax = sx + 14 + k * 58;
-          c.beginPath(); c.moveTo(ax, base); c.lineTo(ax, base - 46); c.arc(ax + 22, base - 46, 22, Math.PI, 0); c.lineTo(ax + 44, base); c.fill();
-          if (e.world === 'night') X.glow(ax + 22, base - 30, 30, p.light, 0.22 * e.a);
-        }
-        // 满洲窗：彩色玻璃
-        const rows = Math.floor((h - 90) / 44);
-        for (let rr = 0; rr < rows; rr++) for (let k = 0; k < 3; k++) {
-          const wx = sx + 22 + k * 56, wy = y + 16 + rr * 44;
-          const lit = e.world === 'night' && U.hash(i * 31 + rr * 3 + k, 57) > 0.35;
-          const gc = [[230, 90, 80], [90, 170, 140], [240, 200, 90], [110, 140, 220]][(rr + k + i) % 4];
-          c.fillStyle = lit ? rgb(U.mix(gc, [255, 230, 170], 0.4)) : rgb(e.world === 'day' ? U.mix(gc, [255, 255, 255], 0.35) : U.mix(gc, p.roof, 0.7));
-          c.fillRect(wx, wy, 30, 26);
-          c.strokeStyle = rgb(p.roof, 0.6); c.lineWidth = 1;
-          c.strokeRect(wx, wy, 30, 26); c.beginPath(); c.moveTo(wx + 15, wy); c.lineTo(wx + 15, wy + 26); c.moveTo(wx, wy + 13); c.lineTo(wx + 30, wy + 13); c.stroke();
-          if (lit) X.glow(wx + 15, wy + 13, 24, gc, 0.3 * e.a);
-        }
-        // 夜里的招牌
-        if (U.hash(i, 58) > 0.45) {
-          const bx = sx + w - 22, by = y + 30;
-          c.fillStyle = e.world === 'night' ? 'rgba(255,120,90,0.95)' : rgb(U.mix(p.roof, [180, 60, 50], 0.6));
-          c.fillRect(bx, by, 12, 60);
-          if (e.world === 'night') X.glow(bx + 6, by + 30, 40, [255, 110, 90], 0.45 * e.a);
-        }
-      });
-    }
-  };
-
-  // ============================================================ 5 丹霞与雅丹
-  R.danxia = {
-    day: pal({ top: '#5ea8e0', mid: '#bcdcec', bot: '#f6e2c0', sun: '#fff3d0', far: '#d98a64', far2: '#c4653f',
-      stripe: '#f0c27a', stripe2: '#b8484a', mist: '#f7e6cc', ground: '#a8452f', gtop: '#d9774c', roof: '#5a2a22',
-      light: '#ffd58a', deep: '#8a3a2a', glow: 0.5 }),
-    night: pal({ top: '#050a1e', mid: '#121a3c', bot: '#2c2446', sun: '#f3ecd8', far: '#3a2238', far2: '#2c1a2e',
-      stripe: '#5a3446', stripe2: '#2a1426', mist: '#2a2244', ground: '#3a1c24', gtop: '#5a2c32', roof: '#140a12',
-      light: '#ffcf80', deep: '#0e0816', glow: 1.0 }, true),
-    back(c, e) {
-      const p = e.pal;
-      sky(c, p);
-      // 银河
-      if (e.world === 'night') {
-        c.save(); c.translate(640, 200); c.rotate(-0.35);
-        const g = c.createLinearGradient(0, -90, 0, 90);
-        g.addColorStop(0, 'rgba(160,170,255,0)'); g.addColorStop(0.5, rgb([190, 180, 255], 0.22 * e.a)); g.addColorStop(1, 'rgba(160,170,255,0)');
-        c.fillStyle = g; c.fillRect(-900, -90, 1800, 180); c.restore();
-        for (let k = 0; k < 6; k++) X.glow(200 + k * 180, 330 - k * 60, 120, [170, 160, 255], 0.12 * e.a);
+    } else {
+      const [c0, c1] = cfg.abyss;
+      const top = 150;
+      for (let y = top; y < PH; y += 2) {
+        ctx.fillStyle = U.rgb(U.mix(U.hex(c0), U.hex(c1), (y - top) / (PH - top)), world === 'day' ? 1 : 1);
+        ctx.fillRect(0, y, PW, 2);
       }
-      stars(c, e, 220, 15);
-      sunMoon(c, e, 980, 120);
-      // 彩色条纹的丹霞山
-      const off = e.cam * 0.1;
-      c.save();
-      ridge(c, e.cam, 0.1, 520, 170, 330, 61, rgb(p.far));
-      c.clip();
-      const cols = [p.far, p.stripe, p.far2, p.stripe2, p.far, p.stripe];
-      for (let k = 0; k < 18; k++) {
-        c.fillStyle = rgb(cols[k % cols.length], 0.55);
-        c.beginPath();
-        for (let sx = 0; sx <= W + 20; sx += 20) c.lineTo(sx, 360 + k * 14 + Math.sin((sx + off) / 160 + k * 0.6) * 18);
-        for (let sx = W + 20; sx >= 0; sx -= 20) c.lineTo(sx, 368 + k * 14 + Math.sin((sx + off) / 160 + k * 0.6) * 18);
-        c.fill();
-      }
-      c.restore();
-      band(c, 430, 560, p.mist, 0, 0.55);
-      // 雅丹：被风削成船形的土台
-      items(e.cam, 0.3, 360, 62, (sx, i, r) => {
-        const w = 120 + r * 120, h = 50 + U.hash(i, 63) * 50, base = 590;
-        c.fillStyle = rgb(U.mix(p.far2, p.roof, 0.35));
-        c.beginPath(); c.moveTo(sx - w * 0.6, base);
-        c.lineTo(sx - w * 0.5, base - h * 0.7); c.quadraticCurveTo(sx - w * 0.42, base - h, sx - w * 0.2, base - h);
-        c.lineTo(sx + w * 0.3, base - h * 0.92); c.quadraticCurveTo(sx + w * 0.55, base - h * 0.6, sx + w * 0.62, base);
-        c.fill();
-        c.strokeStyle = rgb(p.stripe, 0.25); c.lineWidth = 2;
-        for (let k = 1; k < 4; k++) { c.beginPath(); c.moveTo(sx - w * 0.5, base - h * k * 0.2); c.lineTo(sx + w * 0.55, base - h * k * 0.2); c.stroke(); }
-      });
-      band(c, 560, 720, p.deep, 0.3, 0.95);
-      // 白天的热浪
-      if (e.world === 'day' && !e.reduce) {
-        c.strokeStyle = 'rgba(255,240,220,0.12)'; c.lineWidth = 2;
-        for (let k = 0; k < 5; k++) {
-          const y = 520 + k * 12; c.beginPath();
-          for (let sx = 0; sx <= W; sx += 16) c.lineTo(sx, y + Math.sin(sx / 40 + e.t * 3 + k) * 2);
-          c.stroke();
+      // 抖动的边：像素风的雾气
+      ctx.fillStyle = 'rgba(200,210,230,0.18)';
+      for (let x = 0; x < PW; x += 2) if (U.hash(Math.floor(x + camPix * 0.5), 3) > 0.5) ctx.fillRect(x, top - 1, 2, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ------------------------------------------------------------ 天气
+  const W_DARK = { rain: 'rgba(20,30,50,0.22)', fog: 'rgba(200,206,214,0.18)', snow: 'rgba(220,230,245,0.08)' };
+  function weatherBack(ctx, w, world, t, camPix) {
+    if (W_DARK[w]) { ctx.fillStyle = W_DARK[w]; ctx.fillRect(0, 0, PW, PH); }
+    if (w === 'fog') {
+      for (let b = 0; b < 4; b++) {
+        const y0 = 70 + b * 22;
+        for (let x = -8; x < PW + 8; x += 4) {
+          const n = U.noise((x + camPix * (0.3 + b * 0.1) + t * 4) / 40, b + 3);
+          if (n < 0.35) continue;
+          ctx.fillStyle = `rgba(226,230,236,${(0.10 + n * 0.18) * (world === 'night' ? 0.6 : 1)})`;
+          ctx.fillRect(x, y0 + Math.round(Math.sin(x / 30 + b) * 2), 4, 6 + b * 2);
         }
       }
     }
-  };
-
-  // ============================================================ 6 雪域圣湖
-  R.tibet = {
-    water: { day: 586, night: 568, frozen: 'night' },
-    day: pal({ top: '#2f7fd0', mid: '#8cc2ea', bot: '#e4eef2', sun: '#fffaf0', far: '#7f9cc0', far2: '#5f7fa8',
-      snow: '#f7fbff', mist: '#eaf2f8', water: '#3f8fc8', ground: '#6b6a72', gtop: '#e9eef4', roof: '#33333d',
-      light: '#ffe2a0', deep: '#3c6c9a', glow: 0.45 }),
-    night: pal({ top: '#030820', mid: '#0c1a44', bot: '#1e3466', sun: '#f6f3e6', far: '#1c2c55', far2: '#142247',
-      snow: '#b8c8ec', mist: '#1d2f5c', water: '#0c1a3e', ground: '#22243a', gtop: '#8a9ac4', roof: '#0a0c18',
-      light: '#ffd890', deep: '#06102a', glow: 1.0 }, true),
-    back(c, e) {
-      const p = e.pal;
-      sky(c, p); stars(c, e, 260, 16); sunMoon(c, e, 640, 110);
-      // 雪山
-      const peaks = (par, spacing, seed, base, hMin, hVar, col) => items(e.cam, par, spacing, seed, (sx, i, r) => {
-        const h = hMin + r * hVar, w = 90 + U.hash(i, seed + 1) * 70;
-        const pts = [[sx - w * 1.4, base], [sx - w * 0.45, base - h * 0.62], [sx - w * 0.2, base - h * 0.78], [sx, base - h], [sx + w * 0.3, base - h * 0.74], [sx + w * 0.55, base - h * 0.6], [sx + w * 1.4, base]];
-        c.fillStyle = col; c.beginPath(); pts.forEach((q, k) => c[k ? 'lineTo' : 'moveTo'](q[0], q[1])); c.fill();
-        c.fillStyle = rgb(p.snow);
-        c.beginPath(); c.moveTo(pts[1][0] + w * 0.18, pts[1][1] + h * 0.1);
-        for (let k = 2; k <= 4; k++) c.lineTo(pts[k][0], pts[k][1]);
-        c.lineTo(pts[5][0] - w * 0.12, pts[5][1] + h * 0.08);
-        c.lineTo(sx + w * 0.18, base - h * 0.6); c.lineTo(sx, base - h * 0.7); c.lineTo(sx - w * 0.2, base - h * 0.56);
-        c.fill();
-      });
-      peaks(0.05, 300, 71, 520, 170, 140, rgb(p.far));
-      band(c, 400, 540, p.mist, 0, 0.5);
-      peaks(0.12, 380, 72, 560, 110, 110, rgb(p.far2));
-      // 白塔与经幡
-      items(e.cam, 0.4, 700, 73, (sx, i, r) => {
-        if (r < 0.5) {
-          const b = 588;
-          c.fillStyle = rgb(U.mix(p.snow, p.far2, 0.15));
-          c.fillRect(sx - 30, b - 18, 60, 18); c.fillRect(sx - 22, b - 30, 44, 12);
-          c.beginPath(); c.ellipse(sx, b - 30, 20, 22, 0, Math.PI, 0); c.fill();
-          c.fillRect(sx - 4, b - 76, 8, 26);
-          c.fillStyle = rgb([210, 170, 80]); c.beginPath(); c.arc(sx, b - 80, 5, 0, 7); c.fill();
-        }
-        const x0 = sx + 60, x1 = sx + 300, y0 = 470 + r * 20;
-        c.strokeStyle = rgb(p.roof, 0.6); c.lineWidth = 1;
-        c.beginPath(); c.moveTo(x0, 590); c.lineTo(x0, y0); c.moveTo(x1, 590); c.lineTo(x1, y0 + 10); c.stroke();
-        c.beginPath(); c.moveTo(x0, y0); c.quadraticCurveTo((x0 + x1) / 2, y0 + 50, x1, y0 + 10); c.stroke();
-        const FL = [[60, 120, 210], [245, 245, 245], [210, 60, 50], [60, 160, 90], [240, 200, 60]];
-        for (let k = 1; k < 16; k++) {
-          const tt = k / 16, fx = U.lerp(x0, x1, tt), fy = (1 - tt) * (1 - tt) * y0 + 2 * (1 - tt) * tt * (y0 + 50) + tt * tt * (y0 + 10);
-          const fl = e.reduce ? 0 : Math.sin(e.t * 3 + k) * 2;
-          c.fillStyle = rgb(e.world === 'day' ? FL[k % 5] : U.mix(FL[k % 5], p.far2, 0.6));
-          c.beginPath(); c.moveTo(fx, fy); c.lineTo(fx + 9 + fl, fy + 1); c.lineTo(fx + 8 + fl, fy + 12); c.lineTo(fx, fy + 11); c.fill();
-        }
-      });
-      band(c, 540, 600, p.mist, 0, 0.5);
+  }
+  function weatherFront(ctx, w, world, t, camPix, reduce) {
+    const sp = reduce ? 0.35 : 1;
+    if (w === 'rain') {
+      ctx.fillStyle = world === 'day' ? 'rgba(210,225,245,0.55)' : 'rgba(160,180,230,0.5)';
+      for (let i = 0; i < 140; i++) {
+        const x = U.mod(Math.floor(U.hash(i, 1) * 360 - t * 40 * sp - camPix), 360) - 20;
+        const y = U.mod(Math.floor(U.hash(i, 2) * 200 + t * 230 * sp), 200) - 10;
+        ctx.fillRect(x, y, 1, 4);
+      }
+      ctx.fillStyle = 'rgba(220,235,255,0.5)';
+      for (let i = 0; i < 14; i++) {      // 地上的水花
+        const ph = (t * 3 + U.hash(i, 5)) % 1;
+        if (ph > 0.3) continue;
+        const x = Math.floor(U.hash(i + Math.floor(t * 3 + U.hash(i, 5)), 6) * PW);
+        ctx.fillRect(x - 1, 139, 1, 1); ctx.fillRect(x + 1, 139, 1, 1); ctx.fillRect(x, 138, 1, 1);
+      }
+    } else if (w === 'snow') {
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      for (let i = 0; i < 110; i++) {
+        const big = i % 5 === 0;
+        const x = U.mod(Math.floor(U.hash(i, 3) * 340 + Math.sin(t * 0.8 + i) * 5 - camPix * (big ? 1.1 : 0.7) - t * 6 * sp), 340) - 10;
+        const y = U.mod(Math.floor(U.hash(i, 4) * 190 + t * (big ? 22 : 13) * sp), 190) - 5;
+        ctx.fillRect(x, y, big ? 2 : 1, big ? 2 : 1);
+      }
+    } else if (w === 'wind') {
+      const cols = ['#d0682a', '#e0a030', '#b8402a', '#c88a2a'];
+      for (let i = 0; i < 34; i++) {
+        const x = U.mod(Math.floor(U.hash(i, 7) * 360 - t * (90 + U.hash(i, 8) * 60) * sp - camPix * 0.4), 360) - 20;
+        const y = Math.floor(30 + U.hash(i, 9) * 130 + Math.sin(t * 3 + i) * 6);
+        ctx.fillStyle = cols[i % 4];
+        ctx.fillRect(x, y, 2, 1); if (i % 3 === 0) ctx.fillRect(x + 1, y + 1, 1, 1);
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      for (let i = 0; i < 8; i++) {
+        const x = U.mod(Math.floor(U.hash(i, 11) * 400 - t * 220 * sp), 400) - 40;
+        ctx.fillRect(x, Math.floor(40 + U.hash(i, 12) * 100), 16 + (i % 3) * 8, 1);
+      }
     }
-  };
+  }
 
-  RF.Regions = { R, items, ridge, band, redLantern, roof };
+  RF.Regions = {
+    R, load, backdrop, regionMix, lowland, pattern, weatherBack, weatherFront, bgAt,
+    get sprites() { return sprites; }, get spritesNight() { return spritesNight; }, get spritesDim() { return spritesDim; }
+  };
 })();

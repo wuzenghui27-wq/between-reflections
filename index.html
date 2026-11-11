@@ -19,6 +19,7 @@
       <svg class="ico moon" viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 12.6A6.5 6.5 0 0 1 7.4 4.5a6.5 6.5 0 1 0 8.1 8.1z"/></svg>
       <span id="worldName">白天</span>
     </div>
+    <div id="weatherPill" class="glass" data-weather="clear" title="这一站的天气"><span id="weatherName">晴</span></div>
     <div id="lanternPill" class="glass" title="收集到的灯"><svg class="ico lamp" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4h8l-1.2 11H7.2z"/><rect x="7.5" y="15.5" width="5" height="2" rx="1"/></svg><span id="lanternCount">0 / 0</span></div></div>
     <button class="glass round" data-act="pause" aria-label="暂停 (Esc)" title="暂停 (Esc)">
       <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5.5" y="4.5" width="3" height="11" rx="1.2"/><rect x="11.5" y="4.5" width="3" height="11" rx="1.2"/></svg>
@@ -57,8 +58,8 @@
         <li><span class="keys"><kbd>R</kbd></span><span>回到最近的检查点</span></li>
         <li><span class="keys"><kbd>Esc</kbd></span><span>暂停 / 继续</span></li>
       </ul>
-      <p class="note">旅人会自己向前走。同一个地方，白天和夜里的路不一样：江南白天水涨、夜里落潮；老宅白天摆着货摊、夜里关上大门。前方淡色的轮廓是另一面的路和障碍，提前切过去。音乐的鼓点和障碍对齐，踩着拍子切换，光波会更亮。</p>
-      <p class="note muted">脚下的小圆圈表示另一面此刻能站，叉号表示不能。沿途的灯可以收集，有的只在一面出现。</p>
+      <p class="note">旅人会自己向前走。同一个地方，白天和夜里的路不一样：江南白天水涨、夜里落潮；宫苑白天摆着货摊、夜里关上大门。前方淡色的轮廓是另一面的路和障碍，提前切过去。音乐的鼓点和障碍对齐，踩着拍子切换，光波会更亮。</p>
+      <p class="note muted">脚下的小圆圈表示另一面此刻能站，叉号表示不能。沿途的灯可以收集，有的只在一面出现。每次出发，各站的天气都是随机的：下雨时旅人会撑伞，下雪时披上斗篷。</p>
       <button class="pill primary" data-act="back">好的</button>
     </div>
   </section>
@@ -102,9 +103,10 @@
       <p class="note">《倒影之间》· Game Off 2026 参赛作品，主题 SHIFT。</p>
       <ul class="list plain">
         <li><span>策划</span><span>meter</span></li>
-        <li><span>程序、画面与声音</span><span>AI 辅助原创编写</span></li>
+        <li><span>背景像素画</span><span>meter</span></li>
+        <li><span>程序、人物与声音</span><span>AI 辅助原创编写</span></li>
       </ul>
-      <p class="note muted">画面全部由代码实时绘制，音乐与音效由 Web Audio 实时合成。没有使用第三方素材、字体或游戏引擎。</p>
+      <p class="note muted">背景像素画由策划提供；人物、道具为原创像素画；音乐与音效由 Web Audio 实时合成。没有使用游戏引擎。</p>
       <button id="btnCreditsBack" class="pill primary" data-act="back">返回</button>
     </div>
   </section>
@@ -115,6 +117,7 @@
 <script src="js/level.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/game.js"></script>
+<script src="js/atlas.js"></script>
 <script src="js/gfx/fx.js"></script>
 <script src="js/gfx/regions.js"></script>
 <script src="js/gfx/props.js"></script>
