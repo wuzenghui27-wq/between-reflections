@@ -37,11 +37,16 @@
     },
 
     // 放大到屏幕：像素层不平滑，光层平滑叠加
-    present(glowStrength) {
+    present(glowStrength, shx, shy) {
       const o = X.out;
       o.setTransform(1, 0, 0, 1, 0, 0);
       o.globalCompositeOperation = 'source-over'; o.globalAlpha = 1;
       o.imageSmoothingEnabled = false;
+      if (shx || shy) {            // 震屏：整体挪几个像素，边缘补暗色
+        const k = X.outW / PW;
+        o.fillStyle = '#0c0a14'; o.fillRect(0, 0, X.outW, X.outH);
+        o.setTransform(1, 0, 0, 1, Math.round(shx * k), Math.round(shy * k));
+      }
       o.drawImage(X.buf, 0, 0, X.outW, X.outH);
       o.imageSmoothingEnabled = true;
       o.globalCompositeOperation = 'lighter';

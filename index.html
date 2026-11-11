@@ -15,12 +15,14 @@
   <!-- 行走中的极简 HUD -->
   <div id="hud" class="hidden">
     <div class="hud-left"><div id="worldPill" class="glass" data-world="day">
-      <svg class="ico sun" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="4"/><g stroke-linecap="round"><path d="M10 1.8v2.2M10 16v2.2M1.8 10H4M16 10h2.2M4.2 4.2l1.5 1.5M14.3 14.3l1.5 1.5M4.2 15.8l1.5-1.5M14.3 5.7l1.5-1.5"/></g></svg>
-      <svg class="ico moon" viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 12.6A6.5 6.5 0 0 1 7.4 4.5a6.5 6.5 0 1 0 8.1 8.1z"/></svg>
+      <img class="ico sun pxi" src="assets/ui/sun.png" alt="">
+      <img class="ico moon pxi" src="assets/ui/moon.png" alt="">
       <span id="worldName">白天</span>
     </div>
-    <div id="weatherPill" class="glass" data-weather="clear" title="这一站的天气"><span id="weatherName">晴</span></div>
-    <div id="lanternPill" class="glass" title="收集到的灯"><svg class="ico lamp" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4h8l-1.2 11H7.2z"/><rect x="7.5" y="15.5" width="5" height="2" rx="1"/></svg><span id="lanternCount">0 / 0</span></div></div>
+    <div id="weatherPill" class="glass" data-weather="clear" title="这一站的天气"><img id="weatherIcon" class="pxi" src="assets/ui/clear.png" alt=""><span id="weatherName">晴</span></div>
+    <div id="lanternPill" class="glass" title="收集到的灯"><img class="pxi" src="assets/ui/lantern.png" alt=""><span id="lanternCount">0 / 0</span></div>
+    <div id="comboPill" class="glass hidden" title="连续踩在拍子上切换"><img class="pxi" src="assets/ui/beat.png" alt=""><span>踩拍</span><b id="comboNum">×2</b></div></div>
+    <div id="journey" aria-hidden="true"><div class="track"></div><div class="stops"></div><div class="me"></div></div>
     <button class="glass round" data-act="pause" aria-label="暂停 (Esc)" title="暂停 (Esc)">
       <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5.5" y="4.5" width="3" height="11" rx="1.2"/><rect x="11.5" y="4.5" width="3" height="11" rx="1.2"/></svg>
     </button>
@@ -30,6 +32,7 @@
   <div id="hint" class="glass" aria-live="polite"></div>
   <div id="reason" class="glass" aria-live="assertive"><div class="r-main"></div><div class="r-tip"></div></div>
   <div id="introLine">从江南出发，一路走到雪域的湖边。<br>白天走不通的路，夜里也许能走。</div>
+  <div id="stamp" aria-live="polite"><div class="st-seal"><span class="st-mark">甲</span></div><div class="st-text"><div class="st-name"></div><div class="st-sub"></div></div></div>
   <div id="debug" hidden></div>
 
   <!-- 标题 -->
@@ -58,7 +61,7 @@
         <li><span class="keys"><kbd>R</kbd></span><span>回到最近的检查点</span></li>
         <li><span class="keys"><kbd>Esc</kbd></span><span>暂停 / 继续</span></li>
       </ul>
-      <p class="note">旅人会自己向前走。同一个地方，白天和夜里的路不一样：江南白天水涨、夜里落潮；宫苑白天摆着货摊、夜里关上大门。前方淡色的轮廓是另一面的路和障碍，提前切过去。音乐的鼓点和障碍对齐，踩着拍子切换，光波会更亮。</p>
+      <p class="note">旅人会自己向前走。同一个地方，白天和夜里的路不一样：江南白天水涨、夜里落潮；宫苑白天摆着货摊、夜里关上大门。前方淡色的轮廓是另一面的路和障碍，提前切过去。音乐的鼓点和障碍对齐，踩着拍子切换，光波会更亮，连着踩中会累积“踩拍”连击。每走完一站会按踩拍、收灯和失误盖一枚“甲乙丙丁”的印章。</p>
       <p class="note muted">脚下的小圆圈表示另一面此刻能站，叉号表示不能。沿途的灯可以收集，有的只在一面出现。每次出发，各站的天气都是随机的：下雨时旅人会撑伞，下雪时披上斗篷。</p>
       <button class="pill primary" data-act="back">好的</button>
     </div>
@@ -87,7 +90,8 @@
     <div class="end-block">
       <h2 class="big">旅程已抵达</h2>
       <p class="tagline">星星落进了圣湖里。</p>
-      <div class="stats glass"><div><b id="endLanterns">0</b><span>灯</span></div><div><b id="endFails">0</b><span>失误</span></div><div><b id="endTime">0</b><span>用时</span></div></div>
+      <div class="stats glass"><div><b id="endLanterns">0</b><span>灯</span></div><div><b id="endCombo">0</b><span>最长连拍</span></div><div><b id="endFails">0</b><span>失误</span></div><div><b id="endTime">0</b><span>用时</span></div></div>
+      <ol id="endGrades" class="grades"></ol>
       <button id="btnAgain" class="pill primary" data-act="again">再走一次</button>
       <div class="row">
         <button class="pill ghost" data-act="title">返回标题</button>
@@ -122,6 +126,7 @@
 <script src="js/gfx/regions.js"></script>
 <script src="js/gfx/props.js"></script>
 <script src="js/gfx/traveler.js"></script>
+<script src="js/gfx/particles.js"></script>
 <script src="js/gfx/renderer.js"></script>
 <script src="js/ui.js"></script>
 </body>

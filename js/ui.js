@@ -54,34 +54,93 @@
   G.on('switched', (w, onBeat) => A.sfx('switch', { night: w === 'night', onBeat }));
   G.on('intro', () => $('introLine').classList.add('show'));
   G.on('run', () => $('introLine').classList.remove('show'));
-  G.on('jump', () => A.sfx('jump'));
-  G.on('land', () => A.sfx('land'));
-  G.on('bell', () => A.sfx('bell'));
-  G.on('lantern', () => { A.sfx('lantern'); setLanterns(); });
-  G.on('checkpoint', () => A.sfx('checkpoint'));
+  // 粒子与手感
+  const PT = RF.Particles;
+  const DUST = { jiangnan: ['#b5b7b0', '#8a8c8c'], garden: ['#f4f1ea', '#c9c4b8'], autumn: ['#c8a070', '#d0682a', '#8a9a3a'],
+    wall: ['#c0a888', '#8a6a4c'], glacier: ['#ffffff', '#c8e4f4'], tibet: ['#ffffff', '#dfe6ee'] };
+  const dustCols = () => DUST[LV.regions[LV.regionAt(G.px)].id] || ['#cccccc'];
+  G.on('jump', () => { A.sfx('jump'); PT.dust(G.px, G.foot, 6, dustCols(), 0.6); });
+  G.on('land', () => { A.sfx('land'); PT.dust(G.px, G.foot, 10, dustCols(), 1); });
+  G.on('bell', b => { A.sfx('bell'); if (b) PT.sparks(b.x, b.y + 0, '#ffe08a', 10); });
+  G.on('lantern', l => {
+    A.sfx('lantern'); setLanterns();
+    PT.sparks(l.x, l.y, '#ffd27a', 14);
+    PT.float(l.x, l.y - 30, '+1', '#ffe8a8');
+    const p = $('lanternPill'); p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump');
+  });
+  G.on('checkpoint', () => { A.sfx('checkpoint'); PT.sparks(G.px - 24, G.foot - 50, '#ffd890', 8); });
+  // 踩拍连击
+  G.on('combo', n => {
+    const el = $('comboPill');
+    if (n >= 2) {
+      el.classList.remove('hidden'); $('comboNum').textContent = '×' + n;
+      el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+      if (n % 4 === 0) PT.float(G.px, G.foot - 110, 'x' + n, '#fff2c0');
+    } else el.classList.add('hidden');
+  });
+  // 每站结束盖一个印章：甲乙丙丁
+  let stampTimer = null;
+  G.on('regionDone', (ri, g) => {
+    if (!g) return;
+    const st = $('stamp');
+    st.querySelector('.st-mark').textContent = g.mark;
+    st.querySelector('.st-name').textContent = LV.regions[ri].name;
+    st.querySelector('.st-sub').textContent = '踩拍 ' + Math.round(g.beat * 100) + '% · 灯 ' + g.lanterns + '/' + g.lanternsTotal + ' · 失误 ' + g.fails;
+    st.classList.remove('show'); void st.offsetWidth; st.classList.add('show');
+    A.sfx('checkpoint');
+    clearTimeout(stampTimer); stampTimer = setTimeout(() => st.classList.remove('show'), 2600);
+  });
   const WNAME = { clear: '晴', rain: '雨', snow: '雪', fog: '雾', wind: '风' };
   function setWeather() {
     const w = G.weatherAt(G.px);
     $('weatherName').textContent = WNAME[w] || '晴';
     $('weatherPill').dataset.weather = w;
+    $('weatherIcon').src = 'assets/ui/' + (w || 'clear') + '.png';
     A.setWeather(w);
   }
   G.on('region', reg => { showChapter(reg); A.sfx('region'); setWeather(); });
-  G.on('hint', (t, d) => showHint(t, d));
-  G.on('fail', () => { A.sfx('fail'); hideHint(); $('chapterCard').classList.remove('show'); });
+  G.on('hint', (t, d, tag) => {
+    showHint(t, d);
+    const key = tag === 'switch' || tag === 'switch2' ? 'k_shift' : tag === 'jump' ? 'k_space' : null;
+    G.keyTip = key && !touchUI ? { key, t: Math.min(d, 3.5) } : null;
+  });
+  G.on('switched', () => { if (G.keyTip && G.keyTip.key === 'k_shift') G.keyTip.t = 0; });
+  G.on('jump', () => { if (G.keyTip && G.keyTip.key === 'k_space') G.keyTip.t = 0; });
+  G.on('fail', () => { A.sfx('fail'); PT.shake = 3; hideHint(); $('chapterCard').classList.remove('show'); });
   G.on('ready', (label, tip) => { showReason(label, tip); setLanterns(); setWeather(); });
   G.on('readyEnd', () => hideReason());
   G.on('arrive', () => { A.sfx('arrive'); hideHint(); });
   G.on('ended', () => {
     $('hud').classList.add('hidden'); panelStack = [];
+    hideHint(); $('stamp').classList.remove('show'); G.keyTip = null;
     const s = G.stats, m = Math.floor(s.time / 60), sec = Math.round(s.time % 60);
     $('endLanterns').textContent = G.lanternCount() + ' / ' + LV.lanterns.length;
     $('endFails').textContent = s.fails;
     $('endTime').textContent = m + ' 分 ' + String(sec).padStart(2, '0') + ' 秒';
+    $('endCombo').textContent = s.bestCombo || 0;
+    const rows = LV.regions.map((r, i) => {
+      const g = G.grade(i);
+      if (!g || !G.graded[i]) return `<li><span class="g-name">${r.name}</span><span class="g-sub">—</span><b class="g-mark off">·</b></li>`;
+      return `<li><span class="g-name">${r.name}</span><span class="g-sub">踩拍 ${Math.round(g.beat * 100)}% · 灯 ${g.lanterns}/${g.lanternsTotal}</span><b class="g-mark">${g.mark}</b></li>`;
+    });
+    $('endGrades').innerHTML = rows.join('');
     showPanel('endScreen');
   });
   G.on('paused', () => { A.pause(); panelStack = []; showPanel('pauseScreen'); });
   G.on('resumed', () => { A.resume(); A.sfx('ui'); hidePanels(); focusGame(); });
+
+  // ---------------------------------------------------------------- 旅程进度条：六站
+  const jr = $('journey');
+  jr.querySelector('.stops').innerHTML = LV.regions.map(r => `<i style="left:${(r.x0 / LV.totalX * 100).toFixed(2)}%" title="${r.name}"></i>`).join('') + '<i class="end" style="left:100%"></i>';
+  let lastP = -1;
+  function setJourney() {
+    const p = Math.max(0, Math.min(1, G.px / LV.totalX));
+    if (Math.abs(p - lastP) < 0.0008) return;
+    lastP = p;
+    jr.style.setProperty('--p', (p * 100).toFixed(2) + '%');
+    const ri = LV.regionAt(G.px);
+    jr.querySelectorAll('.stops i').forEach((el, i) => el.classList.toggle('done', i <= ri));
+  }
 
   // ---------------------------------------------------------------- 流程
   function startJourney() {
@@ -91,6 +150,8 @@
     $('hud').classList.remove('hidden');
     focusGame();
     G.wipe = null;
+    RF.Particles.clear();
+    $('comboPill').classList.add('hidden');
     G.start();
     setLanterns();
     if (startAt) { jumpTo(startAt); }
@@ -101,6 +162,7 @@
     G.state = 'title';
     G.reset();
     hidePanels(); hideHint(); hideReason(); panelStack = [];
+    $('stamp').classList.remove('show');
     $('introLine').classList.remove('show');
     $('chapterCard').classList.remove('show');
     $('hud').classList.add('hidden');
@@ -138,8 +200,10 @@
     }
   });
   // 触屏 / 鼠标：左半屏切换，右半屏跳
+  let touchUI = false;
   canvas.addEventListener('pointerdown', e => {
     if (!inGame()) return;
+    if (e.pointerType === 'touch') touchUI = true;
     e.preventDefault();
     const r = canvas.getBoundingClientRect();
     if (e.clientX - r.left < r.width / 2) G.inputSwitch(); else G.inputJump();
@@ -203,6 +267,10 @@
     acc += dt;
     while (acc >= C.STEP) {
       G.update(C.STEP);
+      if (G.state !== 'paused') {
+        RF.Particles.update(C.STEP);
+        if (G.keyTip) G.keyTip.t -= G.state === 'running' ? C.STEP : 0;
+      }
       if (hintT > 0 && G.state === 'running') { hintT -= C.STEP; if (hintT <= 0) hideHint(); }
       // 标题页：每隔几秒自己翻一次昼夜
       if (G.state === 'title' && !G.reduceMotion) {
@@ -216,6 +284,7 @@
     const title = G.state === 'title';
     const camPx = title ? 1400 + Math.sin(G.animT * 0.04) * 900 : G.px;
     RF.Renderer.draw(G, { camPx, title, noGhost: title });
+    if (!title) setJourney();
     if (G.debug && dbg) dbg.textContent = `x ${Math.round(G.px)} · 拍 ${G.beat().toFixed(2)} · ${G.world} · 脚 ${Math.round(G.foot)} · 检查点 ${G.cpIndex} · ${G.state}`;
   }
   if (G.debug && dbg) dbg.hidden = false;

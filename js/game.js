@@ -71,7 +71,7 @@
       pendingSwitch: false, failReason: null, failKind: null, failStreak: 0, lastFail: null,
       wipe: null, fade: 0, playerAlpha: 1, flashes: {}, onBeatFx: 0,
       shown: {}, reduceMotion: false, lowFx: false,
-      stats: { fails: 0, switches: 0, time: 0 },
+      stats: { fails: 0, switches: 0, time: 0 }, combo: 0,
       on(ev, fn) { (handlers[ev] = handlers[ev] || []).push(fn); },
       emit(ev, ...a) { (handlers[ev] || []).forEach(fn => fn(...a)); }
     };
@@ -95,11 +95,22 @@
     G.reset = function () {
       G.shown = {}; G.got = {}; G.gates = {};
       G.failStreak = 0; G.lastFail = null;
-      G.stats = { fails: 0, switches: 0, time: 0 };
+      G.stats = { fails: 0, switches: 0, time: 0, bestCombo: 0, reg: LV.regions.map(() => ({ sw: 0, beat: 0, fails: 0 })) };
+      G.combo = 0; G.graded = {};
       G.loadCheckpoint(0);
       G.phase = 0;
     };
     G.lanternCount = () => Object.keys(G.got).length;
+    // 每站评分：踩拍、收灯、失误 → 甲乙丙丁
+    G.grade = function (ri) {
+      const rs = G.stats.reg ? G.stats.reg[ri] : null; if (!rs) return null;
+      const ls = LV.lanterns.filter(l => LV.regionAt(l.x) === ri);
+      const lg = ls.filter(l => G.got[l.i]).length;
+      const beat = rs.sw ? rs.beat / rs.sw : 0.5;
+      const score = beat * 55 + (ls.length ? lg / ls.length : 1) * 25 + (rs.fails === 0 ? 20 : rs.fails <= 2 ? 10 : 0);
+      const mark = score >= 80 ? '甲' : score >= 62 ? '乙' : score >= 42 ? '丙' : '丁';
+      return { mark, score: Math.round(score), beat, lanterns: lg, lanternsTotal: ls.length, fails: rs.fails, switches: rs.sw };
+    };
 
     // ------------------------------------------------------------ 流程
     // 随机天气：每次开始旅程，为每一站按权重抽一种天气
@@ -124,6 +135,8 @@
       G.state = 'failing'; G.timer = 0;
       G.failReason = reason; G.failKind = kind || null;
       G.stats.fails++;
+      if (G.stats.reg) G.stats.reg[LV.regionAt(G.px)].fails++;
+      if (G.combo) { G.combo = 0; G.emit('combo', 0); }
       G.failStreak = G.lastFail === reason ? G.failStreak + 1 : 1;
       G.lastFail = reason;
       G.emit('fail', reason);
@@ -182,6 +195,13 @@
         G.wipe = { from, t: 0, onBeat: off < 0.14 };
         if (off < 0.14) G.onBeatFx = 1;
         G.emit('switched', G.world, off < 0.14);
+        if (G.stats.reg) {
+          const rs = G.stats.reg[LV.regionAt(G.px)];
+          rs.sw++; if (off < 0.14) rs.beat++;
+          G.combo = off < 0.14 ? G.combo + 1 : 0;
+          G.stats.bestCombo = Math.max(G.stats.bestCombo, G.combo);
+          G.emit('combo', G.combo);
+        }
         const s = Q.solidInBody(G.world, G.px, G.foot);
         if (s) {
           if (G.foot - s.y <= C.STEP_UP && !Q.solidInBody(G.world, G.px, s.y)) { G.foot = s.y; G.vy = 0; G.onGround = true; }
@@ -228,7 +248,7 @@
             if (t.x1 < G.px - C.HALF_W || !active(t, G.world)) continue;
             if (t.y >= G.foot - 0.01 && t.y <= nf && (land === null || t.y < land)) land = t.y;
           }
-          if (land !== null) { G.foot = land; G.vy = 0; G.onGround = true; G.emit('land'); }
+          if (land !== null) { G.foot = land; G.vy = 0; G.onGround = true; G.landT = 0; G.emit('land'); }
           else G.foot = nf;
         } else G.foot = nf;
       }
@@ -255,7 +275,7 @@
     // ------------------------------------------------------------ 更新
     G.update = function (dt) {
       if (G.state === 'paused') return;
-      G.animT += dt;
+      G.animT += dt; G.landT = (G.landT === undefined ? 9 : G.landT) + dt;
       if (G.wipe) { G.wipe.t += dt; if (G.wipe.t >= C.SWITCH_WIPE) G.wipe = null; }
       if (G.onBeatFx > 0) G.onBeatFx = Math.max(0, G.onBeatFx - dt * 2.5);
       for (const k in G.flashes) { G.flashes[k] -= dt; if (G.flashes[k] <= 0) delete G.flashes[k]; }
@@ -274,7 +294,10 @@
             if (G.px >= LV.checkpoints[i].x && G.onGround) { G.cpIndex = i; G.failStreak = 0; G.emit('checkpoint', i); }
           }
           const ri = LV.regionAt(G.px);
-          if (ri !== G.regionIndex) { G.regionIndex = ri; }
+          if (ri !== G.regionIndex) {
+            if (ri > G.regionIndex && G.graded && !G.graded[G.regionIndex]) { G.graded[G.regionIndex] = 1; G.emit('regionDone', G.regionIndex, G.grade(G.regionIndex)); }
+            G.regionIndex = ri;
+          }
           for (let i = 0; i < LV.regions.length; i++) {
             const k = 'r' + i;
             if (!G.shown[k] && G.px >= LV.regions[i].x0) { G.shown[k] = 1; G.emit('region', LV.regions[i], i); }
@@ -284,7 +307,11 @@
             if (G.shown[k] || G.px < t.x || G.px > t.x + 500) continue;
             G.shown[k] = 1; G.emit('hint', t.text, t.dur, t.tag);
           }
-          if (G.px >= LV.endX - 1) { G.state = 'arrived'; G.timer = 0; G.emit('arrive'); }
+          if (G.px >= LV.endX - 1) {
+            G.state = 'arrived'; G.timer = 0;
+            if (G.graded && !G.graded[ri]) { G.graded[ri] = 1; G.emit('regionDone', ri, G.grade(ri)); }
+            G.emit('arrive');
+          }
           break;
         }
         case 'failing':

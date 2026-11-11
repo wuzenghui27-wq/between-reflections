@@ -10,7 +10,7 @@
 想改人物或道具的样子：改本文件里的像素定义，再运行一次；也可以直接用像素画软件改 sprites.png。
 """
 import os, sys, glob, json
-from PIL import Image
+from PIL import Image, ImageFilter, ImageEnhance
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_BG = os.path.join(ROOT, 'assets', 'bg')
@@ -26,6 +26,12 @@ def build_backgrounds(src):
         for y in range(h // 4):
             for x in range(w // 4):
                 sp[x, y] = px[x * 4 + 2, y * 4 + 2]     # 取每格中心，避开格边
+        # 让像素画更“干净”：轻微锐化、提一点对比和饱和，再压成 40 色（不抖动），去掉照片式的柔和渐变
+        small = small.filter(ImageFilter.UnsharpMask(radius=1.2, percent=85, threshold=1))
+        small = ImageEnhance.Contrast(small).enhance(1.08)
+        small = ImageEnhance.Color(small).enhance(1.1)
+        small = small.quantize(colors=40, method=Image.Quantize.MEDIANCUT, kmeans=3,
+                               dither=Image.Dither.NONE)   # 存成调色板 PNG，体积小
         name = os.path.basename(f).split('_')[1] + '.png'   # IMG_8536_pixel.png → 8536.png
         small.save(os.path.join(OUT_BG, name), optimize=True)
         print('bg', name, small.size)
@@ -54,133 +60,217 @@ def grid(rows, extra=None):
             p[x, y] = hexc(pal[ch])
     return im
 
-# ---------------------------------------------------------------- 唐朝旅人
-# 一帧 24×30，脚底在最下一行，面朝右。幞头、圆领袍、革带、乌皮靴。
-FW, FH = 24, 30
+# ---------------------------------------------------------------- 唐朝旅人 v2
+# 一帧 32×40，脚底在第 37 行（再下一行是描边），面朝右。幞头、圆领袍、蹀躞带、乌皮靴。
+# 先画色块，再统一加 1 像素深色描边，背景再花也看得清。
+import math
+FW, FH = 32, 40
+FOOT = 37
+OUTLINE = (23, 19, 28, 255)
 OUTFITS = {
-    # 名称: (袍色, 袍暗部, 袍领/镶边)
-    'clear': ('#cfe0ea', '#94acbd', '#f6f2e6'),     # 月白圆领袍
-    'rain': ('#3f7f7a', '#28534f', '#a9cfc4'),      # 青袍
-    'fog': ('#9a8a74', '#6c5f4f', '#e2d6bf'),       # 赭褐袍
-    'wind': ('#b04a3a', '#7a2c24', '#f0c9a8'),      # 绯袍
-    'snow': ('#b8302a', '#78201c', '#f4f1ea'),      # 红斗篷 + 白毛领
+    # 名称: (亮部, 中间, 暗部, 领口/镶边)
+    'clear': ('#e6f0f4', '#bcd2de', '#8aa4b8', '#f8f4e8'),     # 月白圆领袍
+    'rain': ('#5aa094', '#3f7f7a', '#285450', '#b4dccc'),      # 青袍
+    'fog': ('#b8a688', '#97856c', '#6a5c4a', '#ece0c6'),       # 赭褐袍
+    'wind': ('#d0644c', '#b04a3a', '#7a2c24', '#f4d0a8'),      # 绯袍
+    'snow': ('#d84a3a', '#b8302a', '#7a1e1c', '#f8f6f0'),      # 红斗篷 + 白毛领
 }
 
-def put(p, x, y, col):
-    if 0 <= x < FW and 0 <= y < FH: p[x, y] = col
+def outline(im, col=OUTLINE):
+    """外扩 1 像素并描边（四邻接）。"""
+    w, h = im.size
+    out = Image.new('RGBA', (w + 2, h + 2), (0, 0, 0, 0))
+    out.paste(im, (1, 1))
+    src = out.copy().load(); p = out.load()
+    for y in range(h + 2):
+        for x in range(w + 2):
+            if src[x, y][3]: continue
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                xx, yy = x + dx, y + dy
+                if 0 <= xx < w + 2 and 0 <= yy < h + 2 and src[xx, yy][3] > 0:
+                    p[x, y] = col; break
+    return out
 
 def traveler_frame(outfit, pose, frame):
-    """pose: book 拿书 / back 背手 / umbrella 打伞 / cloak 斗篷；frame: 0-5 走路, 'jump', 'idle'"""
-    robe, shade, trim = (hexc(c) for c in OUTFITS[outfit])
-    K = hexc(BASE['k']); SK = hexc(BASE['s']); SS = hexc(BASE['S']); EY = hexc(BASE['e'])
-    BOOT = hexc('#231c22'); BOOT2 = hexc('#3d3238'); BELT = hexc('#3a2a20'); GOLD = hexc('#d8b050')
-    im = Image.new('RGBA', (FW, FH), (0, 0, 0, 0)); p = im.load()
-    # 走路：近腿 / 远腿的前后位置、身体起伏
-    NEAR = [4, 2, 0, -2, -1, 2]; FAR = [-2, -1, 1, 4, 2, 0]
-    if frame == 'jump': near, far, bob = None, None, -1
-    elif frame == 'idle': near, far, bob = 1, -1, 0
-    else:
-        near, far = NEAR[frame], FAR[frame]
-        bob = -1 if frame in (2, 5) else 0
-    cx = 11
-    top = 9 + bob                          # 帽顶
+    """pose: book 持卷 / back 背手 / umbrella 打伞 / cloak 斗篷
+    frame: 0-7 奔跑, 'up' 起跳, 'fall' 下落, 'land' 落地, 'idle0' 'idle1' 站立呼吸"""
+    L, M, D, T = (hexc(c) for c in OUTFITS[outfit])
+    SK, SS, EY, BL = hexc('#f4cca4'), hexc('#d09a78'), hexc('#2a1a1a'), hexc('#e89a88')
+    HAT, HATH = hexc('#1e1a24'), hexc('#4a4458')
+    PANT, BOOT, BOOTH = hexc('#3a3340'), hexc('#1b1720'), hexc('#4a4250')
+    BELT, GOLD, JADE = hexc('#3a2a20'), hexc('#e8c25a'), hexc('#7ac0a0')
+    W, H = FW - 2, FH - 2                       # 描边前的画布
+    im = Image.new('RGBA', (W, H), (0, 0, 0, 0)); p = im.load()
+    def put(x, y, c):
+        if 0 <= x < W and 0 <= y < H: p[x, y] = c
+    def rect(x0, y0, x1, y1, c):
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1): put(x, y, c)
+    cx, fy = 14, FOOT - 1                       # 描边会让一切右下移 1
     cloak = pose == 'cloak'
+    run = isinstance(frame, int)
 
-    # 腿与靴（袍子下面露出一点）
-    def leg(dx, col, colb):
-        x = cx + dx
-        put(p, x, 27 + 0, col); put(p, x + 1, 27, col)
-        put(p, x, 28, colb); put(p, x + 1, 28, colb); put(p, x + 2, 28, colb)
-    if near is None:      # 跳：收腿
-        for (x, y) in [(cx - 1, 26), (cx, 26), (cx - 1, 27), (cx, 27), (cx + 1, 27)]: put(p, x, y, BOOT2)
-        for (x, y) in [(cx + 2, 25), (cx + 3, 25), (cx + 2, 26), (cx + 3, 26), (cx + 4, 26)]: put(p, x, y, BOOT)
-    else:
-        leg(far, BOOT2, BOOT2)
-        leg(near, BOOT, BOOT)
-    if frame == 'jump' or True:
-        pass
+    # ---- 姿态参数
+    if run:
+        th = frame / 8 * math.pi * 2
+        nx, fx_ = round(3 * math.cos(th)), round(3 * math.cos(th + math.pi))
+        nl, fl = round(max(0, -math.sin(th)) * 2.4), round(max(0, -math.sin(th + math.pi)) * 2.4)
+        bob = -1 if abs(math.sin(th)) > 0.7 else 0
+        swing = -nx                              # 手臂与近腿反向
+        flap = 1 if frame % 4 < 2 else 0
+    elif frame in ('idle0', 'idle1'):
+        nx, fx_, nl, fl, bob, swing, flap = 1, -1, 0, 0, (1 if frame == 'idle1' else 0), 0, 0
+    elif frame == 'up':
+        nx, fx_, nl, fl, bob, swing, flap = 2, -2, 3, 0, -1, -3, 2
+    elif frame == 'fall':
+        nx, fx_, nl, fl, bob, swing, flap = 1, -1, 1, 0, 0, 2, -1
+    else:  # land：蹲一下
+        nx, fx_, nl, fl, bob, swing, flap = 2, -2, 0, 0, 2, 1, 0
+    if outfit == 'wind': flap += 1
 
-    # 袍身
-    hem = 26 if near is not None else 25
-    for y in range(top + 7, hem + 1):
-        t = (y - (top + 7)) / max(1, hem - (top + 7))
-        half = 3 + round(t * 1.6) + (1 if cloak else 0)
-        x0, x1 = cx - half, cx + half + 1
-        if frame == 'jump' and y >= hem - 1: x0 -= 1; x1 += 1
-        for x in range(x0, x1 + 1):
-            col = robe
-            if x >= x1 - 1: col = shade          # 背光一侧
-            if x == x0: col = shade
-            put(p, x, y, col)
-        # 走路时下摆随步子摆动
-        if near is not None and y == hem and frame not in ('idle',):
-            put(p, x1 + (1 if near > 1 else 0), y, shade)
-    # 领口 / 毛领
+    top = fy - 22 + bob          # 帽顶
+    face = top + 4
+    sh = top + 9                 # 肩
+    belt = fy - 9 + (1 if frame == 'land' else 0)
+    hem = fy - 4 + (1 if frame == 'land' else 0)
+    if frame == 'up': hem -= 1
+
+    # ---- 远侧手臂（被身体挡住一半）
+    def arm(sw, col, edge, hand=True):
+        x0, y0 = cx - 1, sh + 1
+        x1, y1 = cx - 1 + sw, sh + 5
+        n = 5
+        for i in range(n + 1):
+            x = round(x0 + (x1 - x0) * i / n); y = round(y0 + (y1 - y0) * i / n)
+            put(x, y, col); put(x + 1, y, col); put(x - 1 if sw >= 0 else x + 2, y, edge)
+        if hand: put(x1, y1 + 1, SK); put(x1 + 1, y1 + 1, SS)
+    if not cloak and pose != 'umbrella':
+        arm(-swing if pose == 'back' else swing - 1, D, D)
+
+    # ---- 远腿
+    def leg(dx, lift, near):
+        x = cx + dx - 1
+        pc = PANT if near else hexc('#2a2430')
+        bc, bh = (BOOT, BOOTH) if near else (BOOT, BOOT)
+        by = fy - lift
+        for y in range(hem, by - 1): put(x, y, pc); put(x + 1, y, pc)
+        rect(x, by - 1, x + 1, by, bc); put(x + 2, by, bc)
+        if near: put(x, by - 1, bh)
+    leg(fx_, fl, False)
+
+    # ---- 斗篷在身后飘的部分
     if cloak:
-        for x in range(cx - 3, cx + 4): put(p, x, top + 7, trim); put(p, x, top + 8, trim)
-        put(p, cx - 4, top + 8, trim); put(p, cx + 4, top + 8, trim)
+        for y in range(sh + 2, hem + 1):
+            k = (y - sh) / (hem - sh)
+            back = cx - 6 - round(k * (1 + max(0, flap)))
+            rect(back, y, cx - 4, y, D)
+
+    # ---- 袍身
+    for y in range(sh, hem + 1):
+        if y <= belt:
+            x0, x1 = cx - 4, cx + 3
+            if y == sh: x0, x1 = cx - 3, cx + 2
+        else:
+            k = (y - belt) / max(1, hem - belt)
+            x0 = cx - 4 - round(k * 2) - (round(k * flap) if y > belt + 1 else 0)
+            x1 = cx + 3 + round(k * 1.5)
+        if cloak: x0 -= 1; x1 += 1
+        for x in range(x0, x1 + 1):
+            c = M
+            if x >= x1 - 1: c = L if y < hem else M
+            if x <= x0 + 1: c = D
+            put(x, y, c)
+        if y == hem and not cloak:
+            for x in range(x0, x1 + 1): put(x, y, D)
+    # 衣褶：一条中缝，奔跑时随步子偏
+    if not cloak:
+        sx = cx + (1 if run and nx > 0 else 0)
+        for y in range(belt + 1, hem): put(sx, y, D)
+        # 圆领
+        for x in range(cx - 2, cx + 3): put(x, sh, T)
+        put(cx + 3, sh + 1, T); put(cx + 3, sh + 2, T)
+        # 蹀躞带 + 带銙 + 垂下的小佩
+        for x in range(cx - 4, cx + 4): put(x, belt, BELT)
+        put(cx + 1, belt, GOLD); put(cx - 2, belt, GOLD)
+        dy = 0 if not run else (frame % 2)
+        put(cx - 3, belt + 1, BELT); put(cx - 3, belt + 2 + dy, JADE)
     else:
-        for x in range(cx - 1, cx + 3): put(p, x, top + 7, trim)
-        # 革带
-        by = top + 13
-        for x in range(cx - 4, cx + 5): put(p, x, by, BELT)
-        put(p, cx + 2, by, GOLD)
-    # 头：幞头 + 脸
+        # 毛领 + 斗篷前襟
+        rect(cx - 4, sh, cx + 3, sh + 1, T); put(cx - 5, sh + 1, T); put(cx + 4, sh + 1, T)
+        put(cx - 3, sh + 2, hexc('#d8d4cc')); put(cx + 2, sh + 2, hexc('#d8d4cc'))
+        for y in range(sh + 3, hem): put(cx + 2, y, D)
+        put(cx + 2, sh + 4, GOLD)
+
+    # ---- 近腿
+    leg(nx, nl, True)
+
+    # ---- 头：幞头 + 脸
     head = [
-        "..kkkk.",
-        ".kkkkkk",
-        "kkkkkkk",
-        "kkssss.",
-        "kssses.",
-        ".ssss..",
-        "..sS...",
+        "...kkkk...",
+        "..kkhhkk..",
+        "..kkkkkkk.",
+        ".kkkkkkkk.",
+        ".kkSsssss.",
+        "..kSssess.",
+        "..SSsssbss",
+        "...Sssss..",
+        "....SSs...",
     ]
-    hc = {'k': K, 's': SK, 'S': SS, 'e': EY}
+    hc = {'k': HAT, 'h': HATH, 's': SK, 'S': SS, 'e': EY, 'b': BL}
     for j, row in enumerate(head):
         for i, ch in enumerate(row):
-            if ch != '.': put(p, cx - 3 + i, top + j, hc[ch])
-    # 幞头后面垂下的两条软脚，随步子 / 风摆动
-    sway = 0 if frame in ('idle',) else (1 if (frame == 'jump' or (isinstance(frame, int) and frame % 3 == 0)) else 0)
-    if outfit == 'wind':
-        for i in range(4): put(p, cx - 4 - i, top + 2 + (i // 2), K)
-    else:
-        put(p, cx - 4, top + 2, K); put(p, cx - 4 - sway, top + 3, K); put(p, cx - 5 - sway, top + 4, K)
+            if ch != '.': put(cx - 5 + i, top + j, hc[ch])
+    if frame == 'idle1': put(cx + 2, top + 5, SK)      # 眨眼
+    # 幞头软脚：两条黑带往后飘
+    tail = 2 + (1 if run or frame in ('up', 'fall') else 0) + (2 if outfit == 'wind' else 0)
+    lift = {'up': 1, 'fall': -1}.get(frame, 0)
+    for i in range(tail):
+        wv = 0 if not run else ((frame + i) % 4 < 2)
+        put(cx - 5 - i, top + 3 + (i + 1) // 2 + lift * (i // 2) - (1 if wv and i > 1 else 0), HAT)
 
-    # 手臂与道具
-    ay = top + 9
+    # ---- 近侧手臂与道具
+    ay = sh + 1
     if pose == 'book':
-        # 前手托一卷书在胸前
-        for (x, y) in [(cx + 3, ay), (cx + 4, ay), (cx + 4, ay + 1)]: put(p, x, y, robe)
-        put(p, cx + 5, ay, SK)
-        for (x, y, c) in [(cx + 5, ay - 2, 'p'), (cx + 6, ay - 2, 'p'), (cx + 6, ay - 1, 'P'), (cx + 5, ay - 1, 'p'), (cx + 7, ay - 2, 'P'), (cx + 7, ay - 1, 'p')]:
-            put(p, x, y, hexc(BASE[c]))
-    elif pose in ('back', 'cloak'):
-        # 一只手背在身后：腰后鼓起的袖子
-        put(p, cx - 4 - (1 if cloak else 0), ay + 2, shade); put(p, cx - 5 - (1 if cloak else 0), ay + 2, shade)
-        put(p, cx - 5 - (1 if cloak else 0), ay + 3, SS if not cloak else shade)
+        # 前手把书卷托在胸前
+        rect(cx + 1, ay, cx + 3, ay + 1, M); put(cx + 1, ay + 2, D); put(cx + 2, ay + 2, M); put(cx + 3, ay + 2, L)
+        put(cx + 4, ay + 1, SK)
+        rect(cx + 4, ay - 1, cx + 6, ay, hexc('#f2e8cc')); put(cx + 7, ay - 1, hexc('#8a3a2a')); put(cx + 7, ay, hexc('#8a3a2a'))
+        put(cx + 4, ay, hexc('#c8b890'))
+    elif pose == 'back':
+        # 一只手背在身后：袖子在腰后
+        rect(cx - 5, ay + 2, cx - 4, ay + 3, D); put(cx - 6, ay + 3, D); put(cx - 6, ay + 4, SS)
+        put(cx - 3, ay + 1, D)
     elif pose == 'umbrella':
         # 前手举伞
-        put(p, cx + 3, ay, robe); put(p, cx + 4, ay - 1, robe); put(p, cx + 4, ay - 2, SK)
-        for y in range(max(1, top - 6), ay - 2): put(p, cx + 4, y, hexc(BASE['h']))
-        U = hexc('#c9483a'); U2 = hexc('#8e2a22'); RIB = hexc('#e9d29a')
+        rect(cx + 1, ay, cx + 2, ay + 1, M); put(cx + 3, ay - 1, M); put(cx + 3, ay - 2, SK); put(cx + 4, ay - 2, SS)
+        pole = hexc('#6a4a2a')
+        ut = top - 9 + (0 if bob < 0 else 1)
+        for y in range(ut + 5, ay - 2): put(cx + 4, y, pole)
+        U, U2, U3, RIB = hexc('#d8574a'), hexc('#a8382c'), hexc('#ec8a6a'), hexc('#f0d8a0')
         canopy = [
-            "......UUU......",
-            "....UuuuuuU....",
-            "..UuuuuuuuuuU..",
-            ".UuuRuuuuuRuuU.",
-            "UUUUUUUUUUUUUUU",
-            "R.....R.....R..",
+            ".......UUU.......",
+            ".....UUuuuUU.....",
+            "...UUulluuuuUU...",
+            "..UuullluuuuuuU..",
+            ".UuuRuuuuuuuRuuU.",
+            "UUUUUUUUUUUUUUUUU",
+            "R.......R.......R",
         ]
-        cc = {'U': U2, 'u': U, 'R': RIB}
-        ox = cx + 4 - 7
-        oy = max(0, top - 9) + (1 if bob == 0 else 0)
+        cc = {'U': U2, 'u': U, 'l': U3, 'R': RIB}
         for j, row in enumerate(canopy):
             for i, ch in enumerate(row):
-                if ch != '.': put(p, ox + i, oy + j, cc[ch])
-    return im
+                if ch != '.': put(cx + 4 - 8 + i, ut + j, cc[ch])
+    if not cloak and pose in ('book', 'umbrella'):
+        pass
+    if pose == 'back' and not cloak:
+        pass
+    # 背手 / 持卷时，另一只手也露出一点摆动（画在身前）
+    if pose == 'back' and run and swing > 1:
+        put(cx + 3, ay + 4, SK)
+    return outline(im)
 
 TRAVELER_ROWS = [('clear', 'book'), ('clear', 'back'), ('rain', 'umbrella'), ('fog', 'back'), ('wind', 'back'), ('snow', 'cloak'), ('wind', 'book')]
-TRAVELER_COLS = [0, 1, 2, 3, 4, 5, 'jump', 'idle']
+TRAVELER_COLS = [0, 1, 2, 3, 4, 5, 6, 7, 'up', 'fall', 'land', 'idle0', 'idle1']
 
 # ---------------------------------------------------------------- 障碍与道具（锚点：底边中点）
 def sprite(rows, extra=None): return grid(rows, extra)
@@ -346,15 +436,71 @@ PROPS['wheel'] = sprite([
 # 灯（收集物），7×9
 PROPS['lantern'] = sprite(["..kkk..", ".rrrrr.", "rrfffrr", "rffwffr", "rffffffr"[:7], "rrfffrr", ".rrrrr.", "..yyy..", "...y..."])
 
+# ---------------------------------------------------------------- 路边摆件（只是装饰，不挡路）
+DX = {'a': '#5a7a3a', 'A': '#3a5a2a', 'm': '#8aa84a', 'l': '#d8c070', 'z': '#9a9488', 'Z': '#6a665e', 'j': '#c8c2b4',
+      'd': '#e05a3a', 'D': '#a83a2a', 'O': '#f0a030', 't': '#e8e4dc', 'T': '#b8b4ac', 'c': '#a8d8f0', 'C': '#6aa8d0',
+      'n': '#2f5a3a', 'N': '#1f3a2a', 'v': '#e8d84a', 'P': '#e86a8a', 'Q': '#b04a6a', 'u': '#3a6ab0', 'g': '#4aa04a'}
+DECO = {}
+DECO['reed'] = sprite([".l...l..", ".a..la..", ".a..a..l", "aa..a..a", ".a.aa.a.", ".aa.a.a.", "..a.aaa.", "..aaaa..", "...Aa...", "...AA..."], DX)
+DECO['stonelamp'] = sprite(["..zzz..", ".zzzzz.", "zzzzzzz", ".ZfFfZ.".replace('F', 'f'), ".ZfffZ.", "zzzzzzz", "..zjz..", "..zjz..", "..zjz..", ".zzzzz.", "zzzzzzz"], DX)
+DECO['post'] = sprite(["bb", "bB", "bB", "bB", "bB", "BB"])
+DECO['peony'] = sprite(["..P.PQ..", ".PPQPPP.", "PPQPPaP.", ".aPPa.a.", "..aAa...", "rrrrrrrr", ".rRRRRr.", ".rRRRRr.", "..RRRR.."], DX)
+DECO['redpost'] = sprite(["kkkkk", ".rfr.", ".rfr.", ".rrr.", "..b..", "..b..", "..b..", "..b..", "..b..", "..b..", "..b..", "..b..", ".bBb."], DX)
+DECO['maple'] = sprite(["...dO.d...", "..dDdOdd..", ".dOdDddOd.", "dDddOdDdd.", ".dddDdOddd", "..dOddDd..", "....bb....", "....bB....", "....bB...."], DX)
+DECO['tuft'] = sprite(["m.a..m", ".aa.a.", "a.aaa.", ".aAaa.", "AAAAAA"], DX)
+DECO['banner'] = sprite(["b......", "brrrrr.", "brrRrrr", "brrrrr.", "brRrrr.", "brrrr..", "b......", "b......", "b......", "b......", "b......", "b......", "b......", "b......", "b......", "B......", "BB....."], DX)
+DECO['stones'] = sprite(["...zz...", "..zjzz..", ".zzzZz.z", "zzZZZZzZ"], DX)
+DECO['crystal'] = sprite(["..c....", "..cC.c.", ".ccC.cC", ".cCC.cC", "ccCCcCC", "CCCCCCC"], DX)
+DECO['pine'] = sprite(["....t....", "...tnt...", "..tnnNt..", "...nNn...", "..tnnNNt.", ".tnnnNNt.", "..nnNNn..", ".tnnnNNNt", "tnnnnNNNN", "....B....", "....B...."], DX)
+DECO['chorten'] = sprite(["...v...", "...v...", "..ttt..", "..tTt..", ".ttttt.", ".tvvvt.", "ttttttt", "tTTTTTT", "ZZZZZZZ"], DX)
+DECO['flowers'] = sprite(["v..P.u", "a.Pa.a", ".aa.a.", "aAaaAa"], DX)
+# 检查点石碑：没到之前暗着，到了亮起一盏小灯
+def stele(lit):
+    rows = ["..fF..", "..ff..", "..yy..", ".zzzz.", "zjzzZz", "zjkkZz", "zjzzZz", "zjkkZz", "zjzzZz", "zjkkZz", "zjzzZz", "ZZZZZZ", "ZZZZZZ"]
+    if not lit: rows = ["......", "......", "..YY.."] + rows[3:]
+    return sprite(rows, DX)
+DECO['stele'] = stele(False); DECO['stele_lit'] = stele(True)
+
+# ---------------------------------------------------------------- 界面用的小图标与按键
+ICONS = {}
+ICONS['i_sun'] = sprite(["...y...", ".y.y.y.", "..yyy..", "yyyfyyy", "..yyy..", ".y.y.y.", "...y..."])
+ICONS['i_moon'] = sprite(["..ii...", ".iI....", "iI.....", "iI.....", "iI.....", ".iIi..i", "..iiii."])
+ICONS['i_lantern'] = sprite(["..k..", ".rrr.", "rfffr", "rfwfr", "rfffr", ".rrr.", "..y.."])
+ICONS['i_clear'] = ICONS['i_sun']
+ICONS['i_rain'] = sprite([".WWW...", "WwwwW..", "WwwwwWW", "WWWWWWW", ".J.J.J.", "J.J.J..", "......."])
+ICONS['i_snow'] = sprite(["...w...", ".w.w.w.", "..www..", "wwwwwww", "..www..", ".w.w.w.", "...w..."])
+ICONS['i_fog'] = sprite(["WWWW...", ".......", "..WWWWW", ".......", "WWWWW..", ".......", "..WWWW."])
+ICONS['i_wind'] = sprite(["....ww.", "wwwww.w", ".......", "wwwwwww", "......w", "wwww.w.", "....w.."])
+ICONS['i_beat'] = sprite(["..yy...", "..yYy..", "..y.Yy.", "..y..y.", "yyy....", "yYy....", ".y....."])
+def keycap(label_rows, w):
+    top = "." + "p" * (w - 2) + "."
+    rows = [top] + ["p" + r.ljust(w - 2, 'p')[:w - 2] + "p" for r in label_rows] + ["W" + "W" * (w - 2) + "W", "." + "g" * (w - 2) + "."]
+    return sprite(rows, {'p': '#f2e8cc', 'W': '#c8b890', 'g': '#8a7a5a', 'k': '#3a2a20'})
+LET = {'S': ['111', '100', '111', '001', '111'], 'H': ['101', '101', '111', '101', '101'], 'I': ['111', '010', '010', '010', '111'],
+       'F': ['111', '100', '110', '100', '100'], 'T': ['111', '010', '010', '010', '010']}
+def word(w):
+    rows = []
+    for r in range(5):
+        rows.append('p' + 'p'.join(LET[ch][r] for ch in w).replace('1', 'k').replace('0', 'p') + 'p')
+    return ['p' * len(rows[0])] + rows + ['p' * len(rows[0])]
+_sw = word('SHIFT')
+ICONS['k_shift'] = keycap(_sw, len(_sw[0]) + 2)
+ICONS['k_space'] = keycap(["pppppppppppppppppppppp", "ppkpppppppppppppppkppp", "ppkkkkkkkkkkkkkkkkkppp", "pppppppppppppppppppppp"], 24)
+
 # ---------------------------------------------------------------- 打包
 def pack():
     items = []
     for ri, (outfit, pose) in enumerate(TRAVELER_ROWS):
         for ci, fr in enumerate(TRAVELER_COLS):
-            items.append((f't_{outfit}_{pose}_{fr}', traveler_frame(outfit, pose, fr), (FW // 2, FH - 1)))
-    for k, im in PROPS.items():
-        items.append((k, im, (im.size[0] // 2, im.size[1] - 1)))
-    W = 256
+            items.append((f't_{outfit}_{pose}_{fr}', traveler_frame(outfit, pose, fr), (15, FOOT)))
+    for group in (PROPS, DECO):          # 障碍、道具、摆件都加深色描边
+        for k, im in group.items():
+            o = outline(im)
+            items.append((k, o, (o.size[0] // 2, o.size[1] - 2)))
+    for k, im in ICONS.items():
+        o = outline(im)
+        items.append((k, o, (o.size[0] // 2, o.size[1] - 2)))
+    W = 512
     x = y = rowh = 0
     place = []
     for name, im, anc in items:
@@ -377,6 +523,37 @@ def pack():
         f.write('RF.TRAVELER = ' + json.dumps({'rows': TRAVELER_ROWS, 'cols': [str(c) for c in TRAVELER_COLS], 'w': FW, 'h': FH}) + ';\n')
     print('sprites', sheet.size, len(atlas))
 
+# ---------------------------------------------------------------- 界面：九宫格边框与图标（CSS 用）
+def frame_png(fill, light, dark, ring=None):
+    N = 12
+    im = Image.new('RGBA', (N, N), (0, 0, 0, 0)); p = im.load()
+    INK = (18, 14, 26, 255)
+    for y in range(N):
+        for x in range(N):
+            edge = min(x, y, N - 1 - x, N - 1 - y)
+            corner = (x in (0, N - 1)) and (y in (0, N - 1))
+            if corner: continue
+            if edge == 0: p[x, y] = INK
+            elif ring and edge == 1: p[x, y] = ring
+            elif edge == (2 if ring else 1):
+                e2 = edge
+                p[x, y] = light if ((y == e2 and x < N - 1 - e2) or (x == e2 and y < N - 1 - e2)) else dark
+            else: p[x, y] = fill
+    # 内侧角补一个点，让角更圆
+    for (x, y) in ((1, 1), (N - 2, 1), (1, N - 2), (N - 2, N - 2)): p[x, y] = INK
+    return im
+
+def build_ui():
+    d = os.path.join(ROOT, 'assets', 'ui'); os.makedirs(d, exist_ok=True)
+    frame_png((29, 26, 43, 232), (242, 232, 204, 255), (168, 154, 120, 255), ring=(58, 50, 76, 255)).save(os.path.join(d, 'frame.png'))
+    frame_png((200, 64, 46, 255), (244, 150, 110, 255), (122, 32, 20, 255)).save(os.path.join(d, 'btn.png'))
+    frame_png((216, 80, 58, 255), (255, 186, 140, 255), (140, 40, 26, 255)).save(os.path.join(d, 'btn_hover.png'))
+    frame_png((242, 232, 204, 255), (255, 252, 240, 255), (184, 168, 130, 255)).save(os.path.join(d, 'paper.png'))
+    for k, im in ICONS.items():
+        if k.startswith('i_'): outline(im).save(os.path.join(d, k[2:] + '.png'))
+    print('ui', len(ICONS))
+
 if __name__ == '__main__':
+    build_ui()
     if len(sys.argv) > 1: build_backgrounds(sys.argv[1])
     pack()

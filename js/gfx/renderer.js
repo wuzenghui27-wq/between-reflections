@@ -40,6 +40,7 @@
       for (const l of LV.lanterns) if (l.w === ow && l.x > x0 && l.x < x1) RF.Props.lantern(l, e, G.got, true);
     }
     for (const s of LV.solids) if (on(s, world) && s.x1 > x0 && s.x0 < x1) RF.Props.solid(s, e);
+    RF.Props.decorations(e, x0, x1);
     for (const h of LV.hazards) if (on(h, world) && h.x1 > x0 && h.x0 < x1) RF.Props.hazard(h, e, G.gates, false);
     for (const b of LV.bells) if (on(b, world) && b.x > x0 && b.x < x1) RF.Props.bell(b, e, G.gates, false);
     for (const l of LV.lanterns) if (on(l, world) && l.x > x0 && l.x < x1) RF.Props.lantern(l, e, G.got, false);
@@ -51,7 +52,8 @@
     const ri = LV.regionAt(G.px);
     const st = G.state === 'running' ? (G.onGround ? 'run' : 'air') : (G.state === 'failing' && !G.onGround ? 'air' : 'idle');
     RF.Traveler.draw(G.px - cam, G.foot, {
-      weather: G.weather[ri], region: ri, state: st, dist: G.px, alpha: G.playerAlpha, night: G.world === 'night'
+      weather: G.weather[ri], region: ri, state: st, dist: G.px, alpha: G.playerAlpha, night: G.world === 'night',
+      vy: G.vy, landT: G.landT, t: e.t
     });
     // 脚下记号：另一面此刻能不能站
     if ((G.state === 'running' || G.state === 'ready') && G.onGround) {
@@ -61,6 +63,14 @@
       if (G.otherSafe()) { X.ctx.fillRect(x - 1, y, 3, 1); X.ctx.fillRect(x - 2, y + 1, 1, 1); X.ctx.fillRect(x + 2, y + 1, 1, 1); X.ctx.fillRect(x - 1, y + 2, 3, 1); }
       else { for (let k = -1; k <= 1; k++) { X.ctx.fillRect(x + k, y + 1 + k, 1, 1); X.ctx.fillRect(x - k, y + 1 + k, 1, 1); } }
     }
+  }
+
+  // 教学提示：人物头顶浮着一个按键
+  function keyTip(G, cam) {
+    const k = G.keyTip; if (!k || k.t <= 0 || G.state !== 'running') return;
+    const x = Math.round((G.px - cam) / P) + 8, y = Math.round(G.foot / P) - 32 + (G.reduceMotion ? 0 : Math.round(Math.sin(e.t * 6)));
+    const press = Math.floor(e.t * 2.5) % 2;     // 一按一放
+    RF.Props.spr(k.key, x, y + press, false);
   }
 
   function ring(cx, cy, rr, col) {
@@ -95,8 +105,11 @@
 
     if (!opt.title) player(G, cam);
     if (G.onBeatFx > 0 && !opt.title) X.glow(cx, cy, 18, [255, 240, 200], G.onBeatFx * 0.5);
-    // 近处的天气（落在人物前面）
+    RF.Particles.draw(c, e.camPix);
+    if (!opt.title) keyTip(G, cam);
+    // 近处的天气（落在人物前面）与近景剪影
     RG.weatherFront(c, G.weather[LV.regionAt(cam + C.W / 2)], G.world, e.t, e.camPix, e.reduce);
+    RG.foreground(c, LV.regions[m.a].id, G.world, e.t, e.camPix, e.reduce);
 
     // 暗角与失误淡出
     const vg = c.createRadialGradient(PW / 2, PH / 2, PH * 0.45, PW / 2, PH / 2, PH * 0.98);
@@ -104,7 +117,9 @@
     c.fillStyle = vg; c.fillRect(0, 0, PW, PH);
     if (G.fade > 0) { c.fillStyle = `rgba(8,8,20,${(G.fade * 0.6).toFixed(3)})`; c.fillRect(0, 0, PW, PH); }
 
-    X.present(G.world === 'night' ? 1.0 : 0.55);
+    let sx = 0, sy = 0;
+    if (RF.Particles.shake > 0 && !G.reduceMotion) { const a = RF.Particles.shake; sx = Math.round((Math.random() * 2 - 1) * a); sy = Math.round((Math.random() * 2 - 1) * a * 0.6); }
+    X.present(G.world === 'night' ? 1.0 : 0.55, sx, sy);
   }
 
   RF.Renderer = { draw };

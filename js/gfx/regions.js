@@ -244,8 +244,93 @@
     }
   }
 
+  // ------------------------------------------------------------ 近景剪影（比地面走得快，拉出纵深）
+  const FG = {
+    jiangnan: { col: ['#17251f', '#080b16'], hi: '#2e4a3a', kinds: ['reed', 'reed', 'grass', 'rock'], top: 'willow' },
+    garden: { col: ['#241a1e', '#0a0a16'], hi: '#4a3a3a', kinds: ['grass', 'rock', 'grass'], top: 'eave' },
+    autumn: { col: ['#2a160e', '#0c0a14'], hi: '#6a3a1a', kinds: ['grass', 'rock', 'grass', 'reed'], top: 'maple' },
+    wall: { col: ['#211a18', '#0a0a14'], hi: '#4a3a30', kinds: ['rock', 'grass', 'rock'], top: null },
+    glacier: { col: ['#18202e', '#080c18'], hi: '#e8f0f8', kinds: ['rock', 'rock', 'grass'], top: null },
+    tibet: { col: ['#1a1e2c', '#080a16'], hi: '#e8eef6', kinds: ['rock', 'grass', 'rock'], top: 'flags' }
+  };
+  function foreground(ctx, rid, world, t, camPix, reduce) {
+    const f = FG[rid]; if (!f) return;
+    const col = f.col[world === 'day' ? 0 : 1], hi = world === 'day' ? f.hi : '#2a3050';
+    const SL = 54, k0 = Math.floor(camPix * 1.5 / SL) - 1;
+    for (let k = k0; k < k0 + PW / SL + 3; k++) {
+      if (U.hash(k, 31) < 0.42) continue;
+      const x = Math.round(k * SL + U.hash(k, 32) * 30 - camPix * 1.5);
+      const kind = f.kinds[Math.floor(U.hash(k, 33) * f.kinds.length)];
+      const sway = reduce ? 0 : Math.sin(t * 1.6 + k);
+      ctx.fillStyle = col;
+      if (kind === 'rock') {
+        const w = 14 + Math.floor(U.hash(k, 34) * 16), h = 5 + Math.floor(U.hash(k, 35) * 6);
+        for (let i = 0; i < w; i++) {
+          const yy = Math.round(Math.sin(i / (w - 1) * Math.PI) * h);
+          ctx.fillRect(x + i, PH - yy - 1, 1, yy + 1);
+        }
+        ctx.fillStyle = hi;
+        for (let i = 2; i < w - 2; i++) if (i % 3) ctx.fillRect(x + i, PH - Math.round(Math.sin(i / (w - 1) * Math.PI) * h) - 1, 1, 1);
+      } else {
+        // 一丛草 / 芦苇：底下一团，叶片有粗有细
+        const reed = kind === 'reed', n = reed ? 7 : 11, tall = reed ? 26 : 13, w = n * 2;
+        for (let i = 0; i < w; i++) {
+          const yy = Math.round(Math.sin(i / (w - 1) * Math.PI) * 4) + 1;
+          ctx.fillRect(x + i, PH - yy, 1, yy);
+        }
+        for (let i = 0; i < n; i++) {
+          const h = Math.round(tall * (0.45 + U.hash(k * 7 + i, 36) * 0.65)), bx = x + 1 + i * 2;
+          const lean = (i - n / 2) / n * 4 + sway * 1.2;
+          for (let y = 0; y < h; y++) {
+            const bend = Math.round((y / h) * (y / h) * lean);
+            ctx.fillRect(bx + bend, PH - 3 - y, y < h * 0.6 ? 2 : 1, 1);
+          }
+          if (reed && i % 2 === 0) { const bend = Math.round(lean); ctx.fillRect(bx + bend - 1, PH - 3 - h - 3, 2, 4); }
+        }
+      }
+    }
+    // 顶上垂下的东西：柳条 / 枫叶 / 屋檐 / 经幡
+    if (!f.top) return;
+    const TS = 260, t0 = Math.floor(camPix * 1.3 / TS) - 1;
+    for (let k = t0; k < t0 + 3; k++) {
+      if (U.hash(k, 41) < 0.55) continue;
+      const x = Math.round(k * TS + U.hash(k, 42) * 80 - camPix * 1.3);
+      ctx.fillStyle = col;
+      if (f.top === 'willow') {
+        // 柳条：从画面上沿垂下，一条条带着叶子
+        const lc = world === 'day' ? ['#2e4a2a', '#456a32', '#1e3420'] : ['#0c1220', '#141c2c', '#080c18'];
+        for (let i = 0; i < 12; i++) {
+          const len = 8 + Math.floor(U.hash(k * 9 + i, 43) * 22), sx = x + i * 3 + Math.floor(U.hash(k * 9 + i, 46) * 3);
+          for (let y = 0; y < len; y++) {
+            const dx = Math.round(Math.sin(t * 1.3 + i * 0.7 + y / 9) * (y / len) * (reduce ? 0 : 2));
+            ctx.fillStyle = lc[2]; ctx.fillRect(sx + dx, y, 1, 1);
+            if (y % 3 === 1) { ctx.fillStyle = lc[(i + y) % 2]; ctx.fillRect(sx + dx + ((y >> 1) % 2 ? 1 : -1), y, 1, 2); }
+          }
+        }
+      } else if (f.top === 'maple') {
+        ctx.fillRect(x - 10, 0, 50, 4); ctx.fillRect(x, 4, 30, 3); ctx.fillRect(x + 6, 7, 16, 2);
+        const lc = world === 'day' ? ['#a83a1a', '#d0682a', '#7a2a14'] : ['#2a1a2a', '#3a2238', '#1a1222'];
+        for (let i = 0; i < 26; i++) {
+          ctx.fillStyle = lc[i % 3];
+          ctx.fillRect(x - 8 + Math.floor(U.hash(k * 31 + i, 44) * 46), Math.floor(U.hash(k * 31 + i, 45) * 12), 2, 2);
+        }
+      } else if (f.top === 'eave') {
+        for (let i = 0; i < 60; i++) { const y = Math.max(0, 8 - Math.floor(i / 6)); ctx.fillRect(x + i, 0, 1, y + 2); }
+        ctx.fillStyle = world === 'day' ? '#a83a2a' : '#3a1a2a'; ctx.fillRect(x, 10, 2, 6); ctx.fillRect(x - 1, 16, 4, 1);
+      } else if (f.top === 'flags') {
+        const cols = ['#3a6ab0', '#f4f1ea', '#b8322a', '#4aa04a', '#e8c25a'];
+        for (let i = 0; i < 70; i++) { const y = Math.round(6 + (i - 35) * (i - 35) / 140); ctx.fillStyle = col; ctx.fillRect(x + i, y, 1, 1); }
+        for (let i = 3, j = 0; i < 68; i += 5, j++) {
+          const y = Math.round(6 + (i - 35) * (i - 35) / 140) + 1, fl = reduce ? 0 : Math.round(Math.sin(t * 4 + j) * 1);
+          ctx.fillStyle = world === 'day' ? cols[j % 5] : '#2a3050';
+          ctx.fillRect(x + i + fl, y, 3, 4);
+        }
+      }
+    }
+  }
+
   RF.Regions = {
-    R, load, backdrop, regionMix, lowland, pattern, weatherBack, weatherFront, bgAt,
+    R, load, foreground, backdrop, regionMix, lowland, pattern, weatherBack, weatherFront, bgAt,
     get sprites() { return sprites; }, get spritesNight() { return spritesNight; }, get spritesDim() { return spritesDim; }
   };
 })();

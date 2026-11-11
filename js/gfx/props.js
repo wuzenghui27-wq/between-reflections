@@ -184,5 +184,53 @@
     c.globalAlpha = 1;
   }
 
-  RF.Props = { spr, solid, ghostSolid, hazard, bell, lantern, mirage };
+  // ------------------------------------------------------------ 路边摆件（只是装饰）
+  const DECO_SET = {
+    jiangnan: ['reed', 'stonelamp', 'post', 'tuft', 'reed'],
+    garden: ['peony', 'redpost', 'stones', 'flowers'],
+    autumn: ['maple', 'tuft', 'stones', 'flowers', 'maple'],
+    wall: ['banner', 'stones', 'tuft'],
+    glacier: ['crystal', 'pine', 'stones', 'pine'],
+    tibet: ['chorten', 'flowers', 'stones', 'tuft']
+  };
+  let decos = null;
+  function buildDecos() {
+    decos = [];
+    const busy = [];
+    for (const h of LV.hazards) busy.push([h.x0 - 60, h.x1 + 60]);
+    for (const b of LV.bells) busy.push([b.x - 50, b.x + 50]);
+    for (const l of LV.lanterns) busy.push([l.x - 40, l.x + 40]);
+    for (const c of LV.checkpoints) busy.push([c.x - 70, c.x + 70]);
+    const free = x => !busy.some(([a, b]) => x > a && x < b);
+    let k = 0;
+    for (const s of LV.solids) {
+      if (s.kind !== 'ground' && s.kind !== 'shore') continue;
+      const rid = LV.regions[LV.regionAt(s.x0)].id, set = DECO_SET[rid];
+      for (let x = s.x0 + 50; x < s.x1 - 50; x += 150 + U.hash(k, 21) * 220, k++) {
+        if (!free(x) || U.hash(k, 23) < 0.25) continue;
+        decos.push({ x, y: s.y, w: s.w, name: set[Math.floor(U.hash(k, 22) * set.length)] });
+      }
+    }
+  }
+  function decorations(e, x0, x1) {
+    if (!decos) buildDecos();
+    const night = e.world === 'night';
+    for (const d of decos) {
+      if (d.x < x0 || d.x > x1 || !(d.w === 'both' || d.w === e.world)) continue;
+      spr(d.name, Math.round(d.x / P) - e.camPix, Math.round(d.y / P), night);
+      if (d.name === 'stonelamp' || d.name === 'redpost') X.glow(Math.round(d.x / P) - e.camPix, Math.round(d.y / P) - (d.name === 'redpost' ? 12 : 7), 7, [255, 190, 110], night ? 0.6 : 0.2);
+    }
+    // 检查点石碑：走到过的亮着灯
+    for (let i = 0; i < LV.checkpoints.length; i++) {
+      const c = LV.checkpoints[i];
+      if (c.x < x0 || c.x > x1 || i === 0) continue;
+      const gy = RF.Q.groundAt(e.world, c.x); if (gy === null || gy === undefined) continue;
+      const lit = e.G.cpIndex >= i && e.G.state !== 'title';
+      const sx = Math.round(c.x / P) - e.camPix - 6, sy = Math.round(gy / P);
+      spr(lit ? 'stele_lit' : 'stele', sx, sy, night);
+      if (lit) X.glow(sx, sy - 12, 8, [255, 200, 110], 0.6 + (e.reduce ? 0 : 0.15 * Math.sin(e.t * 5)));
+    }
+  }
+
+  RF.Props = { spr, solid, ghostSolid, hazard, bell, lantern, mirage, decorations };
 })();
