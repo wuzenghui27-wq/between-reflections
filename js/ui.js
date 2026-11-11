@@ -59,6 +59,7 @@
   const DUST = { jiangnan: ['#b5b7b0', '#8a8c8c'], garden: ['#f4f1ea', '#c9c4b8'], autumn: ['#c8a070', '#d0682a', '#8a9a3a'],
     wall: ['#c0a888', '#8a6a4c'], glacier: ['#ffffff', '#c8e4f4'], tibet: ['#ffffff', '#dfe6ee'] };
   const dustCols = () => DUST[LV.regions[LV.regionAt(G.px)].id] || ['#cccccc'];
+  let slideN = 0;
   G.on('jump', () => { A.sfx('jump'); PT.dust(G.px, G.foot, 6, dustCols(), 0.6); });
   G.on('land', () => { A.sfx('land'); PT.dust(G.px, G.foot, 10, dustCols(), 1); RF.Renderer.kick(1.2); });
   G.on('bell', b => { A.sfx('bell'); if (b) PT.sparks(b.x, b.y + 0, '#ffe08a', 10); });
@@ -77,6 +78,7 @@
     PT.sparks(c.x, c.y, run >= 4 ? '#fff2b0' : '#ffd27a', run >= 4 ? 6 : 4);
     setCoins();
   });
+  G.on('moongate', () => { A.sfx('switch', { night: G.world === 'night', onBeat: false }); PT.sparks(G.px, G.foot - 40, '#fff6e0', 10); });
   // 上船：木头一响，溅点水
   G.on('board', f => { A.sfx('board'); PT.splash(G.px - 20, f.y + 8, 'rgba(230,240,255,0.9)'); RF.Renderer.kick(1.5); });
   // 空中翻面借力
@@ -125,7 +127,7 @@
   G.on('region', reg => { showChapter(reg); A.sfx('region'); setWeather(); });
   G.on('hint', (t, d, tag) => {
     showHint(t, d);
-    const key = tag === 'switch' || tag === 'switch2' || tag === 'hop' || tag === 'bridge' ? 'k_shift' : tag === 'jump' ? 'k_space' : null;
+    const key = tag === 'switch' || tag === 'switch2' || tag === 'hop' || tag === 'bridge' || tag === 'gate2' ? 'k_shift' : tag === 'jump' || tag === 'lotus' || tag === 'roll' ? 'k_space' : null;
     G.keyTip = key && !touchUI ? { key, t: Math.min(d, 3.5) } : null;
   });
   G.on('switched', () => { if (G.keyTip && G.keyTip.key === 'k_shift') G.keyTip.t = 0; });
@@ -295,6 +297,9 @@
       G.update(C.STEP);
       if (G.state !== 'paused') {
         RF.Particles.update(C.STEP);
+        // 冰滑道：脚下扬起雪沫
+        if (G.state === 'running' && G.onGround && !G.riding && LV.paceAt(G.px) > 1.2 && (slideN = (slideN + 1) % 3) === 0)
+          PT.dust(G.px - 6, G.foot, 2, ['#ffffff', '#dfeefa', '#bcd6ec'], 1.6);
         if (G.keyTip) G.keyTip.t -= G.state === 'running' ? C.STEP : 0;
       }
       if (hintT > 0 && G.state === 'running') { hintT -= C.STEP; if (hintT <= 0) hideHint(); }
@@ -306,7 +311,7 @@
       acc -= C.STEP;
     }
     const rid = LV.regions[LV.regionAt(G.px)].id;
-    A.tick(G.beat(), G.state === 'running', rid);
+    A.tick(G.beat(), G.state === 'running', rid, LV.paceAt(G.px));
     const title = G.state === 'title';
     const camPx = title ? 1400 + Math.sin(G.animT * 0.04) * 900 : G.px;
     RF.Renderer.draw(G, { camPx, title, noGhost: title });

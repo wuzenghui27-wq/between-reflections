@@ -21,7 +21,7 @@
     const rid = LV.regions[LV.regionAt(s.x0)].id, night = e.world === 'night', w = x1 - x0;
     const c = X.ctx;
     switch (s.kind) {
-      case 'ground': case 'shore': {
+      case 'ground': case 'shore': case 'slide': {
         const pat = RG.pattern(c, rid, e.world);
         pat.setTransform(new DOMMatrix([1, 0, 0, 1, -e.camPix, y]));
         c.fillStyle = pat;
@@ -82,6 +82,46 @@
         const lean = Math.round(push * 4);                       // 竹篙从高处斜插进水里
         const pc = night ? '#6a6a50' : '#b8a060';
         for (let k = 0; k < 14; k++) r(bx + 2 + Math.round((k / 14) * (3 - lean)), yy - 9 + k, 1, 1, pc);
+        break;
+      }
+      case 'lotus': case 'floe': {     // 残荷 / 浮冰：踩上去会沉
+        if (s.gone) break;
+        const wl = RG.R[rid].water, wy = wl ? Math.round(wl[e.world] / P) : PH;
+        const sunk = s.y - s.by, tilt = sunk > 0 ? Math.min(2, Math.round(sunk / 10)) : 0;
+        const lotus = s.kind === 'lotus';
+        const top = lotus ? (night ? '#3a5a4a' : '#5a8a3a') : (night ? '#b8c8e8' : '#eef6fc');
+        const rim = lotus ? (night ? '#24382e' : '#3a6028') : (night ? '#7a8ab0' : '#a8cce4');
+        const vein = lotus ? (night ? '#4a6a58' : '#8ab05a') : '#ffffff';
+        c.save(); c.beginPath(); c.rect(x0 - 4, 0, w + 8, wy + 1); c.clip();
+        const ol = '#17131c', lite = lotus ? (night ? '#5a7a68' : '#9ac85a') : '#ffffff', side = lotus ? rim : (night ? '#5a6a98' : '#7aa8cc');
+        for (let i = 0; i < w; i++) {
+          const k = i / (w - 1), dy = Math.round((k - 0.5) * tilt * 2), yy = y + dy;
+          const ins = Math.min(i, w - 1 - i), cut = lotus && Math.abs(i - (w >> 1) - 3) < 1;   // 荷叶上的小缺口
+          if (ins === 0) { r(x0 + i, yy, 1, 2, ol); continue; }
+          r(x0 + i, yy - 1, 1, 1, ol);
+          if (cut) { r(x0 + i, yy, 1, 1, ol); r(x0 + i, yy + 1, 1, 1, rim); r(x0 + i, yy + 2, 1, 1, ol); continue; }
+          r(x0 + i, yy, 1, 1, ins > 1 && ins < 5 ? lite : top);
+          r(x0 + i, yy + 1, 1, 1, top);
+          r(x0 + i, yy + 2, 1, 1, side);
+          r(x0 + i, yy + 3, 1, 1, ol);
+          if (!lotus && ins > 1) r(x0 + i, yy + 4, 1, 1, i % 4 ? side : ol);
+        }
+        if (lotus) {
+          const cx = x0 + (w >> 1) - 1;
+          for (let k = 1; k < 5; k++) r(cx - k * 2 + 1, y + 1, 1, 1, vein), r(cx + k * 2, y + 1, 1, 1, vein);
+          if (!sunk && (s.x0 / 120 | 0) % 2 === 0) {            // 一朵荷花
+            const fx = x0 + 4, pk = night ? '#a07090' : '#f0a0b8', pk2 = night ? '#704a68' : '#d06a8a';
+            r(fx, y - 4, 1, 3, ol); r(fx + 4, y - 4, 1, 3, ol); r(fx + 1, y - 5, 3, 1, ol);
+            r(fx + 1, y - 4, 3, 3, pk); r(fx + 2, y - 4, 1, 2, pk2); r(fx + 2, y - 6, 1, 1, ol);
+          }
+        } else { r(x0 + 3, y, 3, 1, vein); r(x1 - 7, y, 2, 1, vein); }
+        c.restore();
+        if (sunk > 0 && !e.reduce) {                // 往下沉时冒出的水圈
+          const wc = night ? 'rgba(190,205,255,0.5)' : 'rgba(255,255,255,0.6)';
+          r(x0 - 2, Math.min(y, wy) + 1, 2, 1, wc); r(x1, Math.min(y, wy) + 1, 2, 1, wc);
+        } else if (s.stood > 0 && !e.reduce) {
+          r(x0 + ((e.t * 30) | 0) % 2, y - 1, w - 1, 1, 'rgba(255,255,255,0.35)');   // 刚踩上去：叶面一抖
+        }
         break;
       }
       case 'firefly': {    // 萤火连成的路
@@ -278,6 +318,69 @@
     }
   }
 
+  // ------------------------------------------------------------ 月洞门：粉墙上一个圆洞，穿过去天色翻转
+  function moongate(mg, e) {
+    const x = Math.round(mg.x / P) - e.camPix, y = Math.round(mg.y / P);
+    if (x < -24 || x > PW + 24) return;
+    const night = e.world === 'night';
+    const wall = night ? '#7c80a0' : '#ece6d8', wall2 = night ? '#5e6280' : '#cfc7b4', tile = night ? '#2a2c40' : '#4a4c52', ring = night ? '#9a9ec0' : '#b8b0a0';
+    const R = 12, cy = y - 12, H = 46, half = 17;
+    for (let xx = x - half; xx <= x + half; xx++) {
+      const dx = xx - x;
+      const inside = Math.abs(dx) < R ? Math.round(Math.sqrt(R * R - dx * dx)) : -1;
+      for (let yy = y - H + 4; yy < y; yy++) {
+        const dy = yy - cy;
+        if (inside >= 0 && Math.abs(dy) <= inside) continue;          // 圆洞
+        const d = Math.sqrt(dx * dx + dy * dy);
+        r(xx, yy, 1, 1, d < R + 2 ? ring : (xx === x - half || xx === x + half ? wall2 : wall));
+      }
+    }
+    const LV = RF.LEVEL, tib = LV.regions[LV.regionAt(mg.x)].id === 'tibet';
+    if (tib) {                                      // 藏式白墙：顶上一道赭红边玛墙，拉一串经幡
+      r(x - half - 1, y - H + 1, half * 2 + 3, 5, night ? '#4a2430' : '#8a2a24');
+      r(x - half - 1, y - H + 1, half * 2 + 3, 1, '#17131c');
+      const FL = ['#2a5cc0', '#f4f4f0', '#c83030', '#2a9a4a', '#e8c030'];
+      for (let k = 0; k < 9; k++) {
+        const fx = x - half - 14 + k * 4, fy = y - H - 6 + Math.round(Math.abs(k - 4) * 1.2);
+        r(fx, fy, 3, 3, night ? '#6a6a88' : FL[k % 5]); r(fx, fy - 1, 4, 1, '#3a3036');
+      }
+    } else {
+    // 墙头的瓦
+    r(x - half - 2, y - H + 2, half * 2 + 5, 2, tile); r(x - half - 1, y - H + 1, half * 2 + 3, 1, tile);
+    for (let xx = x - half - 1; xx <= x + half + 2; xx += 3) r(xx, y - H + 4, 1, 1, tile);
+    }
+    if (!e.reduce) X.glow(x, cy, 10, night ? [180, 200, 255] : [255, 236, 190], 0.25 + 0.1 * Math.sin(e.t * 3));
+  }
+
+  // ------------------------------------------------------------ 滚木：迎面滚来
+  function roller(h, e, ghost) {
+    const x0 = Math.round(h.x0 / P) - e.camPix, x1 = Math.round(h.x1 / P) - e.camPix;
+    const y0 = Math.round(h.y0 / P), y1 = Math.round(h.y1 / P);
+    if (x1 < -12 || x0 > PW + 12) return;
+    if (ghost) { const a = e.ghostA(h.x0, h.x1); if (a > 0.02) ghostRect(x0, y0, x1, y1, a, e); return; }
+    const night = e.world === 'night', cx = (x0 + x1) >> 1, cy = (y0 + y1) >> 1, rad = ((y1 - y0) >> 1);
+    const snow = h.kind === 'snow';                 // 雪球滚石
+    const bark = snow ? (night ? '#7a86a8' : '#a8bcd0') : night ? '#3a2e3a' : '#6a4a2a',
+      wood = snow ? (night ? '#b8c4dc' : '#f4f8fc') : night ? '#6a5a5a' : '#c89a5a',
+      ringc = snow ? (night ? '#9aa8c4' : '#d4e2ee') : night ? '#4a3e48' : '#9a6a3a';
+    for (let yy = -rad - 1; yy <= rad + 1; yy++) {   // 描一圈深色外轮廓，和别的物件统一
+      const hw = Math.round(Math.sqrt(Math.max(0, (rad + 1) * (rad + 1) - yy * yy)));
+      r(cx - hw, cy + yy, hw * 2 + 1, 1, '#17131c');
+    }
+    for (let yy = -rad; yy <= rad; yy++) {
+      const hw = Math.round(Math.sqrt(rad * rad - yy * yy));
+      r(cx - hw, cy + yy, hw * 2 + 1, 1, bark);
+      if (hw > 1) r(cx - hw + 1, cy + yy, hw * 2 - 1, 1, wood);
+    }
+    for (const rr of [rad - 3, rad - 6]) {          // 年轮
+      if (rr <= 0) continue;
+      for (let k = 0; k < 16; k++) { const a = k / 16 * Math.PI * 2; r(Math.round(cx + Math.cos(a) * rr), Math.round(cy + Math.sin(a) * rr), 1, 1, ringc); }
+    }
+    const ang = -(h.bx0 - h.x0) / (rad * P);        // 滚动：一道裂纹跟着转
+    for (let k = 0; k < rad; k++) r(Math.round(cx + Math.cos(ang) * k), Math.round(cy + Math.sin(ang) * k), 1, 1, bark);
+    if (h.rolling && !e.reduce) { r(x1 + 1, y1 - 1, 2, 1, 'rgba(220,200,170,0.6)'); r(x1 + 3, y1 - 2, 1, 1, 'rgba(220,200,170,0.5)'); }
+  }
+
   // ------------------------------------------------------------ 雪桥：白天看着结实，其实踩不住
   function mirage(m, e) {
     if (e.world !== 'day') return;
@@ -341,5 +444,5 @@
     }
   }
 
-  RF.Props = { spr, solid, ghostSolid, hazard, bell, lantern, mirage, decorations, coins };
+  RF.Props = { spr, solid, ghostSolid, hazard, bell, lantern, mirage, decorations, coins, moongate, roller };
 })();

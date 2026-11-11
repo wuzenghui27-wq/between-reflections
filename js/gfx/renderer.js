@@ -42,11 +42,14 @@
       for (const h of LV.hazards) if (h.w === ow && h.x1 > x0 && h.x0 < x1) RF.Props.hazard(h, e, G.gates, true);
       for (const b of LV.bells) if (b.w === ow && b.x > x0 && b.x < x1) RF.Props.bell(b, e, G.gates, true);
       for (const l of LV.lanterns) if (l.w === ow && l.x > x0 && l.x < x1) RF.Props.lantern(l, e, G.got, true);
+      for (const h of LV.rollers) if (h.w === ow) RF.Props.roller(h, e, true);
     }
     for (const s of LV.solids) if (on(s, world) && s.x1 > x0 && s.x0 < x1) RF.Props.solid(s, e);
     RF.Props.decorations(e, x0, x1);
+    for (const mg of LV.moongates) if (mg.x > x0 && mg.x < x1) RF.Props.moongate(mg, e);
     for (const h of LV.hazards) if (on(h, world) && h.x1 > x0 && h.x0 < x1) RF.Props.hazard(h, e, G.gates, false);
     for (const b of LV.bells) if (on(b, world) && b.x > x0 && b.x < x1) RF.Props.bell(b, e, G.gates, false);
+    for (const h of LV.rollers) if (on(h, world)) RF.Props.roller(h, e, false);
     for (const l of LV.lanterns) if (on(l, world) && l.x > x0 && l.x < x1) RF.Props.lantern(l, e, G.got, false);
     if (!e.noGhost) RF.Props.coins(e, x0, x1);
     c.restore(); X.oy = 0;
@@ -80,7 +83,7 @@
     const st = G.state === 'running' ? (G.riding ? 'idle' : G.onGround ? 'run' : 'air') : (G.state === 'failing' && !G.onGround ? 'air' : 'idle');
     RF.Traveler.draw(G.px - cam, G.foot, {
       weather: G.weather[ri], region: ri, state: st, dist: G.px, alpha: G.playerAlpha, night: G.world === 'night',
-      vy: G.vy, landT: G.landT, t: e.t
+      vy: G.vy, landT: G.landT, t: e.t, slide: G.state === 'running' && G.onGround && !G.riding && LV.paceAt(G.px) > 1.2
     });
     // 脚下记号：另一面此刻能不能站
     if ((G.state === 'running' || G.state === 'ready') && G.onGround) {

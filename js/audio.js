@@ -154,14 +154,16 @@
     get layer() { return layer; },
     setLayer(n) { layer = Math.max(0, Math.min(3, n)); },
     // 每帧调用：pos = 当前拍位置（可以是小数），playing = 旅人正在走
-    tick(pos, playing, rid) {
+    // mult：当前步速倍数（每站步调不同，冰滑道更快），音乐跟着变快变慢
+    tick(pos, playing, rid, mult) {
       if (!ctx || ctx.state !== 'running') return;
       if (!playing) { nextIdx = null; return; }
+      const bs = CFG.BEAT_SEC / (mult || 1);
       const p8 = pos * 2;
       if (nextIdx === null || Math.abs(nextIdx - p8) > 4) nextIdx = Math.ceil(p8);
-      const ahead = 0.3 / CFG.BEAT_SEC * 2;
+      const ahead = 0.3 / bs * 2;
       while (nextIdx < p8 + ahead) {
-        const t = ctx.currentTime + Math.max(0, (nextIdx - p8) / 2 * CFG.BEAT_SEC);
+        const t = ctx.currentTime + Math.max(0, (nextIdx - p8) / 2 * bs);
         step(nextIdx, t, rid);
         nextIdx++;
       }

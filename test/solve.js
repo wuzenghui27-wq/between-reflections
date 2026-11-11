@@ -19,7 +19,7 @@ function solveSegment(i) {
   let nodes = 0;
   function dfs(tick) {
     if (++nodes > 400000) return false;
-    const key = tick + '|' + G.world + '|' + Math.round(G.foot / 3) + '|' + Math.round(G.vy / 80) + '|' + G.onGround + '|' + !!G.hopUsed + '|' + Object.keys(G.gates).length + '|' + LV.ferries.map(f => f.on ? 1 : 0).join('');
+    const key = tick + '|' + G.world + '|' + Math.round(G.foot / 3) + '|' + Math.round(G.vy / 80) + '|' + G.onGround + '|' + !!G.hopUsed + '|' + Object.keys(G.gates).length + '|' + LV.ferries.map(f => f.on ? 1 : 0).join('') + '|' + LV.sinkers.filter(k => k.stood > 0).length;
     if (seen.has(key)) return false; seen.add(key);
     const snap = G.snapshot();
     for (const [sw, jp] of ACTS) {
@@ -55,6 +55,6 @@ for (let i = 0; i < LV.checkpoints.length; i++) {
   if (!r.ok) all = false;
   out.push({ cp: i, plan: r.plan });
 }
-console.log(all ? 'ALL OK' : 'SOME FAILED', 'switches', totSw, 'jumps', totJp, 'length', (LV.endX / C.SPEED).toFixed(1) + 's', 'lanterns', LV.lanterns.length);
+console.log(all ? 'ALL OK' : 'SOME FAILED', 'switches', totSw, 'jumps', totJp, 'length', (function () { let t = 0; for (let x = 0; x < LV.endX; x += 10) t += 10 / (C.SPEED * LV.paceAt(x)); return t; })().toFixed(1) + 's', 'lanterns', LV.lanterns.length);
 const pi = process.argv.indexOf('--plan');
 if (pi > 0) fs.writeFileSync(process.argv[pi + 1], JSON.stringify(out));

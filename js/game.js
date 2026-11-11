@@ -51,6 +51,14 @@
       }
       return null;
     },
+    rollerHit(world, x, foot) {
+      const l = x - C.HALF_W + 3, r = x + C.HALF_W - 3, top = foot - C.BODY_H + 4, bot = foot - 2;
+      for (const h of LV.rollers) {
+        if (h.x1 < l || h.x0 > r || !active(h, world)) continue;
+        if (top < h.y1 && bot > h.y0) return h;
+      }
+      return null;
+    },
     groundAt(world, x) {  // 某处最高的地面（用于检查点落脚）
       let best = null;
       for (const s of LV.solids) if (active(s, world) && x >= s.x0 && x <= s.x1 && (best === null || s.y < best)) best = s.y;
@@ -66,6 +74,13 @@
     f.moving = f.on && off < f.travel;
   }
   RF.placeFerry = placeFerry;
+  // 滚木：px 过了触发点后，按“相对人的时间”朝左滚
+  function placeRoller(h, px) {
+    const off = px > h.trig ? (px - h.trig) * h.v : 0;
+    h.x0 = h.bx0 - off; h.x1 = h.bx1 - off; h.rolling = off > 0;
+  }
+  RF.placeRoller = placeRoller;
+  const SINK_DELAY = 0.28, SINK_V = 70;
 
   function createGame() {
     const handlers = {};
@@ -105,6 +120,8 @@
         placeFerry(f, cp.x);
       }
       G.riding = false;
+      for (const h of LV.rollers) placeRoller(h, cp.x);
+      for (const sk of LV.sinkers) { sk.y = sk.by; sk.stood = 0; sk.gone = false; }
       G.coinRun = 0; G.lastCoin = -9;
       G.wipe = null; G.playerAlpha = 1; G.pendingSwitch = false; G.flashes = {};
       G.regionIndex = LV.regionAt(G.px);
@@ -256,10 +273,26 @@
         }
       }
       // 3) 前进 + 撞墙 / 迈上小台阶
-      let sp = C.SPEED;
+      let sp = C.SPEED * LV.paceAt(G.px);
       const toEnd = LV.endX - G.px;
-      if (toEnd < 300) sp = C.SPEED * Math.max(0.05, toEnd / 300);
+      if (toEnd < 300) sp = sp * Math.max(0.05, toEnd / 300);
+      const prevPx = G.px;
       G.px = Math.min(LV.endX, G.px + sp * dt);
+      for (const h of LV.rollers) placeRoller(h, G.px);
+      // 月洞门：穿过去天色自己翻转
+      for (const mg of LV.moongates) {
+        if (prevPx < mg.x && G.px >= mg.x) {
+          const from = G.world;
+          setWorld(other(G.world));
+          G.wipe = { from, t: 0, onBeat: false, gate: true };
+          G.emit('moongate', mg);
+          const sb = Q.solidInBody(G.world, G.px, G.foot);
+          if (sb) {
+            if (G.foot - sb.y <= C.STEP_UP && !Q.solidInBody(G.world, G.px, sb.y)) { G.foot = sb.y; G.vy = 0; G.onGround = true; }
+            else return fail('stuck');
+          }
+        }
+      }
       G.phase += sp * dt * 0.075;
       for (const f of LV.ferries) if (f.on) placeFerry(f, G.px);
       const s = Q.solidInBody(G.world, G.px, G.foot);
@@ -292,6 +325,17 @@
           else G.foot = nf;
         } else G.foot = nf;
       }
+      // 残荷 / 浮冰：站上去一会儿就往下沉，沉到水下就没了
+      for (const sk of LV.sinkers) {
+        if (sk.gone) continue;
+        const on = G.onGround && G.px >= sk.x0 - C.HALF_W && G.px <= sk.x1 + C.HALF_W && Math.abs(G.foot - sk.y) < 0.6;
+        if (on || sk.stood > 0) sk.stood += dt;
+        if (sk.stood > SINK_DELAY) {
+          sk.y += SINK_V * dt;
+          if (on) G.foot = sk.y;
+          if (sk.y > sk.by + 44) { sk.gone = true; sk.y = 1e4; }
+        }
+      }
       // 踩上船：船开始载人
       G.riding = false;
       if (G.onGround && G.world === 'day') for (const f of LV.ferries) {
@@ -301,7 +345,7 @@
       }
       if (G.foot > C.FALL_LIMIT) return fail('fall');
       // 5) 障碍 / 门
-      const h = Q.hazardHit(G.world, G.px, G.foot, G.gates);
+      const h = Q.hazardHit(G.world, G.px, G.foot, G.gates) || Q.rollerHit(G.world, G.px, G.foot);
       if (h) return fail(h.gate ? 'gate' : 'hazard', h.kind);
       // 6) 铃铛
       for (const b of LV.bells) {
@@ -391,12 +435,15 @@
       const s = {}; for (const k of KEYS) s[k] = G[k];
       s.gates = Object.assign({}, G.gates); s.got = Object.assign({}, G.got);
       s.ferries = LV.ferries.map(f => [f.on, f.p0]);
+      s.sinkers = LV.sinkers.map(k => [k.y, k.stood, k.gone]);
       return s;
     };
     G.restore = function (s) {
       for (const k of KEYS) G[k] = s[k];
       G.gates = Object.assign({}, s.gates); G.got = Object.assign({}, s.got);
       LV.ferries.forEach((f, i) => { f.on = s.ferries[i][0]; f.p0 = s.ferries[i][1]; placeFerry(f, G.px); });
+      LV.sinkers.forEach((k, i) => { [k.y, k.stood, k.gone] = s.sinkers[i]; });
+      for (const r of LV.rollers) placeRoller(r, G.px);
     };
     G.physicsOnly = function (dt) {   // 不触发界面事件的快速模拟
       if (G.state !== 'running') return;

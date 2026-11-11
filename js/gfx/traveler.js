@@ -19,6 +19,7 @@
     const [outfit, pose] = look(o.weather, o.region);
     let fr;
     if (o.state === 'air') fr = (o.vy || 0) < 120 ? 'up' : 'fall';
+    else if (o.state === 'run' && o.slide) fr = 'land';                    // 冰滑道上压低身子
     else if (o.state === 'run') fr = (o.landT !== undefined && o.landT < 0.09) ? 'land' : Math.floor(o.dist / 20) % 8;
     else fr = Math.floor((o.t || 0) / 0.7) % 4 === 3 ? 'idle1' : 'idle0';
     const a = RF.ATLAS[`t_${outfit}_${pose}_${fr}`];
