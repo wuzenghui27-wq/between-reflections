@@ -26,6 +26,8 @@
     e.world = world;
     X.mute = !!opt.mute;
     const centre = cam + C.W / 2;
+    // 先铺一层底色：万一背景图没画上，也不会留下上一帧的拖影
+    c.fillStyle = world === 'night' ? '#0c1226' : '#9fb3c4'; c.fillRect(0, 0, X.PW, X.PH);
     const m = RG.backdrop(c, G, world, centre);
     const wA = G.weather[m.a];
     RG.weatherBack(c, wA, world, e.t, e.camPix);

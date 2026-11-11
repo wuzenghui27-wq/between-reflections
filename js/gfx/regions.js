@@ -123,7 +123,7 @@
     const ri = LV.regionAt(px), reg = LV.regions[ri], rid = reg.id;
     const w = (G.weather && G.weather[ri]) || 'clear';
     const list = R[rid].bg[w] || R[rid].bg.clear || Object.values(R[rid].bg)[0];
-    const len = Math.min(reg.x1, LV.totalX) - reg.x0;
+    const len = Math.max(1, Math.min(reg.x1, LV.totalX || reg.x1) - reg.x0) || 1;
     const t = U.clamp((px - reg.x0) / len, 0, 0.9999) * list.length;
     const k = Math.floor(t), f = t - k;
     const cur = list[k], next = list[k + 1];
