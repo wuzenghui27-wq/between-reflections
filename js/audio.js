@@ -9,6 +9,9 @@
   try { enabled = localStorage.getItem(KEY) !== 'off'; } catch (e) { }
 
   let night = false, nextIdx = null;
+  // 乐器层（借鉴节奏跑酷的“升档”）：0 只有鼓和低音，1 加和声，2 加旋律，3 再加高音琶音
+  let layer = 1;
+  const cur = { chord: 62, root: 62, lead: 'pluck' };
   const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
   const PENTA = [0, 2, 4, 7, 9];                       // 宫 商 角 徵 羽
   const PROG = [0, 9, 5, 7];                           // I vi IV V
@@ -114,6 +117,7 @@
     const S = STYLE[rid] || STYLE.jiangnan;
     const beat = n / 2, onBeat = n % 2 === 0, bar = Math.floor(beat / 4), bi = beat % 4;
     const chordRoot = S.root + PROG[bar % 4];
+    cur.chord = chordRoot; cur.root = S.root; cur.lead = S.lead;
     const h = k => { const x = Math.sin((n + k) * 12.9898 + S.seed * 78.233) * 43758.5453; return x - Math.floor(x); };
     // 鼓：每拍一下，夜里更轻
     if (onBeat) {
@@ -125,8 +129,13 @@
     if (n % 8 === 0) {
       tone(mtof(chordRoot - 24), t, { type: 'sine', a: 0.02, g: 0.09, d: CFG.BEAT_SEC * 3.6, bus: musicBus });
       const pg = night ? 0.035 : 0.02;
-      [0, 7, 16].forEach(iv => tone(mtof(chordRoot - 12 + iv), t, { type: 'triangle', a: 0.5, g: pg, d: CFG.BEAT_SEC * 4, bus: musicBus }));
+      if (layer >= 1) [0, 7, 16].forEach(iv => tone(mtof(chordRoot - 12 + iv), t, { type: 'triangle', a: 0.5, g: pg, d: CFG.BEAT_SEC * 4, bus: musicBus }));
     }
+    if (layer >= 3 && !onBeat) {        // 高音琶音：和弦音轮流响
+      const iv = [0, 4, 7, 12][(n >> 1) % 4];
+      lead('bell', chordRoot + 24 + iv, t, night ? 0.014 : 0.018);
+    }
+    if (layer < 2) return;
     // 旋律：在五声音阶上随机游走（种子固定，每次经过同一段都一样）
     const r = h(0);
     if (r < (night ? 0.35 : 0.55)) {
@@ -142,6 +151,8 @@
     init,
     unlock() { init(); if (ctx && ctx.state === 'suspended') ctx.resume(); },
     startMusic() { A.unlock(); },
+    get layer() { return layer; },
+    setLayer(n) { layer = Math.max(0, Math.min(3, n)); },
     // 每帧调用：pos = 当前拍位置（可以是小数），playing = 旅人正在走
     tick(pos, playing, rid) {
       if (!ctx || ctx.state !== 'running') return;
@@ -185,13 +196,26 @@
       switch (name) {
         case 'switch': {
           const up = !!arg.night;
-          if (up) { tone(392, t, { to: 196, glide: 0.25, g: 0.06, d: 0.3 }); }
-          else { tone(523, t, { to: 1046, glide: 0.2, g: 0.05, d: 0.3 }); }
-          noise(t, 0.25, 0.05, up ? 600 : 2400, sfxBus, 0.7);
+          // 切换本身也是一个音：夜里落到和弦根音，白天升到三度
+          lead(cur.lead, cur.chord + (up ? 0 : 16), t, 0.05);
+          noise(t, 0.25, 0.035, up ? 600 : 2400, sfxBus, 0.7);
           if (arg.onBeat) [0, 4, 7].forEach((iv, k) => tone(mtof(72 + iv + (up ? -12 : 0)), t + k * 0.03, { type: 'triangle', g: 0.05, d: 0.7 }));
           break;
         }
-        case 'jump': tone(300, t, { to: 520, glide: 0.12, g: 0.035, d: 0.14 }); break;
+        case 'jump':           // 跳：拨一个和弦里的五度音
+          tone(300, t, { to: 520, glide: 0.12, g: 0.018, d: 0.12 });
+          lead(cur.lead, cur.chord + 19, t, 0.05); break;
+        case 'hop':            // 空中借力：再高一个八度，带一点铃
+          lead('bell', cur.chord + 24, t, 0.045); lead(cur.lead, cur.chord + 28, t + 0.05, 0.03);
+          noise(t, 0.18, 0.03, 3000, sfxBus, 0.8); break;
+        case 'coin': {         // 铜钱：连续吃到就沿五声音阶往上走
+          const run = arg || 0, deg = run % 10;
+          const m = cur.root + 12 + PENTA[deg % 5] + 12 * Math.floor(deg / 5);
+          tone(mtof(m), t, { type: 'triangle', g: 0.035, d: 0.22 }); tone(mtof(m) * 2, t, { g: 0.012, d: 0.1 });
+          break;
+        }
+        case 'layerUp': [0, 4, 7, 12].forEach((iv, k) => lead('bell', cur.chord + 12 + iv, t + k * 0.05, 0.035)); break;
+        case 'layerDown': tone(mtof(cur.chord), t, { to: mtof(cur.chord - 5), glide: 0.3, type: 'triangle', g: 0.04, d: 0.4 }); break;
         case 'land': noise(t, 0.06, 0.04, 500, sfxBus, 1); break;
         case 'bell': [988, 1319, 1976].forEach((f, k) => tone(f, t + k * 0.04, { g: 0.06, d: 1.6 })); break;
         case 'lantern': [1568, 2093].forEach((f, k) => tone(f, t + k * 0.07, { type: 'triangle', g: 0.05, d: 0.5 })); break;

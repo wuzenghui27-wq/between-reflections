@@ -28,7 +28,7 @@
     c.globalAlpha = o.alpha === undefined ? 1 : o.alpha;
     c.drawImage(img, a[0], a[1], a[2], a[3], x - a[4], y - a[5], a[2], a[3]);
     c.globalAlpha = 1;
-    if (o.night) X.glow(x, y - 12, 12, [190, 205, 255], 0.08 * (o.alpha || 1));
+    if (o.night && !o.noGlow) X.glow(x, y - 12, 12, [190, 205, 255], 0.08 * (o.alpha || 1));
   }
 
   RF.Traveler = { draw, look };

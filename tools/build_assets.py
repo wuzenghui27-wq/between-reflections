@@ -461,6 +461,12 @@ def stele(lit):
     return sprite(rows, DX)
 DECO['stele'] = stele(False); DECO['stele_lit'] = stele(True)
 
+# 铜钱（引路的收集物），转动三帧
+CX = {'y': '#f0c858', 'Y': '#b07a28', 'h': '#fff2b0', 'o': '#7a4a18'}
+DECO['coin0'] = sprite(["..YYY..", ".YyhyY.", "YyhoyyY", "Yyo.oyY", "YyyoyyY", ".YyyyY.", "..YYY.."], CX)
+DECO['coin1'] = sprite([".YYY.", "YyhyY", "Yyoyy", "Yo.oY", "YyoyY", "YyyyY", ".YYY."], CX)
+DECO['coin2'] = sprite(["Y", "h", "y", "y", "y", "Y", "Y"], CX)
+
 # ---------------------------------------------------------------- 界面用的小图标与按键
 ICONS = {}
 ICONS['i_sun'] = sprite(["...y...", ".y.y.y.", "..yyy..", "yyyfyyy", "..yyy..", ".y.y.y.", "...y..."])
@@ -471,6 +477,7 @@ ICONS['i_rain'] = sprite([".WWW...", "WwwwW..", "WwwwwWW", "WWWWWWW", ".J.J.J.",
 ICONS['i_snow'] = sprite(["...w...", ".w.w.w.", "..www..", "wwwwwww", "..www..", ".w.w.w.", "...w..."])
 ICONS['i_fog'] = sprite(["WWWW...", ".......", "..WWWWW", ".......", "WWWWW..", ".......", "..WWWW."])
 ICONS['i_wind'] = sprite(["....ww.", "wwwww.w", ".......", "wwwwwww", "......w", "wwww.w.", "....w.."])
+ICONS['i_coin'] = sprite(["..YYY..", ".YyhyY.", "YyhoyyY", "Yyo.oyY", "YyyoyyY", ".YyyyY.", "..YYY.."], CX)
 ICONS['i_beat'] = sprite(["..yy...", "..yYy..", "..y.Yy.", "..y..y.", "yyy....", "yYy....", ".y....."])
 def keycap(label_rows, w):
     top = "." + "p" * (w - 2) + "."

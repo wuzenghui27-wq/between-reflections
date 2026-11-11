@@ -162,8 +162,8 @@
     if (cfg.water) {
       const wy = Math.round(cfg.water[world] / P);
       const col = cfg.waterCol[world === 'day' ? 0 : 1];
-      ctx.fillStyle = col; ctx.fillRect(0, wy, PW, PH - wy);
-      ctx.fillStyle = 'rgba(0,0,10,0.25)'; ctx.fillRect(0, wy + 12, PW, PH);
+      ctx.fillStyle = col; ctx.fillRect(0, wy, PW, PH + 16 - wy);
+      ctx.fillStyle = 'rgba(0,0,10,0.25)'; ctx.fillRect(0, wy + 12, PW, PH + 16);
       if (cfg.water.frozen === world) {
         ctx.fillStyle = '#c8e0f4'; ctx.fillRect(0, wy, PW, 1);
         ctx.fillStyle = 'rgba(200,224,244,0.35)'; ctx.fillRect(0, wy + 1, PW, 2);
@@ -177,7 +177,7 @@
     } else {
       const [c0, c1] = cfg.abyss;
       const top = 150;
-      for (let y = top; y < PH; y += 2) {
+      for (let y = top; y < PH + 16; y += 2) {
         ctx.fillStyle = U.rgb(U.mix(U.hex(c0), U.hex(c1), (y - top) / (PH - top)), world === 'day' ? 1 : 1);
         ctx.fillRect(0, y, PW, 2);
       }

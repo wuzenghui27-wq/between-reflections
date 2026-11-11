@@ -19,7 +19,7 @@ function solveSegment(i) {
   let nodes = 0;
   function dfs(tick) {
     if (++nodes > 400000) return false;
-    const key = tick + '|' + G.world + '|' + Math.round(G.foot / 3) + '|' + Math.round(G.vy / 80) + '|' + G.onGround + '|' + Object.keys(G.gates).length;
+    const key = tick + '|' + G.world + '|' + Math.round(G.foot / 3) + '|' + Math.round(G.vy / 80) + '|' + G.onGround + '|' + !!G.hopUsed + '|' + Object.keys(G.gates).length;
     if (seen.has(key)) return false; seen.add(key);
     const snap = G.snapshot();
     for (const [sw, jp] of ACTS) {

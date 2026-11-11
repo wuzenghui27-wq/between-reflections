@@ -10,13 +10,23 @@
     PW, PH,
     out: null, outW: 1, outH: 1,
     buf: null, ctx: null, glowC: null, g: null, blurC: null, bctx: null,
-    mute: false, lowFx: false,
+    mute: false, lowFx: false, oy: 0,
+    buf2: null, ctx2: null, mask: null, mctx: null, dith: null,
 
     init(cv) {
       X.out = cv.getContext('2d');
       X.buf = canvas(PW, PH); X.ctx = X.buf.getContext('2d');
       X.glowC = canvas(PW, PH); X.g = X.glowC.getContext('2d');
       X.blurC = canvas(PW / 4, PH / 4); X.bctx = X.blurC.getContext('2d');
+      // 切换过渡用：另一面先画进第二块画布，再用带像素抖动边的圆形遮罩叠上来
+      X.buf2 = canvas(PW, PH); X.ctx2 = X.buf2.getContext('2d');
+      X.mask = canvas(PW, PH); X.mctx = X.mask.getContext('2d');
+      const dp = n => {               // n = 4 格里有几格不透明
+        const c = canvas(2, 2), x = c.getContext('2d'); x.fillStyle = '#000';
+        [[0, 0], [1, 1], [1, 0], [0, 1]].slice(0, n).forEach(([a, b]) => x.fillRect(a, b, 1, 1));
+        return X.mctx.createPattern(c, 'repeat');
+      };
+      X.dith = [dp(1), dp(2), dp(3)];
     },
     setOut(w, h) { X.outW = w; X.outH = h; },
 
@@ -28,6 +38,7 @@
     // 柔光（像素坐标）
     glow(x, y, r, col, a) {
       if (X.mute || a <= 0.003 || r <= 0) return;
+      y += X.oy;
       const g = X.g, gr = g.createRadialGradient(x, y, 0, x, y, r);
       gr.addColorStop(0, U.rgb(col, a));
       gr.addColorStop(0.4, U.rgb(col, a * 0.4));
@@ -75,6 +86,24 @@
       return c;
     },
     canvas,
+    // 圆形遮罩：中心实心，边上三圈 75% / 50% / 25% 的像素点，像水墨洇开
+    dissolve(cx, cy, rr) {
+      const m = X.mctx, B = 4;
+      m.setTransform(1, 0, 0, 1, 0, 0);
+      m.clearRect(0, 0, PW, PH);
+      m.fillStyle = '#000';
+      if (rr - B * 3 > 0) { m.beginPath(); m.arc(cx, cy, rr - B * 3, 0, 7); m.fill(); }
+      for (let k = 0; k < 3; k++) {
+        const r1 = rr - B * (2 - k), r0 = Math.max(0, r1 - B);
+        if (r1 <= 0) continue;
+        m.fillStyle = X.dith[2 - k];
+        m.beginPath(); m.arc(cx, cy, r1, 0, 7); if (r0 > 0) m.arc(cx, cy, r0, 0, 7, true); m.fill();
+      }
+      const c2 = X.ctx2;
+      c2.setTransform(1, 0, 0, 1, 0, 0);
+      c2.globalCompositeOperation = 'destination-in'; c2.drawImage(X.mask, 0, 0);
+      c2.globalCompositeOperation = 'source-over';
+    },
 
     rect(x, y, w, h, col) { X.ctx.fillStyle = col; X.ctx.fillRect(x | 0, y | 0, w | 0, h | 0); }
   };

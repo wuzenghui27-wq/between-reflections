@@ -76,6 +76,9 @@
       emit(ev, ...a) { (handlers[ev] || []).forEach(fn => fn(...a)); }
     };
     G.beat = () => G.px / C.BEAT_PX;
+    // 引路铜钱（js/coins.js 生成；自动求解时没有）
+    if (!LV.coins) LV.coins = (RF.COINS || []).map((c, i) => ({ i, x: c[0], y: c[1], w: c[2] ? 'night' : 'day' }));
+    G.cgot = {}; G.coinRun = 0; G.lastCoin = -9;
 
     function setWorld(w, silent) { G.world = w; G.emit('world', w, !!silent); }
 
@@ -85,15 +88,17 @@
       G.px = cp.x;
       setWorld(cp.world, true);
       G.foot = Q.groundAt(cp.world, cp.x) || C.GROUND;
-      G.vy = 0; G.onGround = true; G.coyote = 0; G.jumpBuf = 0; G.airT = 0;
+      G.vy = 0; G.onGround = true; G.coyote = 0; G.jumpBuf = 0; G.airT = 0; G.hopUsed = false;
       for (const b of LV.bells) { if (b.x >= cp.x) delete G.gates[b.id]; else G.gates[b.id] = true; }
       for (const l of LV.lanterns) { if (l.x >= cp.x) delete G.got[l.i]; }
+      for (const c of LV.coins) { if (c.x >= cp.x) delete G.cgot[c.i]; }
+      G.coinRun = 0; G.lastCoin = -9;
       G.wipe = null; G.playerAlpha = 1; G.pendingSwitch = false; G.flashes = {};
       G.regionIndex = LV.regionAt(G.px);
     };
 
     G.reset = function () {
-      G.shown = {}; G.got = {}; G.gates = {};
+      G.shown = {}; G.got = {}; G.gates = {}; G.cgot = {};
       G.failStreak = 0; G.lastFail = null;
       G.stats = { fails: 0, switches: 0, time: 0, bestCombo: 0, reg: LV.regions.map(() => ({ sw: 0, beat: 0, fails: 0 })) };
       G.combo = 0; G.graded = {};
@@ -101,15 +106,29 @@
       G.phase = 0;
     };
     G.lanternCount = () => Object.keys(G.got).length;
+    G.coinCount = () => Object.keys(G.cgot).length;
+    function coins() {
+      const by = G.foot - 30;
+      for (const c of LV.coins) {
+        if (c.x > G.px + 26) break;
+        if (c.x < G.px - 26 || G.cgot[c.i] || c.w !== G.world || Math.abs(c.y - by) > 44) continue;
+        G.cgot[c.i] = true;
+        G.coinRun = c.i === G.lastCoin + 1 ? G.coinRun + 1 : 0;
+        G.lastCoin = c.i;
+        G.emit('coin', c, G.coinRun);
+      }
+    }
     // 每站评分：踩拍、收灯、失误 → 甲乙丙丁
     G.grade = function (ri) {
       const rs = G.stats.reg ? G.stats.reg[ri] : null; if (!rs) return null;
       const ls = LV.lanterns.filter(l => LV.regionAt(l.x) === ri);
       const lg = ls.filter(l => G.got[l.i]).length;
       const beat = rs.sw ? rs.beat / rs.sw : 0.5;
-      const score = beat * 55 + (ls.length ? lg / ls.length : 1) * 25 + (rs.fails === 0 ? 20 : rs.fails <= 2 ? 10 : 0);
+      const cs = LV.coins.filter(c => LV.regionAt(c.x) === ri), cg = cs.filter(c => G.cgot[c.i]).length;
+      const coinR = cs.length ? cg / cs.length : 1;
+      const score = beat * 35 + coinR * 30 + (ls.length ? lg / ls.length : 1) * 15 + (rs.fails === 0 ? 20 : rs.fails <= 2 ? 10 : 0);
       const mark = score >= 80 ? '甲' : score >= 62 ? '乙' : score >= 42 ? '丙' : '丁';
-      return { mark, score: Math.round(score), beat, lanterns: lg, lanternsTotal: ls.length, fails: rs.fails, switches: rs.sw };
+      return { mark, score: Math.round(score), beat, coins: cg, coinsTotal: cs.length, lanterns: lg, lanternsTotal: ls.length, fails: rs.fails, switches: rs.sw };
     };
 
     // ------------------------------------------------------------ 流程
@@ -207,12 +226,19 @@
           if (G.foot - s.y <= C.STEP_UP && !Q.solidInBody(G.world, G.px, s.y)) { G.foot = s.y; G.vy = 0; G.onGround = true; }
           else return fail('stuck');
         }
+        // 空中翻面借力：每次离地只能借一次，向上再弹一下
+        if (!G.onGround && !G.hopUsed) {
+          G.hopUsed = true;
+          G.vy = Math.min(G.vy, -C.JUMP_V * C.SHIFT_HOP);
+          G.coyote = 0; G.jumpBuf = 0;
+          G.emit('hop');
+        }
       }
       // 2) 跳
       if (G.jumpBuf > 0) {
         G.jumpBuf -= dt;
         if (G.onGround || G.coyote > 0) {
-          G.vy = -C.JUMP_V; G.onGround = false; G.coyote = 0; G.jumpBuf = 0; G.airT = 0;
+          G.vy = -C.JUMP_V; G.onGround = false; G.coyote = 0; G.jumpBuf = 0; G.airT = 0; G.hopUsed = false;
           G.emit('jump');
         }
       }
@@ -234,7 +260,7 @@
           // 地面略低一点就贴下去（走下小台阶），否则开始下落
           const low = Q.supportY(G.world, G.px, G.foot + C.STEP_UP, C.STEP_UP);
           if (low !== null) G.foot = low;
-          else { G.onGround = false; G.coyote = C.COYOTE; G.vy = 0; G.airT = 0; }
+          else { G.onGround = false; G.coyote = C.COYOTE; G.vy = 0; G.airT = 0; G.hopUsed = false; }
         } else G.foot = sy;
       } else {
         G.coyote = Math.max(0, G.coyote - dt);
@@ -290,6 +316,7 @@
         case 'running': {
           physics(dt);
           if (G.state !== 'running') break;
+          coins();
           for (let i = G.cpIndex + 1; i < LV.checkpoints.length; i++) {
             if (G.px >= LV.checkpoints[i].x && G.onGround) { G.cpIndex = i; G.failStreak = 0; G.emit('checkpoint', i); }
           }
@@ -338,7 +365,7 @@
     };
 
     // ------------------------------------------------------------ 供自动验证使用的快照
-    const KEYS = ['state', 'px', 'foot', 'vy', 'onGround', 'coyote', 'jumpBuf', 'world', 'cpIndex', 'pendingSwitch', 'airT'];
+    const KEYS = ['state', 'px', 'foot', 'vy', 'onGround', 'coyote', 'jumpBuf', 'world', 'cpIndex', 'pendingSwitch', 'airT', 'hopUsed'];
     G.snapshot = function () {
       const s = {}; for (const k of KEYS) s[k] = G[k];
       s.gates = Object.assign({}, G.gates); s.got = Object.assign({}, G.got);

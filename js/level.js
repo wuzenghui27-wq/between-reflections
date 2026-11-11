@@ -167,7 +167,15 @@
   height(G0 - 120); split(3, { y: G0 - 120 }, { kind: 'firefly', y: G0 - 60 });
   lantern(-1.5, 'day', 40);
   height(G0 - 60); walk(2);
-  height(G0); walk(5);
+  height(G0); walk(3);
+  cp('day');
+  text(-2.5, '跳到空中再切换昼夜，能借力多跳一段。', 5, 'hop');
+  walk(2);
+  gap(1.5);                                     // 一跳够不着：起跳后在空中翻面借力
+  lantern(-0.75, 'both', 90);
+  walk(3);
+  height(G0 - 150); walk(2.5);                 // 高台也要借力
+  height(G0); walk(4);
 
   // ============================================================ 4 岭南骑楼与客家围屋：节奏段
   region('wall', '第四站', '长城', '白天战鼓，夜里烽火', { clear: 5, snow: 3, wind: 2 });
@@ -212,7 +220,11 @@
   haz(-0.75, 'day', 'drum');
   walk(1.5);
   haz(-0.75, 'night', 'beacon');
-  walk(5);
+  walk(2.5);
+  gap(1.4);                                     // 借力跳过城墙缺口
+  walk(1.5);
+  haz(-0.75, 'day', 'drum');
+  walk(4);
 
   // ============================================================ 5 丹霞与雅丹：海市蜃楼
   region('glacier', '第五站', '雪山冰川', '白天的雪桥，一踩就塌', { clear: 4, fog: 3, snow: 3 });
@@ -282,6 +294,9 @@
   lantern(-1, 'night', 50);
   walk(1.5);
   haz(-0.8, 'day', 'yak');
+  walk(1.5);
+  gap(1.5);                                     // 最后一次借力
+  lantern(-0.75, 'both', 100);
   walk(1.5);
   height(G0 - 60); walk(2);
   height(G0); walk(1.5);

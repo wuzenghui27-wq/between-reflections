@@ -60,23 +60,45 @@
     wall: ['#c0a888', '#8a6a4c'], glacier: ['#ffffff', '#c8e4f4'], tibet: ['#ffffff', '#dfe6ee'] };
   const dustCols = () => DUST[LV.regions[LV.regionAt(G.px)].id] || ['#cccccc'];
   G.on('jump', () => { A.sfx('jump'); PT.dust(G.px, G.foot, 6, dustCols(), 0.6); });
-  G.on('land', () => { A.sfx('land'); PT.dust(G.px, G.foot, 10, dustCols(), 1); });
+  G.on('land', () => { A.sfx('land'); PT.dust(G.px, G.foot, 10, dustCols(), 1); RF.Renderer.kick(1.2); });
   G.on('bell', b => { A.sfx('bell'); if (b) PT.sparks(b.x, b.y + 0, '#ffe08a', 10); });
   G.on('lantern', l => {
     A.sfx('lantern'); setLanterns();
     PT.sparks(l.x, l.y, '#ffd27a', 14);
     PT.float(l.x, l.y - 30, '+1', '#ffe8a8');
+    setLayer(A.layer + 1);
     const p = $('lanternPill'); p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump');
   });
   G.on('checkpoint', () => { A.sfx('checkpoint'); PT.sparks(G.px - 24, G.foot - 50, '#ffd890', 8); });
+  // 铜钱：一路吃过去就是一段旋律
+  function setCoins() { $('coinCount').textContent = G.coinCount(); }
+  G.on('coin', (c, run) => {
+    A.sfx('coin', run);
+    PT.sparks(c.x, c.y, run >= 4 ? '#fff2b0' : '#ffd27a', run >= 4 ? 6 : 4);
+    setCoins();
+  });
+  // 空中翻面借力
+  G.on('hop', () => {
+    A.sfx('hop');
+    PT.sparks(G.px, G.foot - 10, G.world === 'night' ? '#c8d8ff' : '#ffe0a0', 12);
+    PT.dust(G.px, G.foot, 4, ['#ffffff', '#e8e0d0'], 0.5);
+  });
+  // 乐器层：收灯、连拍升一档，失误降一档
+  function setLayer(n, quiet) {
+    const old = A.layer; A.setLayer(n);
+    const el = $('comboPill');
+    el.querySelectorAll('.pip').forEach((p, i) => p.classList.toggle('on', i < A.layer));
+    if (quiet || A.layer === old) return;
+    A.sfx(A.layer > old ? 'layerUp' : 'layerDown');
+    el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+    if (A.layer > old) PT.float(G.px, G.foot - 120, '+', '#fff2c0');
+  }
   // 踩拍连击
   G.on('combo', n => {
     const el = $('comboPill');
-    if (n >= 2) {
-      el.classList.remove('hidden'); $('comboNum').textContent = '×' + n;
-      el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
-      if (n % 4 === 0) PT.float(G.px, G.foot - 110, 'x' + n, '#fff2c0');
-    } else el.classList.add('hidden');
+    $('comboNum').textContent = n >= 2 ? '×' + n : '';
+    if (n >= 2) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+    if (n > 0 && n % 4 === 0) { PT.float(G.px, G.foot - 110, 'x' + n, '#fff2c0'); setLayer(A.layer + 1); }
   });
   // 每站结束盖一个印章：甲乙丙丁
   let stampTimer = null;
@@ -85,7 +107,7 @@
     const st = $('stamp');
     st.querySelector('.st-mark').textContent = g.mark;
     st.querySelector('.st-name').textContent = LV.regions[ri].name;
-    st.querySelector('.st-sub').textContent = '踩拍 ' + Math.round(g.beat * 100) + '% · 灯 ' + g.lanterns + '/' + g.lanternsTotal + ' · 失误 ' + g.fails;
+    st.querySelector('.st-sub').textContent = '踩拍 ' + Math.round(g.beat * 100) + '% · 铜钱 ' + g.coins + '/' + g.coinsTotal + ' · 灯 ' + g.lanterns + '/' + g.lanternsTotal + ' · 失误 ' + g.fails;
     st.classList.remove('show'); void st.offsetWidth; st.classList.add('show');
     A.sfx('checkpoint');
     clearTimeout(stampTimer); stampTimer = setTimeout(() => st.classList.remove('show'), 2600);
@@ -101,12 +123,12 @@
   G.on('region', reg => { showChapter(reg); A.sfx('region'); setWeather(); });
   G.on('hint', (t, d, tag) => {
     showHint(t, d);
-    const key = tag === 'switch' || tag === 'switch2' ? 'k_shift' : tag === 'jump' ? 'k_space' : null;
+    const key = tag === 'switch' || tag === 'switch2' || tag === 'hop' ? 'k_shift' : tag === 'jump' ? 'k_space' : null;
     G.keyTip = key && !touchUI ? { key, t: Math.min(d, 3.5) } : null;
   });
   G.on('switched', () => { if (G.keyTip && G.keyTip.key === 'k_shift') G.keyTip.t = 0; });
   G.on('jump', () => { if (G.keyTip && G.keyTip.key === 'k_space') G.keyTip.t = 0; });
-  G.on('fail', () => { A.sfx('fail'); PT.shake = 3; hideHint(); $('chapterCard').classList.remove('show'); });
+  G.on('fail', () => { A.sfx('fail'); PT.shake = 3; setTimeout(() => setLayer(A.layer - 1), 350); hideHint(); $('chapterCard').classList.remove('show'); });
   G.on('ready', (label, tip) => { showReason(label, tip); setLanterns(); setWeather(); });
   G.on('readyEnd', () => hideReason());
   G.on('arrive', () => { A.sfx('arrive'); hideHint(); });
@@ -118,10 +140,11 @@
     $('endFails').textContent = s.fails;
     $('endTime').textContent = m + ' 分 ' + String(sec).padStart(2, '0') + ' 秒';
     $('endCombo').textContent = s.bestCombo || 0;
+    $('endCoins').textContent = G.coinCount() + ' / ' + LV.coins.length;
     const rows = LV.regions.map((r, i) => {
       const g = G.grade(i);
       if (!g || !G.graded[i]) return `<li><span class="g-name">${r.name}</span><span class="g-sub">—</span><b class="g-mark off">·</b></li>`;
-      return `<li><span class="g-name">${r.name}</span><span class="g-sub">踩拍 ${Math.round(g.beat * 100)}% · 灯 ${g.lanterns}/${g.lanternsTotal}</span><b class="g-mark">${g.mark}</b></li>`;
+      return `<li><span class="g-name">${r.name}</span><span class="g-sub">踩拍 ${Math.round(g.beat * 100)}% · 铜钱 ${g.coins}/${g.coinsTotal}</span><b class="g-mark">${g.mark}</b></li>`;
     });
     $('endGrades').innerHTML = rows.join('');
     showPanel('endScreen');
@@ -151,8 +174,9 @@
     focusGame();
     G.wipe = null;
     RF.Particles.clear();
-    $('comboPill').classList.add('hidden');
+    $('comboNum').textContent = '';
     G.start();
+    setLayer(1, true); setCoins();
     setLanterns();
     if (startAt) { jumpTo(startAt); }
     setWeather();

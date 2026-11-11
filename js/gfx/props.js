@@ -24,8 +24,13 @@
       case 'ground': case 'shore': {
         const pat = RG.pattern(c, rid, e.world);
         pat.setTransform(new DOMMatrix([1, 0, 0, 1, -e.camPix, y]));
-        c.fillStyle = pat; c.fillRect(x0, y, w, PH - y);
-        r(x0, y, 1, PH - y, 'rgba(0,0,0,0.25)'); r(x1 - 1, y, 1, PH - y, 'rgba(0,0,0,0.35)');
+        c.fillStyle = pat;
+        c.fillRect(x0 + 1, y, w - 2, 1); c.fillRect(x0, y + 1, w, PH + 15 - y);     // 上角各缺一格，圆一点
+        r(x0, y + 1, 1, PH + 15 - y, 'rgba(0,0,0,0.25)'); r(x1 - 1, y + 1, 1, PH + 15 - y, 'rgba(0,0,0,0.35)');
+        // 越往下越暗，像土石的厚度
+        for (let k = 1; k <= 10; k++) r(x0, y + 6 + k * 3, w, 3, `rgba(${night ? '4,6,20' : '20,14,10'},0.035)`);   // 叠加出平滑的渐暗
+        r(x0, y + 36, w, PH + 16, `rgba(${night ? '4,6,20' : '20,14,10'},0.04)`);
+        edgeLip(s, x0, x1, y, rid, e);
         if (rid === 'wall') {         // 城墙垛口
           const col = night ? '#4a4258' : '#9a8266', top = night ? '#5e566e' : '#b4a084';
           for (let wx = Math.ceil((x0 + e.camPix) / 8) * 8; wx < x1 + e.camPix - 3; wx += 8) {
@@ -42,7 +47,7 @@
       case 'steps': {      // 夜里露出的青石阶
         for (let bx = x0 + 1; bx < x1 - 2; bx += 9) {
           const bw = Math.min(8, x1 - 1 - bx);
-          r(bx + 1, y + 3, bw - 2, PH - y, night ? '#2a3448' : '#5c6466');
+          r(bx + 1, y + 3, bw - 2, PH + 16 - y, night ? '#2a3448' : '#5c6466');
           r(bx, y, bw, 3, night ? '#7884a0' : '#a8aca4');
           r(bx, y, bw, 1, night ? '#9aa6c4' : '#c8ccc4');
           r(bx + 1, y + 3, bw - 2, 1, '#4a6a4a');
@@ -70,9 +75,9 @@
         break;
       }
       case 'pillar': {     // 冰柱
-        r(x0 + 1, y + 2, w - 2, PH - y, night ? '#3a5a8a' : '#6aa0c8');
-        r(x0 + 2, y + 2, 2, PH - y, night ? '#6a8ac0' : '#bfe0f2');
-        r(x1 - 3, y + 2, 2, PH - y, night ? '#2a3a6a' : '#4a7aa8');
+        r(x0 + 1, y + 2, w - 2, PH + 16 - y, night ? '#3a5a8a' : '#6aa0c8');
+        r(x0 + 2, y + 2, 2, PH + 16 - y, night ? '#6a8ac0' : '#bfe0f2');
+        r(x1 - 3, y + 2, 2, PH + 16 - y, night ? '#2a3a6a' : '#4a7aa8');
         r(x0, y, w, 2, '#f2f6fa');
         if (night) X.glow((x0 + x1) / 2, y, 12, [170, 210, 255], 0.35);
         break;
@@ -83,6 +88,42 @@
         X.glow((x0 + x1) / 2, y + 1, Math.max(8, w * 0.4), [170, 210, 255], 0.25);
         break;
       }
+    }
+  }
+
+  // 地面边缘：积雪的檐、垂下的草，让方块的地面不那么生硬
+  const LIP = {
+    jiangnan: { grass: ['#5d7a4a', '#3e5a34'] }, autumn: { grass: ['#9aa83a', '#5a6a2a'], leaf: '#d0682a' },
+    garden: null, wall: { grass: ['#7a8a4a', '#4a5a2a'] }, glacier: { snow: true }, tibet: { snow: true }
+  };
+  function edgeLip(s, x0, x1, y, rid, e) {
+    const night = e.world === 'night', w = x1 - x0;
+    const ri = LV.regionAt(s.x0), wx = e.G.weather ? e.G.weather[ri] : 'clear';
+    const L0 = LIP[rid] || {}, snow = L0.snow || wx === 'snow';
+    const H = (i, k) => U.hash(Math.floor(s.x0) + i * 7, k);
+    if (snow) {
+      const sn = night ? '#b8c4e4' : '#f6f8fc', sh = night ? '#7884b0' : '#c4d2e4';
+      r(x0, y - 1, w, 2, sn); r(x0 - 1, y, 1, 2, sn); r(x1, y, 1, 2, sn);
+      r(x0, y + 1, w, 1, sh);
+      for (let i = 0; i < w; i += 3) if (H(i, 1) > 0.6) r(x0 + i, y - 2, 2 + (H(i, 2) > 0.5 ? 1 : 0), 1, sn);   // 雪堆起伏
+      // 檐边挂的冰凌
+      r(x0 - 1, y + 2, 1, 2, sh); r(x1, y + 2, 1, 3, sh); r(x0, y + 2, 1, 1, sh);
+      for (let i = 4; i < w - 4; i += 9) if (H(i, 3) > 0.7) r(x0 + i, y + 2, 1, 1 + Math.floor(H(i, 4) * 2), sh);
+      return;
+    }
+    if (L0.grass) {
+      const [g1, g2] = night ? ['#2a3a4a', '#1a2434'] : L0.grass;
+      // 顶上一排草尖
+      for (let i = 1; i < w - 1; i++) {
+        const hh = H(i, 5);
+        if (hh > 0.72) r(x0 + i, y - 1, 1, 1, g1);
+        if (hh > 0.93) r(x0 + i, y - 2, 1, 1, g1);
+      }
+      r(x0, y, w, 1, g1);
+      // 两侧垂下的草
+      r(x0 - 1, y, 1, 3, g2); r(x0, y + 1, 1, 4, g2); r(x0 - 1, y + 4, 1, 1, g2);
+      r(x1, y, 1, 3, g2); r(x1 - 1, y + 1, 1, 5, g2); r(x1, y + 5, 1, 2, g2);
+      if (L0.leaf && !night) for (let i = 2; i < w - 2; i += 5) if (H(i, 6) > 0.75) r(x0 + i, y, 1, 1, L0.leaf);
     }
   }
 
@@ -135,7 +176,7 @@
       }
       return;
     }
-    spr(HSPR[h.kind] || 'block', cx, y1, night);
+    spr(HSPR[h.kind] || 'block', cx, y1 - (h.kind === 'drum' || h.kind === 'yak' || h.kind === 'mani' ? e.pulse : 0), night);
   }
 
   // ------------------------------------------------------------ 铃（铜铃 / 锣 / 转经筒）
@@ -165,8 +206,31 @@
     const bob = e.reduce ? 0 : Math.round(Math.sin(e.t * 2 + l.i));
     const y = Math.round(l.y / P) + bob - (got[l.i] ? Math.round((1 - fl) * 14) : 0);
     if (ghost) { const a = e.ghostA(l.x, l.x); if (a > 0.02 && !got[l.i]) ghostRect(x - 3, y - 4, x + 4, y + 5, a, e); return; }
-    spr('lantern', x, y + 4, false, got[l.i] ? fl : 1);
+    spr('lantern', x, y + 4 - e.pulse, false, got[l.i] ? fl : 1);
     X.glow(x, y, 9 + fl * 10, [255, 190, 110], (0.7 + fl * 0.3) * (got[l.i] ? fl : 1));
+  }
+
+  // ------------------------------------------------------------ 铜钱：这一面的转着发光，另一面的只留一个小点
+  function coins(e, x0, x1) {
+    const G = e.G, cs = LV.coins || [];
+    const night = e.world === 'night';
+    for (const c of cs) {
+      if (c.x < x0) continue;
+      if (c.x > x1) break;
+      if (G.cgot[c.i]) continue;
+      const x = Math.round(c.x / P) - e.camPix, y = Math.round(c.y / P);
+      if (c.w === e.world) {
+        const ph = e.reduce ? 0 : Math.floor((e.t * 8 + c.i * 0.7) % 4);
+        spr(['coin0', 'coin1', 'coin2', 'coin1'][ph], x, y + 3 - e.pulse, false);
+        X.glow(x, y, 5, [255, 210, 110], night ? 0.35 : 0.15);
+      } else if (!e.noGhost) {
+        const a = e.ghostA(c.x, c.x); if (a < 0.05) continue;
+        const c2 = X.ctx; c2.globalAlpha = a * 0.8;
+        r(x - 1, y - 1, 3, 1, e.world === 'day' ? '#2a4cc0' : '#ffd88a'); r(x - 1, y + 1, 3, 1, e.world === 'day' ? '#2a4cc0' : '#ffd88a');
+        r(x - 1, y, 1, 1, e.world === 'day' ? '#2a4cc0' : '#ffd88a'); r(x + 1, y, 1, 1, e.world === 'day' ? '#2a4cc0' : '#ffd88a');
+        c2.globalAlpha = 1;
+      }
+    }
   }
 
   // ------------------------------------------------------------ 雪桥：白天看着结实，其实踩不住
@@ -217,7 +281,7 @@
     const night = e.world === 'night';
     for (const d of decos) {
       if (d.x < x0 || d.x > x1 || !(d.w === 'both' || d.w === e.world)) continue;
-      spr(d.name, Math.round(d.x / P) - e.camPix, Math.round(d.y / P), night);
+      spr(d.name, Math.round(d.x / P) - e.camPix, Math.round(d.y / P) - (d.name === 'stones' || d.name === 'post' ? 0 : e.pulse), night);
       if (d.name === 'stonelamp' || d.name === 'redpost') X.glow(Math.round(d.x / P) - e.camPix, Math.round(d.y / P) - (d.name === 'redpost' ? 12 : 7), 7, [255, 190, 110], night ? 0.6 : 0.2);
     }
     // 检查点石碑：走到过的亮着灯
@@ -232,5 +296,5 @@
     }
   }
 
-  RF.Props = { spr, solid, ghostSolid, hazard, bell, lantern, mirage, decorations };
+  RF.Props = { spr, solid, ghostSolid, hazard, bell, lantern, mirage, decorations, coins };
 })();

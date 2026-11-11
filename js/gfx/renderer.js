@@ -8,6 +8,7 @@
 
   const e = {
     world: 'day', t: 0, camPix: 0, reduce: false, G: null, noGhost: false,
+    camY: 0, camYpix: 0, dip: 0, lastT: null, pulse: 0,
     flash(k) { return e.G.flashes[k]; },
     ghostA(x0, x1) {
       if (e.noGhost) return 0;
@@ -28,8 +29,11 @@
     const m = RG.backdrop(c, G, world, centre);
     const wA = G.weather[m.a];
     RG.weatherBack(c, wA, world, e.t, e.camPix);
+    // 以下是“世界”层：跟着镜头上下移
+    c.save(); c.translate(0, e.camYpix); X.oy = e.camYpix;
     RG.lowland(c, LV.regions[m.a].id, world, e.t, e.camPix, 1);
     if (m.b !== null && m.t > 0) RG.lowland(c, LV.regions[m.b].id, world, e.t, e.camPix, m.t);
+    if (!opt.noPlayer) reflection(G, cam, LV.regions[m.a].id, world);
     const x0 = cam - 120, x1 = cam + C.W + 120;
     for (const mr of LV.mirages) if (mr.x1 > x0 && mr.x0 < x1) RF.Props.mirage(mr, e);
     if (opt.preview) {
@@ -44,8 +48,31 @@
     for (const h of LV.hazards) if (on(h, world) && h.x1 > x0 && h.x0 < x1) RF.Props.hazard(h, e, G.gates, false);
     for (const b of LV.bells) if (on(b, world) && b.x > x0 && b.x < x1) RF.Props.bell(b, e, G.gates, false);
     for (const l of LV.lanterns) if (on(l, world) && l.x > x0 && l.x < x1) RF.Props.lantern(l, e, G.got, false);
+    if (!e.noGhost) RF.Props.coins(e, x0, x1);
+    c.restore(); X.oy = 0;
     X.mute = false;
     return m;
+  }
+
+  // 水面倒影：画在水里、地面之前，所以只在缺口处露出来
+  function reflection(G, cam, rid, world) {
+    const wl = RG.R[rid].water; if (!wl) return;
+    const wy = Math.round(wl[world] / P), fy = Math.round(G.foot / P);
+    if (fy > wy + 1) return;
+    const c = X.ctx, ri = LV.regionAt(G.px);
+    const st = G.state === 'running' ? (G.onGround ? 'run' : 'air') : 'idle';
+    c.save();
+    c.beginPath(); c.rect(0, wy + 1, PW, PH + 16 - wy); c.clip();
+    c.translate(0, wy * 2 + 1); c.scale(1, -1);
+    RF.Traveler.draw(G.px - cam, G.foot, {
+      weather: G.weather[ri], region: ri, state: st, dist: G.px, night: world === 'night', vy: G.vy, landT: G.landT, t: e.t,
+      alpha: 0.32 * (G.playerAlpha === undefined ? 1 : G.playerAlpha), noGlow: true
+    });
+    c.restore();
+    // 倒影上几道水波亮线
+    c.fillStyle = world === 'day' ? 'rgba(255,255,255,0.35)' : 'rgba(200,215,255,0.3)';
+    const px = Math.round((G.px - cam) / P), d = wy - fy;
+    for (let k = 0; k < 3; k++) c.fillRect(px - 4 + ((Math.floor(e.t * 3) + k * 3) % 7) - 3, wy + 3 + d + k * 4, 4 + k, 1);
   }
 
   function player(G, cam) {
@@ -83,30 +110,45 @@
     const c = X.ctx;
     if (!RG.ready) { c.fillStyle = '#1d1a2b'; c.fillRect(0, 0, PW, PH); X.beginGlow(); X.present(0); return; }
     e.G = G; e.t = G.animT; e.reduce = G.reduceMotion; e.noGhost = !!opt.noGhost;
+    // 物件跟着鼓点轻轻一跳（每拍开头的一小段）
+    const bph = G.beat() % 1;
+    e.pulse = !e.reduce && (G.state === 'running' || G.state === 'intro') && bph < 0.14 ? 1 : 0;
     X.lowFx = G.lowFx;
     const cam = opt.camPx - SX;
     e.camPix = Math.round(cam / P);
+    // 镜头上下平滑跟随：人物爬高时画面跟着往下送一点；落地时轻轻一沉
+    const dt = e.lastT === null ? 0 : U.clamp(e.t - e.lastT, 0, 0.05); e.lastT = e.t;
+    const target = opt.title ? 0 : U.clamp((C.GROUND - G.foot) * 0.42, -20, 64);
+    e.camY += (target - e.camY) * (1 - Math.exp(-dt * 3.2));
+    e.dip *= Math.exp(-dt * 9);
+    e.camYpix = Math.round(e.camY / P + (G.reduceMotion ? 0 : e.dip));
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.imageSmoothingEnabled = false;
     X.beginGlow();
     const preview = !opt.noGhost;
     let m;
-    const cx = opt.title ? PW / 2 : Math.round((G.px - cam) / P), cy = opt.title ? 100 : Math.round((G.foot - 30) / P);
+    const cx = opt.title ? PW / 2 : Math.round((G.px - cam) / P), cy = opt.title ? 100 : Math.round((G.foot - 30) / P) + e.camYpix;
+    const np = !!opt.title;
     if (G.wipe) {
-      const k = U.clamp(G.wipe.t / C.SWITCH_WIPE, 0, 1), rr = U.ease(k) * 380;
-      scene(G, G.wipe.from, cam, { mute: true, preview });
-      c.save(); c.beginPath(); c.arc(cx, cy, Math.max(1, rr), 0, 7); c.clip();
-      m = scene(G, G.world, cam, { preview });
-      c.restore();
+      const k = U.clamp(G.wipe.t / C.SWITCH_WIPE, 0, 1), rr = U.ease(k) * 380 + 12;
+      scene(G, G.wipe.from, cam, { mute: true, preview, noPlayer: np });
+      // 另一面画进第二块画布，用抖动边的圆形遮罩叠上来
+      X.ctx = X.ctx2; X.ctx2.setTransform(1, 0, 0, 1, 0, 0); X.ctx2.imageSmoothingEnabled = false;
+      m = scene(G, G.world, cam, { preview, noPlayer: np });
+      X.ctx = c;
+      X.dissolve(cx, cy, rr);
+      c.drawImage(X.buf2, 0, 0);
       const col = G.world === 'night' ? [200, 215, 255] : [255, 230, 170];
       ring(cx, cy, rr, U.rgb(col, (1 - k) * (G.wipe.onBeat ? 1 : 0.7)));
       X.glow(cx, cy, 30, col, (1 - k) * (G.wipe.onBeat ? 0.8 : 0.4));
-    } else m = scene(G, G.world, cam, { preview });
+    } else m = scene(G, G.world, cam, { preview, noPlayer: np });
 
+    c.save(); c.translate(0, e.camYpix); X.oy = e.camYpix;
     if (!opt.title) player(G, cam);
-    if (G.onBeatFx > 0 && !opt.title) X.glow(cx, cy, 18, [255, 240, 200], G.onBeatFx * 0.5);
+    if (G.onBeatFx > 0 && !opt.title) X.glow(cx, cy - e.camYpix, 18, [255, 240, 200], G.onBeatFx * 0.5);
     RF.Particles.draw(c, e.camPix);
     if (!opt.title) keyTip(G, cam);
+    c.restore(); X.oy = 0;
     // 近处的天气（落在人物前面）与近景剪影
     RG.weatherFront(c, G.weather[LV.regionAt(cam + C.W / 2)], G.world, e.t, e.camPix, e.reduce);
     RG.foreground(c, LV.regions[m.a].id, G.world, e.t, e.camPix, e.reduce);
@@ -122,5 +164,5 @@
     X.present(G.world === 'night' ? 1.0 : 0.55, sx, sy);
   }
 
-  RF.Renderer = { draw };
+  RF.Renderer = { draw, kick(v) { e.dip = Math.max(e.dip, v); } };
 })();

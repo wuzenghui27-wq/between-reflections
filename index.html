@@ -21,7 +21,8 @@
     </div>
     <div id="weatherPill" class="glass" data-weather="clear" title="这一站的天气"><img id="weatherIcon" class="pxi" src="assets/ui/clear.png" alt=""><span id="weatherName">晴</span></div>
     <div id="lanternPill" class="glass" title="收集到的灯"><img class="pxi" src="assets/ui/lantern.png" alt=""><span id="lanternCount">0 / 0</span></div>
-    <div id="comboPill" class="glass hidden" title="连续踩在拍子上切换"><img class="pxi" src="assets/ui/beat.png" alt=""><span>踩拍</span><b id="comboNum">×2</b></div></div>
+    <div id="coinPill" class="glass" title="引路铜钱"><img class="pxi" src="assets/ui/coin.png" alt=""><span id="coinCount">0</span></div>
+    <div id="comboPill" class="glass" title="乐器层数（收灯、连续踩拍会加一层，失误掉一层）与踩拍连击"><img class="pxi" src="assets/ui/beat.png" alt=""><i class="pip on"></i><i class="pip"></i><i class="pip"></i><b id="comboNum"></b></div></div>
     <div id="journey" aria-hidden="true"><div class="track"></div><div class="stops"></div><div class="me"></div></div>
     <button class="glass round" data-act="pause" aria-label="暂停 (Esc)" title="暂停 (Esc)">
       <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5.5" y="4.5" width="3" height="11" rx="1.2"/><rect x="11.5" y="4.5" width="3" height="11" rx="1.2"/></svg>
@@ -61,7 +62,8 @@
         <li><span class="keys"><kbd>R</kbd></span><span>回到最近的检查点</span></li>
         <li><span class="keys"><kbd>Esc</kbd></span><span>暂停 / 继续</span></li>
       </ul>
-      <p class="note">旅人会自己向前走。同一个地方，白天和夜里的路不一样：江南白天水涨、夜里落潮；宫苑白天摆着货摊、夜里关上大门。前方淡色的轮廓是另一面的路和障碍，提前切过去。音乐的鼓点和障碍对齐，踩着拍子切换，光波会更亮，连着踩中会累积“踩拍”连击。每走完一站会按踩拍、收灯和失误盖一枚“甲乙丙丁”的印章。</p>
+      <p class="note">旅人会自己向前走。同一个地方，白天和夜里的路不一样：江南白天水涨、夜里落潮；宫苑白天摆着货摊、夜里关上大门。前方淡色的轮廓是另一面的路和障碍，提前切过去。音乐的鼓点和障碍对齐，踩着拍子切换，光波会更亮，连着踩中会累积“踩拍”连击。每走完一站会按踩拍、铜钱、收灯和失误盖一枚“甲乙丙丁”的印章。</p>
+      <p class="note">跳到空中再按 Shift 切换，能借力再弹起一次（每次离地只能借一次）。路上一串串铜钱标出了一条走得通的路线，连续吃到会奏出一段旋律。收灯和连续踩拍会给音乐加一层乐器，失误会掉一层。</p>
       <p class="note muted">脚下的小圆圈表示另一面此刻能站，叉号表示不能。沿途的灯可以收集，有的只在一面出现。每次出发，各站的天气都是随机的：下雨时旅人会撑伞，下雪时披上斗篷。</p>
       <button class="pill primary" data-act="back">好的</button>
     </div>
@@ -90,7 +92,7 @@
     <div class="end-block">
       <h2 class="big">旅程已抵达</h2>
       <p class="tagline">星星落进了圣湖里。</p>
-      <div class="stats glass"><div><b id="endLanterns">0</b><span>灯</span></div><div><b id="endCombo">0</b><span>最长连拍</span></div><div><b id="endFails">0</b><span>失误</span></div><div><b id="endTime">0</b><span>用时</span></div></div>
+      <div class="stats glass"><div><b id="endLanterns">0</b><span>灯</span></div><div><b id="endCoins">0</b><span>铜钱</span></div><div><b id="endCombo">0</b><span>最长连拍</span></div><div><b id="endFails">0</b><span>失误</span></div><div><b id="endTime">0</b><span>用时</span></div></div>
       <ol id="endGrades" class="grades"></ol>
       <button id="btnAgain" class="pill primary" data-act="again">再走一次</button>
       <div class="row">
@@ -119,6 +121,7 @@
 <script src="js/config.js"></script>
 <script src="js/util.js"></script>
 <script src="js/level.js"></script>
+<script src="js/coins.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/game.js"></script>
 <script src="js/atlas.js"></script>

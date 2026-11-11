@@ -309,7 +309,7 @@ img.pxi { image-rendering: pixelated; width: calc(9 * var(--px)); height: calc(9
 }
 .pill.primary:hover, .pill.primary:focus-visible { border-image-source: url(../assets/ui/btn_hover.png) !important; background: none !important; outline: none; }
 .pill.ghost:hover, .pill.ghost:focus-visible { border-image-source: url(../assets/ui/paper.png) !important; color: var(--ink) !important; outline: none; }
-#worldPill, #lanternPill, #weatherPill, #comboPill { padding: 0 calc(3 * var(--px)) 0 calc(1 * var(--px)) !important; height: calc(13 * var(--px)) !important; box-sizing: border-box; margin: 0 !important; gap: calc(2 * var(--px)) !important; }
+#worldPill, #lanternPill, #weatherPill, #comboPill, #coinPill { padding: 0 calc(3 * var(--px)) 0 calc(1 * var(--px)) !important; height: calc(13 * var(--px)) !important; box-sizing: border-box; margin: 0 !important; gap: calc(2 * var(--px)) !important; }
 .hud-left { gap: calc(2 * var(--px)) !important; align-items: center; }
 #comboPill { display: flex; align-items: center; color: #fff2c0; font-weight: 700; font-size: calc(15 * var(--u)); }
 #comboPill b { font-size: calc(18 * var(--u)); letter-spacing: 0.04em; }
@@ -351,3 +351,9 @@ button.round { width: calc(13 * var(--px)) !important; height: calc(13 * var(--p
 .g-mark { width: calc(8 * var(--px)); height: calc(8 * var(--px)); display: grid; place-items: center; background: #c8402e; color: #fff2dc; font-size: calc(18 * var(--u)); box-shadow: 0 0 0 var(--px) #f2e8cc; text-shadow: none; }
 .g-mark.off { background: #3a3250; }
 .stats { gap: calc(26 * var(--u)) !important; }
+
+/* v0.6：铜钱、乐器层小格 */
+#coinPill { display: flex; align-items: center; color: #ffe8a8; font-weight: 700; font-size: calc(15 * var(--u)); font-variant-numeric: tabular-nums; }
+#comboPill .pip { width: calc(2 * var(--px)); height: calc(4 * var(--px)); background: #3a3250; box-shadow: 0 0 0 calc(0.5 * var(--px)) #1b1720; display: block; }
+#comboPill .pip.on { background: #ffd27a; }
+#comboPill b:empty { display: none; }
