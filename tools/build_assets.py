@@ -26,12 +26,7 @@ def build_backgrounds(src):
         for y in range(h // 4):
             for x in range(w // 4):
                 sp[x, y] = px[x * 4 + 2, y * 4 + 2]     # 取每格中心，避开格边
-        # 让像素画更“干净”：轻微锐化、提一点对比和饱和，再压成 40 色（不抖动），去掉照片式的柔和渐变
-        small = small.filter(ImageFilter.UnsharpMask(radius=1.2, percent=85, threshold=1))
-        small = ImageEnhance.Contrast(small).enhance(1.08)
-        small = ImageEnhance.Color(small).enhance(1.1)
-        small = small.quantize(colors=40, method=Image.Quantize.MEDIANCUT, kmeans=3,
-                               dither=Image.Dither.NONE)   # 存成调色板 PNG，体积小
+        # 原样还原：每格一个像素，不锐化、不调色、不压色（v1.2 起；之前压成 40 色会丢细节）
         name = os.path.basename(f).split('_')[1] + '.png'   # IMG_8536_pixel.png → 8536.png
         small.save(os.path.join(OUT_BG, name), optimize=True)
         print('bg', name, small.size)

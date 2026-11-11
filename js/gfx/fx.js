@@ -58,7 +58,17 @@
         o.fillStyle = '#0c0a14'; o.fillRect(0, 0, X.outW, X.outH);
         o.setTransform(1, 0, 0, 1, Math.round(shx * k), Math.round(shy * k));
       }
-      o.drawImage(X.buf, 0, 0, X.outW, X.outH);
+      // 屏幕宽度往往不是 320 的整数倍，直接放大会让一格有的宽 5 有的宽 6，画面发糊、移动时闪。
+      // 先按整数倍放大到中间画布（每格一样大），剩下的一点点再平滑缩放，边缘清楚又不抖。
+      const n = Math.ceil(X.outW / PW - 0.001);
+      if (n * PW === X.outW) o.drawImage(X.buf, 0, 0, X.outW, X.outH);
+      else {
+        if (!X.mid || X.mid.width !== PW * n) { X.mid = canvas(PW * n, PH * n); X.midc = X.mid.getContext('2d'); X.midc.imageSmoothingEnabled = false; }
+        X.midc.imageSmoothingEnabled = false;
+        X.midc.drawImage(X.buf, 0, 0, PW * n, PH * n);
+        o.imageSmoothingEnabled = true; o.imageSmoothingQuality = 'high';
+        o.drawImage(X.mid, 0, 0, X.outW, X.outH);
+      }
       o.imageSmoothingEnabled = true;
       o.globalCompositeOperation = 'lighter';
       o.globalAlpha = glowStrength;

@@ -21,9 +21,24 @@
   };
   const ALL_BG = [...new Set(Object.values(R).flatMap(r => Object.values(r.bg).flat()))];
 
+  // ------------------------------------------------------------ 背景色调（js/bgtone.js）：前景往背景的颜色上靠
+  const TONE = RF.BGTONE || {};
+  const meanHex = list => {
+    const cs = list.map(c => U.hex(c)).filter(Boolean);
+    if (!cs.length) return null;
+    const m = [0, 1, 2].map(i => Math.round(cs.reduce((a, c) => a + c[i], 0) / cs.length));
+    return '#' + m.map(v => v.toString(16).padStart(2, '0')).join('');
+  };
+  const REGTONE = {};
+  for (const id in R) {
+    const ids = [...new Set(Object.values(R[id].bg).flat())];
+    REGTONE[id] = { low: meanHex(ids.map(b => TONE[b] && TONE[b].low).filter(Boolean)), hor: meanHex(ids.map(b => TONE[b] && TONE[b].hor).filter(Boolean)) };
+  }
+
   // ------------------------------------------------------------ 载入
   const IMG = {}, NIGHT = {};
-  let sprites = null, spritesNight = null, spritesDim = null;
+  let sprites = null, spritesNight = null, spritesDim = null, curRid = null;
+  const spritesReg = {};
   function load(done) {
     const list = ALL_BG.map(id => ['bg/' + id + '.png', id]).concat([['sprites.png', '__sprites']]);
     let left = list.length;
@@ -35,12 +50,21 @@
             sprites = im;
             spritesNight = tint(im, '#7684c0');
             spritesDim = tint(im, '#aab2d8');
+            // 每站的人物与道具带一点这一站背景的色温
+            for (const id in R) if (REGTONE[id].hor) spritesReg[id] = mixTint(im, REGTONE[id].hor, 0.14);
           } else { IMG[id] = im; NIGHT[id] = X.nightOf(im); }
         }
         if (--left === 0) { buildTiles(); RF.Regions.ready = true; done(); }
       };
       im.src = 'assets/' + file;
     });
+  }
+  // 往某个颜色上靠 a（0~1），保留明暗与透明
+  function mixTint(im, col, a) {
+    const c = X.canvas(im.width, im.height), x = c.getContext('2d');
+    x.drawImage(im, 0, 0);
+    x.globalCompositeOperation = 'source-atop'; x.globalAlpha = a; x.fillStyle = col; x.fillRect(0, 0, c.width, c.height);
+    return c;
   }
   function tint(im, col) {
     const c = X.canvas(im.width, im.height), x = c.getContext('2d');
@@ -107,13 +131,15 @@
   }
   function buildTiles() {
     for (const id in R) {
-      const k = R[id].tile;
-      if (!TILE[k]) { const d = makeTile(k); TILE[k] = { day: d, night: tint(d, '#6a78b4') }; }
+      // 地面花纹往这一站背景下半截的颜色上靠，和画面成一体
+      const base = makeTile(R[id].tile), lo = REGTONE[id].low;
+      const d = lo ? mixTint(base, lo, 0.3) : base;
+      TILE[id] = { day: d, night: tint(d, '#6a78b4') };
     }
   }
   function pattern(ctx, rid, world) {
     const key = rid + world;
-    if (!PAT[key]) PAT[key] = ctx.createPattern(TILE[R[rid].tile][world], 'repeat');
+    if (!PAT[key]) PAT[key] = ctx.createPattern(TILE[rid][world], 'repeat');
     return PAT[key];
   }
 
@@ -143,14 +169,19 @@
     }
     return { a: LV.regionAt(centre), b: null, t: 0 };
   }
+  const shownBg = {};     // 每站当前显示的背景图（水面倒影用）
   function backdrop(ctx, G, world, centre) {
     const m = regionMix(centre);
     const A = bgAt(G, m.b === null ? centre : Math.min(centre, LV.regions[m.b].x0 - 1));
+    shownBg[A.rid] = A.fade > 0.5 && A.next ? A.next : A.cur;
+    curRid = A.rid;
     drawImg(ctx, A.cur, world, 1);
     if (A.next && A.fade > 0) drawImg(ctx, A.next, world, A.fade);
     if (m.b !== null && m.t > 0) {
       const B = bgAt(G, LV.regions[m.b].x0 + 1);
       drawImg(ctx, B.cur, world, m.t);
+      shownBg[B.rid] = B.cur;
+      if (m.t > 0.5) curRid = B.rid;
     }
     return m;
   }
@@ -162,7 +193,17 @@
     if (cfg.water) {
       const wy = Math.round(cfg.water[world] / P);
       const col = cfg.waterCol[world === 'day' ? 0 : 1];
-      ctx.fillStyle = col; ctx.fillRect(0, wy, PW, PH + 16 - wy);
+      // 水面倒映这一站的背景：把水线以上的画面上下翻过来，再罩一层水色
+      const id = shownBg[rid], im = id && (world === 'night' ? NIGHT[id] : IMG[id]);
+      const hgt = PH + 16 - wy, s = wy + (X.oy || 0);
+      if (im && s - hgt > -hgt) {
+        ctx.save(); ctx.translate(0, 2 * wy); ctx.scale(1, -1);
+        const sy = Math.max(0, s - hgt), sh = s - sy;
+        if (sh > 0) ctx.drawImage(im, 0, sy, PW, sh, 0, wy - sh, PW, sh);
+        ctx.restore();
+        ctx.globalAlpha = a * 0.32; ctx.fillStyle = col; ctx.fillRect(0, wy, PW, hgt);
+        ctx.globalAlpha = a;
+      } else { ctx.fillStyle = col; ctx.fillRect(0, wy, PW, hgt); }
       ctx.fillStyle = 'rgba(0,0,10,0.25)'; ctx.fillRect(0, wy + 12, PW, PH + 16);
       if (cfg.water.frozen === world) {
         ctx.fillStyle = '#c8e0f4'; ctx.fillRect(0, wy, PW, 1);
@@ -175,7 +216,11 @@
         }
       }
     } else {
-      const [c0, c1] = cfg.abyss;
+      // 深谷：从这一站背景下半截的颜色渐暗下去
+      const lo = REGTONE[rid].low ? U.hex(REGTONE[rid].low) : null;
+      let top0 = lo ? U.mix(lo, U.hex(cfg.abyss[0]), 0.4) : U.hex(cfg.abyss[0]);
+      if (world === 'night') top0 = U.mix(top0, U.hex(cfg.abyss[1]), 0.6);
+      const c0 = '#' + top0.map(v => Math.round(v).toString(16).padStart(2, '0')).join(''), c1 = cfg.abyss[1];
       const top = 150;
       for (let y = top; y < PH + 16; y += 2) {
         ctx.fillStyle = U.rgb(U.mix(U.hex(c0), U.hex(c1), (y - top) / (PH - top)), world === 'day' ? 1 : 1);
@@ -331,6 +376,6 @@
 
   RF.Regions = {
     R, load, foreground, backdrop, regionMix, lowland, pattern, weatherBack, weatherFront, bgAt,
-    get sprites() { return sprites; }, get spritesNight() { return spritesNight; }, get spritesDim() { return spritesDim; }
+    get sprites() { return (curRid && spritesReg[curRid]) || sprites; }, get spritesNight() { return spritesNight; }, get spritesDim() { return spritesDim; }
   };
 })();
