@@ -5,7 +5,7 @@
   const C = RF.CFG, B = C.BEAT_PX, G0 = C.GROUND;
 
   const L = {
-    solids: [], hazards: [], bells: [], lanterns: [], mirages: [],
+    solids: [], hazards: [], bells: [], lanterns: [], mirages: [], ferries: [],
     checkpoints: [], regions: [], texts: [], endX: 0
   };
   let x = 0, gy = G0, gateN = 0;
@@ -26,13 +26,24 @@
     x += beats * B;
   };
   const gap = beats => { x += beats * B; };
+  // 渡船：只在白天浮着。人踩上去才开，载着人往前漂 travel 拍后靠岸停下。
+  // 船身占 len 拍，后面留出 travel 拍的水面给它走。
+  function ferry(len, travel, y) {
+    const s = seg(len, 'day', 'boat', y === undefined ? G0 + 2 : y);
+    s.ferry = true; s.bx0 = s.x0; s.bx1 = s.x1; s.travel = travel * B; s.on = false; s.p0 = 0;
+    L.ferries.push(s);
+    x += (len + travel) * B;
+    return s;
+  }
   const height = y => { gy = y; };
   const at = o => x + o * B;
+  const atX = (x0, o) => x0 + o * B;
 
   // ------------------------------------------------------------ 物件
   const HZ = {
     stall: [56, 100], door: [40, 132], gate: [36, 140], drum: [60, 92], beacon: [40, 112],
-    block: [32, 28], rock: [40, 32], shard: [40, 28], mani: [44, 36], gust: [40, 124], yak: [70, 80]
+    block: [32, 28], rock: [40, 32], shard: [40, 28], mani: [44, 36], gust: [40, 124], yak: [70, 80],
+    arch: [60, 126]        // 低石拱桥：站在船上会撞到桥洞顶，落潮后从石阶上能走过去
   };
   function haz(o, w, kind, y) {
     const [wd, ht] = HZ[kind];
@@ -66,30 +77,31 @@
   only(3, 'night', 'steps', G0 + 6);
   lantern(-1.5, 'night', 30);
   walk(4);
-  text(-3.5, '白天水高，乌篷船才浮得起来。再按 Shift 回到白天。', 5, 'switch2');
-  only(3, 'day', 'boat', G0 + 2);
+  text(-3.5, '白天水高，乌篷船浮在岸边。切回白天跳上船，船就会载你过河。', 6, 'switch2');
+  ferry(2, 2);
   walk(4);
   lantern(-2, 'night');                           // 只在夜里亮的灯：多留一会儿夜里才拿得到
   only(3, 'night', 'steps', G0 + 6);
   walk(3);
-  only(2.5, 'day', 'boat', G0 + 2);
-  lantern(-1.2, 'day', 40);
+  { const f = ferry(1.5, 2); L.lanterns.push({ i: L.lanterns.length, x: f.bx0 + 2.6 * B, y: G0 - 70, w: 'day' }); }
   walk(3);
   only(3, 'night', 'steps', G0 + 6);
   walk(3);
   cp('night');
   text(-2, '看前方淡淡的轮廓：那是另一面的路。', 4);
-  only(2, 'day', 'boat', G0 + 2);
+  ferry(1.5, 1.5);
   walk(2);
   only(2, 'night', 'steps', G0 + 6);
-  walk(1.5);
-  only(2, 'day', 'boat', G0 + 2);
-  lantern(-1, 'day', 30);
-  walk(1.5);
-  only(3, 'night', 'steps', G0 + 6);
-  walk(1);
-  only(2, 'day', 'boat', G0 + 2);
-  walk(1);
+  walk(2);
+  // 低桥：白天水涨，站在船上过不去；切到夜里落潮，从桥洞下的石阶走，再跳起来切回白天落回船上
+  text(-1.5, '前面桥洞太低。切到夜里从石阶下走，再跳起来切回白天，落回船上。', 7, 'bridge');
+  {
+    const f = ferry(1.5, 6.5), x0 = f.bx0;
+    L.hazards.push({ x0: atX(x0, 4.4) - 30, x1: atX(x0, 4.4) + 30, y0: G0 - 150, y1: G0 - 24, w: 'both', kind: 'arch' });
+    L.solids.push({ x0: atX(x0, 3.0), x1: atX(x0, 5.6), y: G0 + 40, w: 'night', kind: 'steps' });
+    L.lanterns.push({ i: L.lanterns.length, x: atX(x0, 6.4), y: G0 - 60, w: 'day' });
+  }
+  walk(2);
   split(3, { kind: 'boat', y: G0 + 2 }, { kind: 'steps', y: G0 + 6 });   // 两面都能走：喘口气
   lantern(-1.5, 'night', 30);
   walk(5);

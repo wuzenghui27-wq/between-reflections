@@ -60,7 +60,7 @@
     const wy = Math.round(wl[world] / P), fy = Math.round(G.foot / P);
     if (fy > wy + 1) return;
     const c = X.ctx, ri = LV.regionAt(G.px);
-    const st = G.state === 'running' ? (G.onGround ? 'run' : 'air') : 'idle';
+    const st = G.state === 'running' ? (G.riding ? 'idle' : G.onGround ? 'run' : 'air') : 'idle';
     c.save();
     c.beginPath(); c.rect(0, wy + 1, PW, PH + 16 - wy); c.clip();
     c.translate(0, wy * 2 + 1); c.scale(1, -1);
@@ -77,7 +77,7 @@
 
   function player(G, cam) {
     const ri = LV.regionAt(G.px);
-    const st = G.state === 'running' ? (G.onGround ? 'run' : 'air') : (G.state === 'failing' && !G.onGround ? 'air' : 'idle');
+    const st = G.state === 'running' ? (G.riding ? 'idle' : G.onGround ? 'run' : 'air') : (G.state === 'failing' && !G.onGround ? 'air' : 'idle');
     RF.Traveler.draw(G.px - cam, G.foot, {
       weather: G.weather[ri], region: ri, state: st, dist: G.px, alpha: G.playerAlpha, night: G.world === 'night',
       vy: G.vy, landT: G.landT, t: e.t

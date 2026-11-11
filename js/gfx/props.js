@@ -54,15 +54,34 @@
         }
         break;
       }
-      case 'boat': {       // 乌篷船
-        const bob = e.reduce ? 0 : Math.round(Math.sin(e.t * 1.8 + s.x0) * 0.6);
-        const yy = y + bob, wood = night ? '#4a3a40' : '#6a4a32', dark = night ? '#2a2028' : '#3e2a1e';
-        r(x0 - 1, yy, w + 2, 1, night ? '#7a6a6a' : '#a07a52');
+      case 'boat': {       // 乌篷船：船尾有船夫撑篙，载人时随拍子撑一下
+        const moving = !!s.moving;
+        const bob = e.reduce ? 0 : Math.round(Math.sin(e.t * (moving ? 3.2 : 1.8) + (s.bx0 || s.x0) * 0.01) * 0.6);
+        const yy = y + bob, wood = night ? '#4a3a40' : '#6a4a32', dark = night ? '#2a2028' : '#3e2a1e', rim = night ? '#7a6a6a' : '#a07a52';
+        // 船尾的水波（开船时）
+        if (moving && !e.reduce) {
+          const wc = night ? 'rgba(190,205,255,0.5)' : 'rgba(255,255,255,0.6)';
+          for (let k = 0; k < 4; k++) {
+            const ph = (e.t * 2 + k * 0.25) % 1, wx = x0 - 2 - Math.round(ph * 22), ww = 3 + Math.round(ph * 6);
+            r(wx, yy + 4 + (k % 2), ww, 1, wc);
+          }
+          r(x1, yy + 3, 2, 1, wc); r(x1 + 1, yy + 2, 1, 1, wc);     // 船头破开的浪
+        }
+        r(x0 - 1, yy, w + 2, 1, rim);
         r(x0, yy + 1, w, 2, wood); r(x0 + 2, yy + 3, w - 4, 2, dark); r(x0 + 5, yy + 5, w - 10, 1, dark);
-        const cx0 = x1 - Math.round(w * 0.45), cx1 = x1 - 3;    // 船尾的乌篷
-        r(cx0, yy - 5, cx1 - cx0, 5, night ? '#1a1820' : '#2a2a30');
-        r(cx0 + 1, yy - 6, cx1 - cx0 - 2, 1, night ? '#1a1820' : '#2a2a30');
-        for (let k = cx0 + 2; k < cx1; k += 3) r(k, yy - 5, 1, 4, night ? '#2e2c38' : '#46464e');
+        r(x0 - 2, yy - 1, 2, 1, rim); r(x1, yy - 1, 2, 1, rim);   // 两头微微翘起
+        const cx0 = x0 + Math.round(w * 0.38), cx1 = x0 + Math.round(w * 0.74);    // 乌篷
+        const roof = night ? '#1a1820' : '#2a2a30', rib = night ? '#2e2c38' : '#46464e';
+        r(cx0, yy - 5, cx1 - cx0, 5, roof); r(cx0 + 1, yy - 6, cx1 - cx0 - 2, 1, roof); r(cx0 + 2, yy - 7, cx1 - cx0 - 4, 1, roof);
+        for (let k = cx0 + 2; k < cx1; k += 3) r(k, yy - 6, 1, 5, rib);
+        // 船夫：斗笠、短褂，手里一根竹篙
+        const bx = x1 - 4, push = moving && !e.reduce ? (e.G.beat() % 1) : 0.6;
+        const hat = night ? '#8a7a5a' : '#d8c088', coat = night ? '#2a3448' : '#3a5a7a', skin = night ? '#a88a7a' : '#e0b08a';
+        r(bx - 1, yy - 4, 3, 4, coat); r(bx, yy - 6, 1, 2, skin);
+        r(bx - 2, yy - 7, 5, 1, hat); r(bx - 1, yy - 8, 3, 1, hat);
+        const lean = Math.round(push * 4);                       // 竹篙从高处斜插进水里
+        const pc = night ? '#6a6a50' : '#b8a060';
+        for (let k = 0; k < 14; k++) r(bx + 2 + Math.round((k / 14) * (3 - lean)), yy - 9 + k, 1, 1, pc);
         break;
       }
       case 'firefly': {    // 萤火连成的路
@@ -166,6 +185,32 @@
     if (h.kind === 'beacon') {
       spr('beacon' + (Math.floor(e.t * 6) % 2), cx, y1, night);
       X.glow(cx, y0 + 3, 16, [255, 150, 60], 0.7);
+      return;
+    }
+    if (h.kind === 'arch') {    // 江南石拱桥：拱起的桥面、栏杆、低矮的桥洞，两侧小洞
+      const st = night ? '#5a6078' : '#a4a49a', st2 = night ? '#3e4258' : '#7a7a70', hi = night ? '#7a82a0' : '#d0d0c4', moss = night ? '#2e3a40' : '#6a7a52';
+      const cxp = Math.round(cx), half = 30, base = y1 + 16;
+      const deckAt = x => { const k = (x - cxp) / half; return y0 + Math.round(12 * k * k); };
+      const hole = (x, hw, top) => { const k = (x - cxp) / hw; return Math.abs(k) < 1 ? Math.round(top + (base - top) * (1 - Math.sqrt(1 - k * k))) : null; };
+      for (let x = cxp - half; x <= cxp + half; x++) {
+        const d = deckAt(x);
+        let open = hole(x, 13, y1);
+        const side = Math.abs(x - cxp) - 21;                         // 两侧的小洞
+        if (open === null && Math.abs(side) < 4) { const k = side / 4; open = Math.round(base - 7 + 7 * (1 - Math.sqrt(1 - k * k))); }
+        const bottom = open === null ? base + 4 : open;
+        r(x, d + 2, 1, bottom - d - 2, st);
+        if (open !== null) r(x, open - 1, 1, 1, st2);
+        r(x, d, 1, 2, hi);                                          // 桥面
+        if ((x - cxp) % 5 === 0) r(x, d - 4, 1, 4, hi);              // 栏杆柱
+        r(x, d - 4, 1, 1, hi);
+        if ((x + Math.floor(d / 4)) % 7 === 0) r(x, d + 4, 1, Math.max(0, bottom - d - 6), st2);   // 竖向砌缝
+      }
+      for (let yy = y0 + 8; yy < base; yy += 4)                     // 横向砌缝（只画在桥身上）
+        for (let x = cxp - half + 2; x <= cxp + half - 2; x++) {
+          const o = hole(x, 13, y1);
+          if (yy > deckAt(x) + 3 && (o === null || yy < o - 1) && x % 2) r(x, yy, 1, 1, st2);
+        }
+      for (let x = cxp - half; x <= cxp + half; x += 3) if (U.hash(x, 51) > 0.6) r(x, base + 1 + Math.floor(U.hash(x, 52) * 3), 1, 2, moss);   // 水线上的青苔
       return;
     }
     if (h.kind === 'gust') {   // 雪旋风：几圈转动的雪粒

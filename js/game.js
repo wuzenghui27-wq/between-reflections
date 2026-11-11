@@ -59,6 +59,14 @@
   };
   RF.Q = Q;
 
+  // 渡船：被踩上之后跟着路程往前漂，漂满 travel 就停
+  function placeFerry(f, px) {
+    const off = f.on ? Math.max(0, Math.min(f.travel, px - f.p0)) : 0;
+    f.x0 = f.bx0 + off; f.x1 = f.bx1 + off; f.off = off;
+    f.moving = f.on && off < f.travel;
+  }
+  RF.placeFerry = placeFerry;
+
   function createGame() {
     const handlers = {};
     const G = {
@@ -92,6 +100,11 @@
       for (const b of LV.bells) { if (b.x >= cp.x) delete G.gates[b.id]; else G.gates[b.id] = true; }
       for (const l of LV.lanterns) { if (l.x >= cp.x) delete G.got[l.i]; }
       for (const c of LV.coins) { if (c.x >= cp.x) delete G.cgot[c.i]; }
+      for (const f of LV.ferries) {          // 检查点之后的船回到岸边，之前的停在对岸
+        if (f.bx0 >= cp.x - 1) { f.on = false; f.p0 = 0; } else { f.on = true; f.p0 = f.bx0 - f.travel - 1e4; }
+        placeFerry(f, cp.x);
+      }
+      G.riding = false;
       G.coinRun = 0; G.lastCoin = -9;
       G.wipe = null; G.playerAlpha = 1; G.pendingSwitch = false; G.flashes = {};
       G.regionIndex = LV.regionAt(G.px);
@@ -248,6 +261,7 @@
       if (toEnd < 300) sp = C.SPEED * Math.max(0.05, toEnd / 300);
       G.px = Math.min(LV.endX, G.px + sp * dt);
       G.phase += sp * dt * 0.075;
+      for (const f of LV.ferries) if (f.on) placeFerry(f, G.px);
       const s = Q.solidInBody(G.world, G.px, G.foot);
       if (s) {
         if (G.foot - s.y <= C.STEP_UP && G.vy >= 0) { G.foot = s.y; G.onGround = true; G.vy = 0; }
@@ -277,6 +291,13 @@
           if (land !== null) { G.foot = land; G.vy = 0; G.onGround = true; G.landT = 0; G.emit('land'); }
           else G.foot = nf;
         } else G.foot = nf;
+      }
+      // 踩上船：船开始载人
+      G.riding = false;
+      if (G.onGround && G.world === 'day') for (const f of LV.ferries) {
+        if (G.px < f.x0 - C.HALF_W || G.px > f.x1 + C.HALF_W || Math.abs(G.foot - f.y) > 0.5) continue;
+        if (!f.on) { f.on = true; f.p0 = G.px; placeFerry(f, G.px); G.emit('board', f); }
+        if (f.moving) G.riding = true;
       }
       if (G.foot > C.FALL_LIMIT) return fail('fall');
       // 5) 障碍 / 门
@@ -365,15 +386,17 @@
     };
 
     // ------------------------------------------------------------ 供自动验证使用的快照
-    const KEYS = ['state', 'px', 'foot', 'vy', 'onGround', 'coyote', 'jumpBuf', 'world', 'cpIndex', 'pendingSwitch', 'airT', 'hopUsed'];
+    const KEYS = ['state', 'px', 'foot', 'vy', 'onGround', 'coyote', 'jumpBuf', 'world', 'cpIndex', 'pendingSwitch', 'airT', 'hopUsed', 'riding'];
     G.snapshot = function () {
       const s = {}; for (const k of KEYS) s[k] = G[k];
       s.gates = Object.assign({}, G.gates); s.got = Object.assign({}, G.got);
+      s.ferries = LV.ferries.map(f => [f.on, f.p0]);
       return s;
     };
     G.restore = function (s) {
       for (const k of KEYS) G[k] = s[k];
       G.gates = Object.assign({}, s.gates); G.got = Object.assign({}, s.got);
+      LV.ferries.forEach((f, i) => { f.on = s.ferries[i][0]; f.p0 = s.ferries[i][1]; placeFerry(f, G.px); });
     };
     G.physicsOnly = function (dt) {   // 不触发界面事件的快速模拟
       if (G.state !== 'running') return;

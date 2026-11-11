@@ -77,6 +77,8 @@
     PT.sparks(c.x, c.y, run >= 4 ? '#fff2b0' : '#ffd27a', run >= 4 ? 6 : 4);
     setCoins();
   });
+  // 上船：木头一响，溅点水
+  G.on('board', f => { A.sfx('board'); PT.splash(G.px - 20, f.y + 8, 'rgba(230,240,255,0.9)'); RF.Renderer.kick(1.5); });
   // 空中翻面借力
   G.on('hop', () => {
     A.sfx('hop');
@@ -123,7 +125,7 @@
   G.on('region', reg => { showChapter(reg); A.sfx('region'); setWeather(); });
   G.on('hint', (t, d, tag) => {
     showHint(t, d);
-    const key = tag === 'switch' || tag === 'switch2' || tag === 'hop' ? 'k_shift' : tag === 'jump' ? 'k_space' : null;
+    const key = tag === 'switch' || tag === 'switch2' || tag === 'hop' || tag === 'bridge' ? 'k_shift' : tag === 'jump' ? 'k_space' : null;
     G.keyTip = key && !touchUI ? { key, t: Math.min(d, 3.5) } : null;
   });
   G.on('switched', () => { if (G.keyTip && G.keyTip.key === 'k_shift') G.keyTip.t = 0; });
