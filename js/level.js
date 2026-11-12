@@ -65,12 +65,12 @@
   }
   // 昼动夜静：这些踏板白天跟着拍子动（period 拍一个来回），夜里停在那一刻。都在两面存在。
   //   水车：n 块踏板绕 (cx, cy) 转，半径 r；秋千：从 (cx, cy) 垂下 r 长的绳，摆幅 amp 弧度；浮木：在 cx 左右漂 amp。
-  function wheelAt(cx, cy, r, n, period, hw) {
+  function wheelAt(cx, cy, r, n, period, hw, style) {
     const g = L.movers.length;
-    for (let k = 0; k < n; k++) L.movers.push({ kind: 'wheel', cx, cy, r, period, phase: k / n * Math.PI * 2, hw: hw || 22, group: g, w: 'both', x0: 0, x1: 0, y: 0 });
+    for (let k = 0; k < n; k++) L.movers.push({ kind: 'wheel', style, cx, cy, r, period, phase: k / n * Math.PI * 2, hw: hw || 22, group: g, w: 'both', x0: 0, x1: 0, y: 0 });
   }
   const swingAt = (cx, cy, r, amp, period, phase, hw) => L.movers.push({ kind: 'swing', cx, cy, r, amp, period, phase: phase || 0, hw: hw || 26, w: 'both', x0: 0, x1: 0, y: 0 });
-  const driftAt = (cx, cy, amp, period, phase, hw) => L.movers.push({ kind: 'drift', cx, cy, amp, period, phase: phase || 0, hw: hw || 38, w: 'both', x0: 0, x1: 0, y: 0 });
+  const driftAt = (cx, cy, amp, period, phase, hw, style) => L.movers.push({ kind: 'drift', style, cx, cy, amp, period, phase: phase || 0, hw: hw || 38, w: 'both', x0: 0, x1: 0, y: 0 });
   // 编钟应和：编钟先敲一小节（bounds 是相对这一小节开头的拍数），下一小节同样的拍子上就是要切换的地方。
   // 每两次切换之间放一个“另一面才有”的障碍，所以照着编钟的节奏切，正好躲开。
   function callResp(bounds, w0) {
@@ -135,7 +135,7 @@
     only(3, 'night', 'steps', G0 + 6);
     lantern(-1.5, 'night', 30);
     walk(4);
-    text(-3.5, '白天水高，乌篷船浮在岸边。切回白天跳上船，船就会载你过河。', 6, 'switch2');
+    text(-3.5, '端午赛龙舟：白天水高，龙舟停在岸边。切回白天跳上去，鼓一响它就载你过河。', 6, 'switch2');
     ferry(2, 2);
     walk(4);
     lantern(-2, 'night');                           // 只在夜里亮的灯：多留一会儿夜里才拿得到
@@ -226,6 +226,15 @@
     { const x0 = x; gap(3.4); swingAt(x0 + 1.0 * B, G0 - 160, 130, 0.7, 4, Math.PI, 28); swingAt(x0 + 2.4 * B, G0 - 160, 130, 0.7, 4, 0, 28); }
     walk(3);
     lantern(-1.5, 'night', 40);
+    walk(2);
+    // ---- 元宵走马灯：白天灯转马走，夜里灯停；挂在横杆上的踏板跟着停成台阶
+    cp('day');
+    walk(3);
+    text(-2.5, '元宵走马灯：白天灯一直转，夜里就停住。等踏板转到脚下的高度再切到夜里。', 7, 'wheel');
+    walk(1);
+    { const x0 = x; gap(3.5); wheelAt(x0 + 1.75 * B, G0 - 30, 84, 4, 8, 24, 'lamp'); }
+    walk(3);
+    lantern(-1.5, 'both', 40);
     walk(2);
     // ---- 月洞门：穿过就自动翻面，进门前要先想好出门是哪一面
     cp('day');
@@ -333,11 +342,11 @@
     // ---- 浮木：白天在湖上漂来漂去，夜里湖面一静它也停住
     cp('day');
     walk(2);
-    text(-1.5, '浮木白天漂来漂去，夜里湖面一静，它也停住。等它漂到正中再切。', 6, 'drift');
+    text(-1.5, '重阳放风筝：白天风大，风筝在湖上飘来飘去；夜里风一停它就定住。等它飘到正中再切。', 6, 'drift');
     walk(1);
-    { const x0 = x; gap(2.5); driftAt(x0 + 1.25 * B, G0 + 16, 80, 4, 0, 40); }
+    { const x0 = x; gap(2.5); driftAt(x0 + 1.25 * B, G0 + 8, 80, 4, 0, 40, 'kite'); }
     walk(2);
-    { const x0 = x; gap(2.5); driftAt(x0 + 1.25 * B, G0 + 16, 80, 3, Math.PI / 2, 40); }
+    { const x0 = x; gap(2.5); driftAt(x0 + 1.25 * B, G0 + 8, 80, 3, Math.PI / 2, 40, 'kite'); }
     walk(3);
     cp('day');
     text(-2.5, '跳到空中再切换昼夜，能借力多跳一段。', 5, 'hop');
@@ -383,8 +392,9 @@
     walk(2);
     haz(-1, 'both', 'block');
     lantern(-1, 'both', 70);
+    text(-1, '蹴鞠：夜里城头的风流眼上卡着一只鞠，碰一下把它踢向城门，门就开了。', 5);
     walk(2);
-    bellGate(-1.6, 'night', -0.3, 'gong');
+    bellGate(-1.6, 'night', -0.3, 'cuju');
     walk(2);
     haz(-1, 'night', 'beacon');
     walk(1.5);
@@ -479,6 +489,15 @@
     haz(-1, 'both', 'shard');
     walk(5);
     lantern(-3, 'night', 50);
+    // ---- 冰嬉：冰床白天被人拉着来回滑，夜里拉床的人歇下，床就停在冰河上
+    cp('day');
+    walk(2);
+    text(-1.5, '冰嬉：冰床白天在冰河上来回滑，夜里就停下。等它滑到正中再切到夜里。', 6, 'drift');
+    walk(1);
+    { const x0 = x; gap(2.5); driftAt(x0 + 1.25 * B, G0 + 16, 80, 4, 0, 40, 'sled'); }
+    walk(2);
+    { const x0 = x; gap(2.5); driftAt(x0 + 1.25 * B, G0 + 16, 80, 3, Math.PI / 2, 40, 'sled'); }
+    walk(3);
 
     // ============================================================ 6 青藏高原与雪域圣湖：终章
     region('tibet', '终点', '雪域圣湖', '天上的星，落进湖里', { clear: 6, snow: 4 }, 0.9);
@@ -506,6 +525,15 @@
     haz(-0.7, 'both', 'mani');
     walk(1.5);
     gap(0.7);
+    walk(3);
+    // ---- 中秋河灯：莲花灯白天随波漂，夜里湖面一静就停住，连成过湖的路
+    cp('day');
+    walk(2);
+    text(-1.5, '中秋放河灯：莲花灯白天随水漂，夜里湖面一静就停住。看准了让它停在脚下。', 6, 'drift');
+    walk(1);
+    { const x0 = x; gap(2.5); driftAt(x0 + 1.25 * B, G0 + 16, 80, 4, 0, 40, 'hedeng'); }
+    walk(1.5);
+    { const x0 = x; gap(2.5); driftAt(x0 + 1.25 * B, G0 + 16, 80, 3, Math.PI / 2, 40, 'hedeng'); }
     walk(3);
     // ---- 终章：船、门、浮冰、滚石，一路学的都用上
     cp('day');

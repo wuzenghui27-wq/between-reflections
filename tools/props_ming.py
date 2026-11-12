@@ -490,3 +490,45 @@ def _space(cv, ox, oy):
 
 ART['k_shift'] = keycap(19, _shift)
 ART['k_space'] = keycap(20, _space)
+
+
+# ---------------------------------------------------------------- 蹴鞠：风流眼球门（两根朱漆杆、中间一张网、网上一个圆洞），鞠卡在洞口
+LEATHER = ramp('#f0c878', '#c8904a', '#8a5a2c', '#4a2e18')
+
+
+def cuju_ball():
+    cv = Canvas(6, 6)
+    sphere(cv, 2.5, 2.5, 2.6, 2.6, LEATHER, (0.65, 0.3, 0.0))
+    cv.put(2, 1, LEATHER[3]); cv.put(3, 2, LEATHER[3]); cv.put(1, 3, LEATHER[3]); cv.put(3, 4, LEATHER[3])   # 皮块缝线
+    return cv.im
+
+
+def cuju_goal(with_ball):
+    W, H = 15, 22
+    cv = Canvas(W, H)
+    for y in range(0, H - 2):                                   # 两根朱漆杆
+        cv.put(1, y, VERM[2]); cv.put(2, y, VERM[1]); cv.put(12, y, VERM[1]); cv.put(13, y, VERM[0])
+    cv.put(1, 0, GOLD[1]); cv.put(2, 0, GOLD[0]); cv.put(12, 0, GOLD[0]); cv.put(13, 0, GOLD[0])
+    cv.hline(1, 13, 1, VERM[1]); cv.hline(3, 11, 1, VERM[0])     # 横杆
+    for y in range(2, 13):                                      # 网
+        for x in range(3, 12):
+            if (x + y) % 2 == 0:
+                cv.put(x, y, (232, 224, 204, 255) if x > 7 else (196, 186, 166, 255))
+    for y in range(4, 9):                                       # 风流眼：网中间一个圆洞
+        for x in range(5, 10):
+            if (x - 7) ** 2 + (y - 6) ** 2 <= 5:
+                cv.put(x, y, None) if False else None
+                cv.im.putpixel((x, y), (0, 0, 0, 0))
+    for (x, y) in ((5, 4), (9, 4), (4, 6), (10, 6), (5, 8), (9, 8), (7, 3), (7, 9)):
+        cv.put(x, y, GOLD[2])
+    if with_ball:
+        cv.im.alpha_composite(cuju_ball(), (5, 4))
+    cv.hline(0, 14, H - 2, STONE[1]); cv.hline(0, 14, H - 1, STONE[2])
+    for x in (1, 13):                                           # 杆座
+        cv.put(x - 1, H - 3, STONE[1]); cv.put(x + 1, H - 3, STONE[0])
+    return cv.im
+
+
+ART['cuju'] = cuju_goal(True)
+ART['cuju_empty'] = cuju_goal(False)
+ART['cuju_ball'] = cuju_ball()

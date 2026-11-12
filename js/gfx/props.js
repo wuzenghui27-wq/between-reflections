@@ -98,6 +98,7 @@
           }
           r(x1, yy + 3, 2, 1, wc); r(x1 + 1, yy + 2, 1, 1, wc);     // 船头破开的浪
         }
+        if (rid === 'jiangnan') { dragonBoat(x0, x1, yy, night, moving, e); break; }
         r(x0 - 1, yy, w + 2, 1, rim);
         r(x0, yy + 1, w, 2, wood); r(x0 + 2, yy + 3, w - 4, 2, dark); r(x0 + 5, yy + 5, w - 10, 1, dark);
         r(x0 - 2, yy - 1, 2, 1, rim); r(x1, yy - 1, 2, 1, rim);   // 两头微微翘起
@@ -356,17 +357,27 @@
   }
 
   // ------------------------------------------------------------ 铃（铜铃 / 锣 / 转经筒）
+  const BELLSPR = { gong: 'gong', wheel: 'wheel', cuju: 'cuju', bell: 'bell' };
   function bell(b, e, gates, ghost) {
     const x = Math.round(b.x / P) - e.camPix, base = Math.round((b.y + 34) / P);
     if (x < -10 || x > PW + 10) return;
     const rung = gates[b.id], fl = e.flash(b.id) || 0;
     if (ghost) {
       const a = e.ghostA(b.x, b.x) * (rung ? 0.3 : 1); if (a <= 0.02) return;
-      if (!ghostSprite(b.kind === 'gong' ? 'gong' : b.kind === 'wheel' ? 'wheel' : 'bell', x, base, a, e)) ghostRect(x - 3, base - 13, x + 4, base - 6, a, e);
+      if (!ghostSprite(BELLSPR[b.kind] || 'bell', x, base, a, e)) ghostRect(x - 3, base - 13, x + 4, base - 6, a, e);
       return;
     }
     const shake = fl > 0 && !e.reduce ? Math.round(Math.sin(e.t * 30) * fl) : 0;
-    spr(b.kind === 'gong' ? 'gong' : b.kind === 'wheel' ? 'wheel' : 'bell', x + shake, base, e.world === 'night');
+    spr(b.kind === 'cuju' && rung ? 'cuju_empty' : (BELLSPR[b.kind] || 'bell'), x + shake, base, e.world === 'night');
+    if (b.kind === 'cuju' && rung && fl > 0) {       // 蹴鞠：球从风流眼飞出去，划一道弧落到门上，门就开了
+      const g = LV.hazards.find(h => h.gate === b.id);
+      if (g) {
+        const k = 1 - Math.min(1, fl), gx = Math.round((g.x0 + g.x1) / 2 / P) - e.camPix, gy = Math.round(g.y0 / P) + 10;
+        const bxp = Math.round(x + (gx - x) * k), byp = Math.round(base - 12 + (gy - base + 12) * k - Math.sin(k * Math.PI) * 30);
+        spr('cuju_ball', bxp, byp + 3, e.world === 'night');
+        for (let q = 1; q < 5; q++) { const kk = Math.max(0, k - q * 0.04); r(Math.round(x + (gx - x) * kk), Math.round(base - 12 + (gy - base + 12) * kk - Math.sin(kk * Math.PI) * 30), 1, 1, `rgba(255,230,170,${0.6 - q * 0.12})`); }
+      }
+    }
     X.glow(x, base - 9, rung ? 8 + fl * 14 : 7, [255, 210, 120], rung ? 0.25 + fl * 0.5 : 0.5);
     if (fl > 0) {   // 一圈像素波纹
       const rr = Math.round((1.2 - fl) * 26) + 4, col = `rgba(255,230,170,${(fl * 0.7).toFixed(2)})`;
@@ -574,6 +585,116 @@
     for (let k = x0 + 2; k < x1; k += 5) r(k, y - 1, 1, 1, 'rgba(210,230,255,0.85)');
     X.glow((x0 + x1) / 2, y, 10, [170, 200, 255], 0.25);
   }
+
+  // ------------------------------------------------------------ 节令活动
+  // 端午龙舟：朱红船身描金鳞，船头昂着龙首、船尾卷着龙尾；船中一面鼓，开船后鼓手踩着拍子擂鼓，几支桨一齐入水。
+  const DRAGON = [
+    "...gg.....",
+    "..gRRg....",
+    ".gRRwkRg..",
+    "gRRRRRRRRg",
+    "RRRRRRggg.",
+    "RRRRRRRRRg",
+    ".RRRRR....",
+    "..RRR.....",
+  ];
+  function dragonBoat(x0, x1, yy, night, moving, e) {
+    const w = x1 - x0, ph = e.G.beat() % 1, hit = moving && !e.reduce && ph < 0.18;
+    const RED = night ? ['#9a4a52', '#6a2a38', '#3e1824'] : ['#e04a34', '#b02a24', '#6a1418'];
+    const GD = night ? '#b0a070' : '#f2c850', INKC = '#17131c';
+    r(x0 - 1, yy - 1, w + 2, 7, INKC);
+    r(x0, yy, w, 1, GD);                                                 // 金色船舷
+    r(x0, yy + 1, w, 2, RED[0]); r(x0 + 1, yy + 3, w - 2, 2, RED[1]); r(x0 + 3, yy + 5, w - 6, 1, RED[2]);
+    for (let k = x0 + 2; k < x1 - 2; k += 3) { r(k, yy + 2, 1, 1, GD); r(k + 1, yy + 3, 1, 1, RED[2]); }   // 鳞
+    const pal = { R: RED[0], g: GD, w: '#ffffff', k: INKC };              // 龙首
+    DRAGON.forEach((row, j) => { for (let i = 0; i < row.length; i++) if (row[i] !== '.') r(x1 - 3 + i, yy - 7 + j, 1, 1, pal[row[i]]); });
+    r(x1 + 6, yy - 6, 2, 1, GD); r(x1 + 7, yy - 7, 1, 1, GD);             // 龙须
+    r(x0 - 3, yy - 3, 2, 3, RED[0]); r(x0 - 4, yy - 5, 2, 2, RED[0]); r(x0 - 3, yy - 6, 2, 1, GD);   // 卷起的龙尾
+    r(x0 - 1, yy - 9, 1, 9, '#6a4a32');                                  // 船尾小旗
+    r(x0, yy - 9, 4, 1, GD); r(x0, yy - 8, 3, 1, GD); r(x0, yy - 7, 2, 1, GD);
+    const dx = x0 + Math.round(w * 0.45);                                 // 鼓与鼓手
+    r(dx - 2, yy - 4, 5, 4, INKC); r(dx - 1, yy - 3, 3, 3, RED[0]); r(dx - 1, yy - 3, 3, 1, GD);
+    if (hit) X.glow(dx, yy - 3, 8, [255, 210, 140], 0.6);
+    const sk = night ? '#a88a7a' : '#e0b08a', cl = night ? '#3a4458' : '#f2ead8';
+    r(dx + 3, yy - 4, 2, 4, cl); r(dx + 3, yy - 6, 2, 2, sk); r(dx + 3, yy - 7, 2, 1, RED[1]);
+    r(dx + 1, yy - (hit ? 4 : 6), 2, 1, '#6a4a32');                      // 鼓槌落在拍子上
+    const stroke = moving && !e.reduce ? Math.sin(ph * Math.PI * 2) : 0;  // 桨手：一齐划
+    for (let k = x0 + 6; k < x1 - 6; k += 9) {
+      if (Math.abs(k - dx) < 6) continue;
+      r(k, yy - 3, 2, 3, cl); r(k, yy - 5, 2, 2, sk);
+      const ox = Math.round(stroke * 3);
+      for (let t = 0; t < 6; t++) r(k - 1 - Math.round(t * 0.4) + Math.round(ox * t / 6), yy - 2 + t, 1, 1, '#b8a060');
+    }
+  }
+  // 元宵走马灯：中间一盏六角大灯，灯纸上马影随灯转；踏板挂在横杆上一起转，夜里灯停马停。
+  function horseLamp(ms, cx, cy, R, night, e) {
+    const ang = ms[0].ang, GD = night ? '#a89a68' : '#f2c850', RED = night ? '#7a3a44' : '#c8302a';
+    r(cx - 1, cy, 3, PH + 16 - cy, night ? '#3a2a30' : '#6a3a2a');
+    for (const q of ms) {                                                // 横杆
+      const a = Math.atan2(q.y - q.cy, (q.x0 + q.x1) / 2 - q.cx), n = Math.round(R - 4);
+      for (let t = 12; t < n; t += 1) r(Math.round(cx + Math.cos(a) * t), Math.round(cy + Math.sin(a) * t), 1, 1, night ? '#5a4a40' : '#8a5a34');
+    }
+    r(cx - 11, cy - 13, 23, 2, RED); r(cx - 9, cy - 15, 19, 2, GD); r(cx - 2, cy - 17, 5, 2, RED);   // 灯顶
+    const paper = night ? '#e8c890' : '#fff2c8';
+    r(cx - 10, cy - 11, 21, 20, '#17131c'); r(cx - 9, cy - 11, 19, 20, paper);
+    for (let k = 0; k < 3; k++) {                                        // 转动的马影
+      const px = cx - 9 + ((Math.round(ang * 6) + k * 7) % 19 + 19) % 19;
+      const hc = night ? 'rgba(120,60,40,0.75)' : 'rgba(140,50,30,0.8)';
+      r(px, cy - 3, 4, 2, hc); r(px + 3, cy - 5, 2, 2, hc); r(px, cy - 1, 1, 3, hc); r(px + 3, cy - 1, 1, 3, hc);
+    }
+    for (const fx of [cx - 9, cx - 3, cx + 3, cx + 9]) r(fx, cy - 11, 1, 20, RED);   // 灯骨
+    r(cx - 11, cy + 9, 23, 2, RED); r(cx - 9, cy + 11, 19, 1, GD);
+    for (let k = -8; k <= 8; k += 4) r(cx + k, cy + 12, 1, 4, RED);      // 流苏
+    X.glow(cx, cy - 1, 26, [255, 200, 120], night ? 0.9 : 0.35);
+  }
+  // 重阳放风筝：一只沙燕风筝（竹骨、黑白红彩绘），线一直牵到岸边；人就站在风筝的背骨上。
+  const KITE = [          // 沙燕：上沿是横竹骨（可以站），两翼往外下垂，燕身短，剪刀尾分得很开；翅上画蝙蝠、身上画牡丹
+    "bbbbbbbbbbbbbbbbbbbbbbbb",
+    "kWWWWBBWWWkkWWWBBWWWWWWk",
+    ".kWWBKKBWWkWWkWBKKBWWWk.",
+    "..kWWBBWWkRRRRkWWBBWWk..",
+    "...kWWWWkWRYYRWkWWWWk...",
+    "....kkkk.kRRRRk.kkkk....",
+    ".........kWRRWk.........",
+    ".........kWWWWk.........",
+    "........kKWkkWKk........",
+    ".......kKk....kKk.......",
+    "......kKk......kKk......",
+    ".....kk..........kk.....",
+  ];
+  function kite(m, bx0, bx1, by, night, e) {
+    const cx = Math.round((bx0 + bx1) / 2), t = e.reduce || night ? 0 : e.t;
+    const pal = night ? { b: '#9a8a6a', k: '#17131c', W: '#b8b4c4', B: '#4a5a8a', K: '#2a2836', R: '#8a3a44', Y: '#a89a68' }
+                      : { b: '#d8b070', k: '#17131c', W: '#fbf6ea', B: '#3a6ab0', K: '#2a2430', R: '#d23a2a', Y: '#f2c850' };
+    const line = night ? 'rgba(200,190,170,0.5)' : 'rgba(250,240,220,0.75)';
+    for (let k = 0; k < 80; k++) r(Math.round(cx - 2 - k), Math.round(by + 8 + k * k / 80), 1, 1, line);   // 风筝线
+    const sw = Math.round(Math.sin(t * 4) * 1);
+    KITE.forEach((row, j) => { for (let i = 0; i < row.length; i++) { const ch = row[i]; if (ch === '.') continue; r(cx - 12 + i + (j > 8 ? sw : 0), by + j, 1, 1, pal[ch]); } });
+  }
+  // 冰嬉：冰床（木板下两道铁刃），前面一个穿冰鞋的人拉着走；夜里拉床的人也停下歇着。
+  function sled(m, bx0, bx1, by, night, e) {
+    const w = bx1 - bx0, ph = e.reduce || night ? 0 : e.t;
+    board(bx0, bx1, by, night, e);
+    r(bx0 + 1, by + 4, w - 2, 1, night ? '#8a8aa0' : '#d8dce4'); r(bx1 - 1, by + 3, 2, 1, night ? '#8a8aa0' : '#d8dce4');   // 冰刃
+    r(bx0 + 3, by + 3, 1, 1, '#3a3438'); r(bx1 - 4, by + 3, 1, 1, '#3a3438');
+    // 撑冰床的人站在床尾，手里一根带铁尖的长杆往后点冰；夜里杆子立着不动
+    const px = bx0 + 1, sk = night ? '#a88a7a' : '#e0b08a', coat = night ? '#3a3a58' : '#3a5a9a';
+    r(px, by - 6, 3, 6, coat); r(px + 1, by - 8, 2, 2, sk); r(px, by - 9, 3, 1, '#2a2228'); r(px - 1, by - 9, 1, 1, '#2a2228');
+    const push = night ? 0 : (Math.sin(ph * 6) + 1) / 2, pole = night ? '#8a7a60' : '#c8a060';
+    for (let k = 0; k < 12; k++) r(Math.round(px + 2 - k * (0.3 + push * 0.5)), by - 7 + k, 1, 1, pole);
+  }
+  // 中秋河灯：莲花灯，粉白的花瓣托着一支烛，水面上一圈暖光
+  function riverLamp(m, bx0, bx1, by, night, e) {
+    const w = bx1 - bx0, cx = Math.round((bx0 + bx1) / 2);
+    const P1 = night ? '#e8a0b0' : '#f4b8c0', P2 = night ? '#b86a84' : '#d87890', INKC = '#17131c';
+    r(bx0 - 1, by - 1, w + 2, 5, INKC);
+    r(bx0, by, w, 1, '#fff0f0'); r(bx0, by + 1, w, 2, P1); r(bx0 + 1, by + 3, w - 2, 1, P2);
+    for (let k = bx0 + 2; k < bx1 - 1; k += 4) { r(k, by - 2, 2, 2, P1); r(k, by - 3, 1, 1, '#fff0f0'); r(k + 1, by - 1, 1, 1, P2); }   // 花瓣尖
+    r(bx0 - 2, by + 3, w + 4, 1, night ? '#3a6a4a' : '#5a8a3a');          // 托底荷叶
+    r(cx - 1, by - 6, 2, 4, '#f4ead8'); r(cx - 1, by - 8, 2, 2, '#ffd860'); r(cx, by - 9, 1, 1, '#fff8d0');
+    X.glow(cx, by - 6, 12, [255, 200, 120], night ? 0.85 : 0.35);
+    if (!e.reduce) { const k = (e.t * 4) | 0; r(bx0 - 3 - k % 3, by + 4, 3, 1, 'rgba(255,220,160,0.5)'); r(bx1 + k % 3, by + 4, 3, 1, 'rgba(255,220,160,0.5)'); }
+  }
   function movers(e, x0, x1) {
     const night = e.world === 'night', done = {};
     const sx = x => Math.round(x / P) - e.camPix, sy = y => Math.round(y / P);
@@ -583,6 +704,11 @@
         if (done[m.group]) continue; done[m.group] = 1;
         const ms = LV.movers.filter(q => q.group === m.group), cx = sx(m.cx), cy = sy(m.cy), R = m.r / P;
         const W = night ? WDN : WD;
+        if (m.style === 'lamp') {
+          horseLamp(ms, cx, cy, R, night, e);
+          for (const q of ms) { const bx0 = sx(q.x0), bx1 = sx(q.x1), by = sy(q.y); board(bx0, bx1, by, night, e); spr('lantern', Math.round((bx0 + bx1) / 2), by + 16, night); still(bx0, bx1, by, e); }
+          continue;
+        }
         r(cx - 1, cy, 3, PH + 16 - cy, W[2]); r(cx + 1, cy, 1, PH + 16 - cy, W[3]);   // 立柱
         if (!night) for (let k = 0; k < 48; k += 2) { const a = k / 48 * Math.PI * 2; r(Math.round(cx + Math.cos(a) * R), Math.round(cy + Math.sin(a) * R) + 1, 1, 1, 'rgba(255,255,255,0.25)'); }
         for (let k = 0; k < 64; k++) {                                   // 轮辋
@@ -627,6 +753,14 @@
       }
       // 浮木：一截圆木，两头有年轮，下面一圈水纹
       const bx0 = sx(m.x0), bx1 = sx(m.x1), by = sy(m.y), w = bx1 - bx0;
+      if (m.style) {
+        if (!night) for (let k = sx(m.cx - m.amp - m.hw); k <= sx(m.cx + m.amp + m.hw); k += 3) r(k, by + (m.style === 'kite' ? -3 : 5), 1, 1, 'rgba(255,255,255,0.25)');
+        if (m.style === 'kite') kite(m, bx0, bx1, by, night, e);
+        else if (m.style === 'sled') sled(m, bx0, bx1, by, night, e);
+        else riverLamp(m, bx0, bx1, by, night, e);
+        still(bx0, bx1, by, e);
+        continue;
+      }
       if (!night) for (let k = sx(m.cx - m.amp - m.hw); k <= sx(m.cx + m.amp + m.hw); k += 3) r(k, by + 5, 1, 1, 'rgba(255,255,255,0.25)');
       const L1 = night ? ['#8a7a7a', '#5e5260', '#3e3446'] : ['#b88a5a', '#8a5e38', '#5e3c24'];
       r(bx0 - 1, by - 1, w + 2, 6, '#17131c');
