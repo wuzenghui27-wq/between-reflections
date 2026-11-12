@@ -1,5 +1,5 @@
-// 六个区域的背景（来自 assets/bg 的像素画）、地面花纹、水面 / 深谷、天气粒子。
-// 背景按“区域 × 天气”挑图，走过一个区域时依次淡入下一张；夜里用压暗偏蓝的版本。
+// 六个区域的背景（assets/bg 的像素画贴图，原生 320×180，游戏里整数倍放大）、地面花纹、水面 / 深谷、天气粒子。
+// 背景按“区域 × 天气”挑图，走过一个区域时依次淡入下一张；夜里换成 assets/bg/night 的夜景像素画。
 (function () {
   const C = RF.CFG, U = RF.U, X = RF.FX, LV = RF.LEVEL;
   const PW = X.PW, PH = X.PH, P = C.PIX;
@@ -19,10 +19,14 @@
     tibet: { bg: { clear: ['8523'], snow: ['8518', '8523'] },
       water: { day: 586, night: 568, frozen: 'night' }, waterCol: ['#3a78a8', '#0c1a3e'], tile: 'snowrock', glow: 0.8 }
   };
-  // 夜景：实拍的中国夜景照片像素化而成（assets/bg/night，来源与署名见 CREDITS.md）；没载入时退回把白天的图压暗
+  // 夜景：作者提供的夜景像素画（新背景像素/夜间真实N → assets/bg/night/nN.png），按画面内容分到各站；没载入时退回把白天的图压暗
   const NIGHT_BG = {
-    jiangnan: ['jiangnan1', 'jiangnan2'], garden: ['garden1', 'garden2'], autumn: ['autumn1', 'autumn2', 'autumn3'],
-    wall: ['wall1'], glacier: ['glacier1', 'glacier2'], tibet: ['tibet1', 'tibet2']
+    jiangnan: ['n2', 'n12', 'n5'],   // 白墙水巷与乌篷船、灯笼河街与石拱桥、雨后灯笼老街
+    garden: ['n3', 'n10', 'n11'],    // 灯火楼阁、樱花水榭、宫殿与画舫
+    autumn: ['n9', 'n7'],            // 黄昏河谷村落、廊下望山村灯火
+    wall: ['n6'],                    // 悬崖栈道与瀑布（险峻山势，接长城的深谷）
+    glacier: ['n1'],                 // 群山云海下的山村
+    tibet: ['n4', 'n8']              // 雪山湖畔、湖边山城
   };
   const ALL_NIGHT = Object.values(NIGHT_BG).flat();
   const ALL_BG = [...new Set(Object.values(R).flatMap(r => Object.values(r.bg).flat()))];
