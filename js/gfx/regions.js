@@ -47,10 +47,13 @@
 
   // ------------------------------------------------------------ 载入
   const IMG = {}, NIGHT = {};
-  let sprites = null, spritesNight = null, spritesDim = null, curRid = null;
+  let spritesGhost = null;
+  let sprites = null, spritesNight = null, spritesDim = null, curRid = null, tilesImg = null;
+  const TSET = {};
+  const TROW = ['jiangnan', 'garden', 'autumn', 'wall', 'glacier', 'tibet'];
   const spritesReg = {};
   function load(done) {
-    const list = ALL_BG.map(id => ['bg/' + id + '.png', id]).concat(ALL_NIGHT.map(id => ['bg/night/' + id + '.png', 'n:' + id]), [['sprites.png', '__sprites']]);
+    const list = ALL_BG.map(id => ['bg/' + id + '.png', id]).concat(ALL_NIGHT.map(id => ['bg/night/' + id + '.png', 'n:' + id]), [['sprites.png', '__sprites'], ['tiles.png', '__tiles']]);
     let left = list.length;
     list.forEach(([file, id]) => {
       const im = new Image();
@@ -60,9 +63,11 @@
             sprites = im;
             spritesNight = tint(im, '#7684c0');
             spritesDim = tint(im, '#aab2d8');
+            spritesGhost = { day: silhouette(im, '#4a6cf0'), night: silhouette(im, '#ffe0a0') };
             // 每站的人物与道具带一点这一站背景的色温
             for (const id in R) if (REGTONE[id].hor) spritesReg[id] = mixTint(im, REGTONE[id].hor, 0.14);
-          } else if (id.startsWith('n:')) NIGHT[id] = im;
+          } else if (id === '__tiles') tilesImg = im;
+          else if (id.startsWith('n:')) NIGHT[id] = im;
           else { IMG[id] = im; NIGHT[id] = X.nightOf(im); }
         }
         if (--left === 0) { buildTiles(); RF.Regions.ready = true; done(); }
@@ -75,6 +80,13 @@
     const c = X.canvas(im.width, im.height), x = c.getContext('2d');
     x.drawImage(im, 0, 0);
     x.globalCompositeOperation = 'source-atop'; x.globalAlpha = a; x.fillStyle = col; x.fillRect(0, 0, c.width, c.height);
+    return c;
+  }
+  // 剪影：保留形状，整块填成一种颜色（另一面的预告用）
+  function silhouette(im, col) {
+    const c = X.canvas(im.width, im.height), x = c.getContext('2d');
+    x.drawImage(im, 0, 0);
+    x.globalCompositeOperation = 'source-in'; x.fillStyle = col; x.fillRect(0, 0, c.width, c.height);
     return c;
   }
   function tint(im, col) {
@@ -147,6 +159,19 @@
       const d = lo ? mixTint(base, lo, 0.3) : base;
       TILE[id] = { day: d, night: tint(d, '#6a78b4') };
     }
+  }
+  // 地面拼接图块（tools/terrain_art.py → assets/tiles.png）：每站一行，往这站背景的颜色上靠一点，夜里压暗
+  function tileset(rid, world) {
+    if (!tilesImg) return null;
+    const k = rid + world;
+    if (!TSET[k]) {
+      const row = TROW.indexOf(rid); if (row < 0) return null;
+      const c = X.canvas(128, 16), x = c.getContext('2d');
+      x.drawImage(tilesImg, 0, row * 16, 128, 16, 0, 0, 128, 16);
+      const lo = REGTONE[rid].low, d = lo ? mixTint(c, lo, 0.16) : c;
+      TSET[rid + 'day'] = d; TSET[rid + 'night'] = tint(d, '#6a78b4');
+    }
+    return TSET[k];
   }
   function pattern(ctx, rid, world) {
     const key = rid + world;
@@ -387,7 +412,7 @@
   }
 
   RF.Regions = {
-    R, load, foreground, backdrop, regionMix, lowland, pattern, weatherBack, weatherFront, bgAt,
-    get sprites() { return (curRid && spritesReg[curRid]) || sprites; }, get spritesNight() { return spritesNight; }, get spritesDim() { return spritesDim; }
+    R, load, foreground, backdrop, regionMix, lowland, pattern, tileset, weatherBack, weatherFront, bgAt,
+    get sprites() { return (curRid && spritesReg[curRid]) || sprites; }, get spritesNight() { return spritesNight; }, get spritesDim() { return spritesDim; }, get spritesGhost() { return spritesGhost; }
   };
 })();

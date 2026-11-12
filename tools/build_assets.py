@@ -530,10 +530,11 @@ ICONS['k_space'] = keycap(["pppppppppppppppppppppp", "ppkpppppppppppppppkppp", "
 # ---------------------------------------------------------------- v3 美术：人物与道具重画（tools/traveler_art.py、tools/props_art.py）
 # 上面的旧画法留作参考；打包时用 v3 的版本覆盖同名图块。
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import traveler_art, props_art
+import traveler_ming as traveler_art, props_art
 from pixelkit import sel_outline
 traveler_frame = traveler_art.traveler_frame
 TRAVELER_ROWS, TRAVELER_COLS = traveler_art.TRAVELER_ROWS, traveler_art.TRAVELER_COLS
+FW, FH, FOOT = traveler_art.FW, traveler_art.FH, traveler_art.FOOT
 V3 = dict(props_art.PROPS); V3.update(props_art.DECO_STELE); V3.update(props_art.COINS)
 for k in list(V3):
     PROPS.pop(k, None); DECO.pop(k, None)
@@ -543,7 +544,7 @@ def pack():
     items = []
     for ri, (outfit, pose) in enumerate(TRAVELER_ROWS):
         for ci, fr in enumerate(TRAVELER_COLS):
-            items.append((f't_{outfit}_{pose}_{fr}', traveler_frame(outfit, pose, fr), (15, FOOT)))
+            items.append((f't_{outfit}_{pose}_{fr}', traveler_frame(outfit, pose, fr), (FW // 2 - 1, FOOT)))
     for group in (PROPS, DECO):          # 障碍、道具、摆件都加深色描边
         for k, im in group.items():
             o = outline(im)

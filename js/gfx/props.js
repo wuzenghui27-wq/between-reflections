@@ -22,15 +22,39 @@
     const c = X.ctx;
     switch (s.kind) {
       case 'ground': case 'shore': case 'slide': {
-        const pat = RG.pattern(c, rid, e.world);
-        pat.setTransform(new DOMMatrix([1, 0, 0, 1, -e.camPix, y]));
-        c.fillStyle = pat;
-        c.fillRect(x0 + 1, y, w - 2, 1); c.fillRect(x0, y + 1, w, PH + 15 - y);     // 上角各缺一格，圆一点
-        r(x0, y + 1, 1, PH + 15 - y, 'rgba(0,0,0,0.25)'); r(x1 - 1, y + 1, 1, PH + 15 - y, 'rgba(0,0,0,0.35)');
-        // 越往下越暗，像土石的厚度
-        for (let k = 1; k <= 10; k++) r(x0, y + 6 + k * 3, w, 3, `rgba(${night ? '4,6,20' : '20,14,10'},0.035)`);   // 叠加出平滑的渐暗
-        r(x0, y + 36, w, PH + 16, `rgba(${night ? '4,6,20' : '20,14,10'},0.04)`);
-        edgeLip(s, x0, x1, y, rid, e);
+        const ts = RG.tileset(rid, e.world);
+        if (ts) {
+          // 拼接图块：顶一排（左端、中间两种交替、右端），下面身块一直铺到画面底；按世界坐标挑花样，镜头动时不会闪
+          const bottom = PH + 16, wx0 = x0 + e.camPix;
+          const put = (ti, row, dx, dy, sw) => c.drawImage(ts, ti * 16, 0, sw, 16, dx, dy, sw, 16);
+          for (let yy = y - 3, row = 0; yy < bottom; yy += 16, row++) {
+            const top = row === 0, L = top ? 0 : 4, Rt = top ? 3 : 7;
+            if (w <= 16) {
+              const h = w >> 1;
+              c.drawImage(ts, L * 16, 0, h, 16, x0, yy, h, 16);
+              c.drawImage(ts, Rt * 16 + 16 - (w - h), 0, w - h, 16, x0 + h, yy, w - h, 16);
+              continue;
+            }
+            put(L, row, x0, yy, 16);
+            for (let xx = x0 + 16; xx < x1 - 16; xx += 16) {
+              const v = U.hash(((xx - x0 + wx0) / 16) | 0, row + 7) > 0.5 ? 1 : 0;
+              put((top ? 1 : 5) + v, row, xx, yy, Math.min(16, x1 - 16 - xx));
+            }
+            put(Rt, row, x1 - 16, yy, 16);
+          }
+        } else {
+          const pat = RG.pattern(c, rid, e.world);
+          pat.setTransform(new DOMMatrix([1, 0, 0, 1, -e.camPix, y]));
+          c.fillStyle = pat;
+          c.fillRect(x0 + 1, y, w - 2, 1); c.fillRect(x0, y + 1, w, PH + 15 - y);
+        }
+        // 越往下越暗：地面线附近细节最清楚，往下逐渐沉进暗色里（视线集中在可以落脚的边沿上）
+        { const dk = night ? '6,8,22' : '24,16,14';
+          for (let k = 0; k < 14; k++) r(x0, y + 14 + k * 3, w, 3, `rgba(${dk},${(0.05 + k * 0.012).toFixed(3)})`);
+          r(x0, y + 56, w, PH + 16, `rgba(${dk},0.25)`);
+          r(x0, y + 72, w, PH + 16, `rgba(${dk},0.3)`); }
+        { const wxs = e.G.weather ? e.G.weather[LV.regionAt(s.x0)] : 'clear';
+          if (wxs === 'snow' && rid !== 'glacier' && rid !== 'tibet') edgeLip(s, x0, x1, y, rid, e); }
         if (rid === 'wall') {         // 城墙垛口
           const col = night ? '#4a4258' : '#9a8266', top = night ? '#5e566e' : '#b4a084';
           for (let wx = Math.ceil((x0 + e.camPix) / 8) * 8; wx < x1 + e.camPix - 3; wx += 8) {
@@ -214,21 +238,47 @@
   function previewCol(e) { return e.world === 'day' ? '#2a4cc0' : '#ffd88a'; }
   function dashH(x0, x1, y, col, on, off) { for (let x = x0; x < x1; x += on + off) r(x, y, Math.min(on, x1 - x), 1, col); }
   function dashV(x, y0, y1, col) { for (let y = y0; y < y1; y += 4) r(x, y, 1, Math.min(2, y1 - y), col); }
+  // 另一面的预告：不画虚线框，而是一层半透明、带水纹抖动的剪影，像隔着水面看见另一个世界
   function ghostSolid(s, e) {
     const a = e.ghostA(s.x0, s.x1); if (a <= 0.02) return;
     const x0 = Math.round(s.x0 / P) - e.camPix, x1 = Math.round(s.x1 / P) - e.camPix, y = Math.round(s.y / P);
     if (x1 < 0 || x0 > PW) return;
-    const c = X.ctx; c.globalAlpha = a;
-    const col = previewCol(e);
-    dashH(x0, x1, y, col, s.thin ? 1 : 3, 2);
-    if (!s.thin) { dashH(x0, x1, y + 1, col, 3, 2); dashV(x0, y, y + 10, col); dashV(x1 - 1, y, y + 10, col); }
+    const c = X.ctx, col = previewCol(e), t = e.reduce ? 0 : e.t;
+    c.globalAlpha = Math.min(1, a * 1.1);
+    for (let x = x0; x < x1; x++) {                               // 地面线：亮线 + 轻微的波动
+      const wv = Math.round(Math.sin(x * 0.35 + t * 4) * 0.6);
+      r(x, y + wv, 1, 1, col);
+    }
+    if (!s.thin) {
+      for (let k = 1; k < 12; k++) {                               // 往下一层层淡开的点阵（隔点填色，不挡背景）
+        c.globalAlpha = a * (0.55 - k * 0.042);
+        for (let x = x0 + ((k + (t * 6 | 0)) & 1); x < x1; x += 2) r(x, y + k, 1, 1, col);
+      }
+      c.globalAlpha = a * 0.8;
+      r(x0, y, 1, 8, col); r(x1 - 1, y, 1, 8, col);
+    }
     c.globalAlpha = 1;
   }
+  // 物件的剪影：用整张图集的单色剪影，左右错开一像素随时间抖，像水里的倒影
+  function ghostSprite(name, x, y, a, e) {
+    const img = RG.spritesGhost && RG.spritesGhost[e.world], at = RF.ATLAS[name];
+    if (!img || !at) return false;
+    const c = X.ctx, t = e.reduce ? 0 : e.t;
+    const dx = Math.round(Math.sin(t * 5) * 0.8);
+    c.globalAlpha = a * 0.55;
+    c.drawImage(img, at[0], at[1], at[2], at[3], Math.round(x - at[4]) + dx, Math.round(y - at[5]), at[2], at[3]);
+    c.globalAlpha = a * 0.35;
+    for (let k = 0; k < at[3]; k += 3)                              // 水平的亮纹，一条条往上走
+      if (((k + (t * 10 | 0)) % 6) < 2) c.drawImage(img, at[0], at[1] + k, at[2], 1, Math.round(x - at[4]) - dx, Math.round(y - at[5]) + k, at[2], 1);
+    c.globalAlpha = 1;
+    return true;
+  }
   function ghostRect(x0, y0, x1, y1, a, e) {
-    const c = X.ctx; c.globalAlpha = a;
-    const col = previewCol(e);
-    dashH(x0, x1, y0, col, 2, 2); dashH(x0, x1, y1 - 1, col, 2, 2); dashV(x0, y0, y1, col); dashV(x1 - 1, y0, y1, col);
-    for (let k = 0; k < Math.min(x1 - x0, y1 - y0); k += 2) { r(x0 + k, y0 + Math.round(k * (y1 - y0) / (x1 - x0)), 1, 1, col); }
+    const c = X.ctx, col = previewCol(e);
+    c.globalAlpha = a * 0.4;
+    for (let y = y0; y < y1; y++) for (let x = x0 + ((y + (e.t * 6 | 0)) & 1); x < x1; x += 2) r(x, y, 1, 1, col);
+    c.globalAlpha = a * 0.8;
+    r(x0, y0, x1 - x0, 1, col); r(x0, y1 - 1, x1 - x0, 1, col);
     c.globalAlpha = 1;
   }
 
@@ -238,7 +288,12 @@
     const x0 = Math.round(h.x0 / P) - e.camPix, x1 = Math.round(h.x1 / P) - e.camPix;
     const y0 = Math.round(h.y0 / P), y1 = Math.round(h.y1 / P), cx = (x0 + x1) / 2;
     if (x1 < -12 || x0 > PW + 12) return;
-    if (ghost) { const a = e.ghostA(h.x0, h.x1); if (a > 0.02) ghostRect(x0, y0, x1, y1, a, e); return; }
+    if (ghost) {
+      const a = e.ghostA(h.x0, h.x1); if (a <= 0.02) return;
+      const nm = h.gate ? (gates[h.gate] ? 'gate_open' : 'gate') : h.kind === 'beacon' ? 'beacon0' : HSPR[h.kind];
+      if (!nm || !ghostSprite(nm, cx, y1, a, e)) ghostRect(x0, y0, x1, y1, a, e);
+      return;
+    }
     const night = e.world === 'night';
     if (h.gate) {
       const open = gates[h.gate];
@@ -295,7 +350,8 @@
     const rung = gates[b.id], fl = e.flash(b.id) || 0;
     if (ghost) {
       const a = e.ghostA(b.x, b.x) * (rung ? 0.3 : 1); if (a <= 0.02) return;
-      ghostRect(x - 3, base - 13, x + 4, base - 6, a, e); return;
+      if (!ghostSprite(b.kind === 'gong' ? 'gong' : b.kind === 'wheel' ? 'wheel' : 'bell', x, base, a, e)) ghostRect(x - 3, base - 13, x + 4, base - 6, a, e);
+      return;
     }
     const shake = fl > 0 && !e.reduce ? Math.round(Math.sin(e.t * 30) * fl) : 0;
     spr(b.kind === 'gong' ? 'gong' : b.kind === 'wheel' ? 'wheel' : 'bell', x + shake, base, e.world === 'night');
@@ -314,7 +370,7 @@
     if (got[l.i] && fl <= 0) return;
     const bob = e.reduce ? 0 : Math.round(Math.sin(e.t * 2 + l.i));
     const y = Math.round(l.y / P) + bob - (got[l.i] ? Math.round((1 - fl) * 14) : 0);
-    if (ghost) { const a = e.ghostA(l.x, l.x); if (a > 0.02 && !got[l.i]) ghostRect(x - 3, y - 4, x + 4, y + 5, a, e); return; }
+    if (ghost) { const a = e.ghostA(l.x, l.x); if (a > 0.02 && !got[l.i]) ghostSprite('lantern', x, y + 4, a, e); return; }
     spr('lantern', x, y + 4 - e.pulse, false, got[l.i] ? fl : 1);
     X.glow(x, y, 9 + fl * 10, [255, 190, 110], (0.7 + fl * 0.3) * (got[l.i] ? fl : 1));
   }
