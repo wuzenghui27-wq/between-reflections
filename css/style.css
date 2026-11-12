@@ -360,44 +360,49 @@ button.round { width: calc(13 * var(--px)) !important; height: calc(13 * var(--p
 #poemLine .pl-src { writing-mode: vertical-rl; font-size: calc(13 * var(--u)); letter-spacing: 0.2em; opacity: 0.85; margin-top: calc(10 * var(--px)); }
 #poemLine .pl-src b { display: inline-block; background: #c8402e; color: #fff2dc; padding: calc(1 * var(--px)) 0; margin-top: calc(2 * var(--px)); }
 
-/* ---------------------------------------------------------------- v1.5 提示条：宣纸小签 + 朱印 + 键帽 + 朱线计时 */
+/* ---------------------------------------------------------------- v1.5 提示签：明代笺纸
+   竹纸底（帘纹、纤维、洒金）+ 朱丝栏边框（毛边、外粗内细、回纹角）+ 角上一枝饾版折枝梅 + 白文方印。
+   纸用比游戏画面细一倍的像素（--hp = 2u），近看有纸的质感。 */
 #hint {
-  display: flex !important; align-items: center; gap: calc(12 * var(--u));
+  --hp: calc(2 * var(--u));
+  display: flex !important; align-items: center; gap: calc(10 * var(--u));
   top: calc(84 * var(--u)) !important; font-size: calc(15 * var(--u)) !important;
-  padding: calc(4 * var(--u)) calc(16 * var(--u)) calc(6 * var(--u)) calc(6 * var(--u)) !important;
-  color: var(--ink) !important; font-weight: 600; letter-spacing: 0.06em;
-  border-image-source: url(../assets/ui/paper.png) !important;
-  box-shadow: 0 calc(2 * var(--px)) 0 0 rgba(0,0,0,0.28) !important;
-  overflow: hidden;
+  padding: calc(2 * var(--u)) calc(58 * var(--u)) calc(2 * var(--u)) calc(4 * var(--u)) !important;
+  color: #2a1e18 !important; font-weight: 600; letter-spacing: 0.08em;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", serif;
+  border: calc(8 * var(--hp)) solid transparent !important;
+  border-image: url(../assets/ui/jian_frame.png) 8 / calc(8 * var(--hp)) repeat !important;
+  background: url(../assets/ui/jian_plum.png) right calc(-2 * var(--hp)) bottom calc(-3 * var(--hp)) / calc(30 * var(--hp)) calc(16 * var(--hp)) no-repeat,
+              url(../assets/ui/jian_tex.png) 0 0 / calc(64 * var(--hp)) calc(32 * var(--hp)) repeat !important;
+  background-clip: padding-box, border-box !important; background-origin: padding-box, border-box !important;
+  image-rendering: pixelated;
+  box-shadow: 0 calc(2 * var(--hp)) 0 0 rgba(40, 24, 16, 0.25) !important;
   transform: translate(-50%, calc(10 * var(--u))) !important;
   transition: opacity .35s var(--ease), transform .45s cubic-bezier(.2, 1.6, .4, 1) !important;
 }
 #hint.show { transform: translate(-50%, 0) !important; }
 #hint .seal {
-  flex: none; width: calc(27 * var(--u)); height: calc(27 * var(--u));
-  padding: calc(4 * var(--u)); box-sizing: content-box;
-  background-color: var(--cinnabar); background-repeat: no-repeat; background-position: center;
-  background-size: calc(27 * var(--u)) calc(27 * var(--u)); image-rendering: pixelated;
-  box-shadow: inset 0 calc(-1 * var(--px)) 0 0 rgba(0,0,0,0.25);
+  flex: none; width: calc(13 * var(--hp)); height: calc(13 * var(--hp));
+  background: none center / 100% 100% no-repeat; image-rendering: pixelated; transform: rotate(-3deg);
 }
-#hint.show .seal { animation: sealIn .5s steps(4) both; }
-@keyframes sealIn { 0% { transform: scale(1.6); opacity: 0; } 60% { transform: scale(0.92); opacity: 1; } 100% { transform: none; } }
+#hint .seal-swap { background-image: url(../assets/ui/seal_swap.png); }
+#hint .seal-leap { background-image: url(../assets/ui/seal_leap.png); }
+#hint .seal-look { background-image: url(../assets/ui/seal_look.png); }
+#hint.show .seal { animation: sealIn .45s steps(3) both; }
+@keyframes sealIn { 0% { transform: rotate(-3deg) scale(1.5); opacity: 0; } 70% { transform: rotate(-3deg) scale(0.94); opacity: 1; } 100% { transform: rotate(-3deg); } }
 #hint kbd {
   display: inline-block; margin: 0 calc(4 * var(--u)); padding: 0 calc(7 * var(--u));
-  font: inherit; font-weight: 800; letter-spacing: 0.04em; line-height: 1.5;
-  background: #fffaf0 !important; color: var(--ink);
-  box-shadow: 0 var(--px) 0 0 var(--cinnabar), 0 0 0 calc(var(--px) / 2) #c8ac7c !important;
-  transform: translateY(calc(-1 * var(--px) / 2));
+  font: 800 1em/1.5 system-ui, sans-serif; letter-spacing: 0.04em;
+  background: #fffaf0 !important; color: #2a1e18;
+  box-shadow: 0 var(--hp) 0 0 #b83a28, 0 0 0 calc(var(--hp) / 2) #c8ac7c !important;
+  transform: translateY(calc(-1 * var(--hp) / 2));
 }
 #hint.show kbd { animation: kbdTap 1.2s steps(1) .6s 3; }
-@keyframes kbdTap { 0%, 100% { transform: translateY(calc(-1 * var(--px) / 2)); } 50% { transform: translateY(calc(var(--px) / 2)); box-shadow: 0 0 0 0 var(--cinnabar), 0 0 0 calc(var(--px) / 2) #c8ac7c; } }
+@keyframes kbdTap { 0%, 100% { transform: translateY(calc(-1 * var(--hp) / 2)); } 50% { transform: translateY(calc(var(--hp) / 2)); box-shadow: 0 0 0 0 #b83a28, 0 0 0 calc(var(--hp) / 2) #c8ac7c; } }
 #hint .hint-timer {
-  position: absolute; left: calc(2 * var(--px)); right: calc(2 * var(--px)); bottom: calc(1 * var(--px));
-  height: calc(var(--px) / 2); background: var(--cinnabar); opacity: 0.7; transform-origin: left center;
+  position: absolute; left: 0; right: 0; bottom: calc(-4 * var(--hp));
+  height: var(--hp); background: #b83a28; opacity: 0.55; transform-origin: left center;
 }
 #hint.show .hint-timer { animation-name: hintTimer; animation-timing-function: linear; animation-fill-mode: both; }
 @keyframes hintTimer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @media (prefers-reduced-motion: reduce) { #hint.show .seal, #hint.show kbd { animation: none; } }
-#hint .seal-swap { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%209%209%22%20shape-rendering%3D%22crispEdges%22%20fill%3D%22%23fbecd0%22%3E%3Crect%20x%3D%222%22%20y%3D%220%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%220%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%221%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%220%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%221%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%221%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%220%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%228%22%20width%3D%221%22%20height%3D%221%22/%3E%3C/svg%3E"); }
-#hint .seal-leap { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%209%209%22%20shape-rendering%3D%22crispEdges%22%20fill%3D%22%23fbecd0%22%3E%3Crect%20x%3D%224%22%20y%3D%220%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%221%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3C/svg%3E"); }
-#hint .seal-look { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%209%209%22%20shape-rendering%3D%22crispEdges%22%20fill%3D%22%23fbecd0%22%3E%3Crect%20x%3D%222%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%221%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%221%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%222%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%220%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%228%22%20y%3D%223%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%220%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%228%22%20y%3D%224%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%220%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%228%22%20y%3D%225%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%221%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%227%22%20y%3D%226%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%222%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%223%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%224%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%225%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3Crect%20x%3D%226%22%20y%3D%227%22%20width%3D%221%22%20height%3D%221%22/%3E%3C/svg%3E"); }

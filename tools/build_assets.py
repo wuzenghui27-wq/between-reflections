@@ -530,7 +530,7 @@ ICONS['k_space'] = keycap(["pppppppppppppppppppppp", "ppkpppppppppppppppkppp", "
 # ---------------------------------------------------------------- v3 美术：人物与道具重画（tools/traveler_art.py、tools/props_art.py）
 # 上面的旧画法留作参考；打包时用 v3 的版本覆盖同名图块。
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import traveler_ming as traveler_art, props_art
+import traveler_guan as traveler_art, props_art
 from pixelkit import sel_outline
 traveler_frame = traveler_art.traveler_frame
 TRAVELER_ROWS, TRAVELER_COLS = traveler_art.TRAVELER_ROWS, traveler_art.TRAVELER_COLS
@@ -606,6 +606,7 @@ def build_ui():
     frame_png((200, 64, 46, 255), (244, 150, 110, 255), (122, 32, 20, 255)).save(os.path.join(d, 'btn.png'))
     frame_png((216, 80, 58, 255), (255, 186, 140, 255), (140, 40, 26, 255)).save(os.path.join(d, 'btn_hover.png'))
     frame_png((242, 232, 204, 255), (255, 252, 240, 255), (184, 168, 130, 255)).save(os.path.join(d, 'paper.png'))
+    import ui_jian; ui_jian.build(d)      # 提示签：明代笺纸
     for k, im in ICONS.items():
         if k.startswith('i_'): outline(im).save(os.path.join(d, k[2:] + '.png'))
     print('ui', len(ICONS))
