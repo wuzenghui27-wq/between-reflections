@@ -48,6 +48,7 @@
     }
     for (const s of LV.solids) if (on(s, world) && s.x1 > x0 && s.x0 < x1) RF.Props.solid(s, e);
     RF.Props.decorations(e, x0, x1);
+    RF.Props.chimes(e, x0, x1);
     for (const mg of LV.moongates) if (mg.x > x0 && mg.x < x1) RF.Props.moongate(mg, e);
     for (const h of LV.hazards) if (on(h, world) && h.x1 > x0 && h.x0 < x1) RF.Props.hazard(h, e, G.gates, false);
     for (const b of LV.bells) if (on(b, world) && b.x > x0 && b.x < x1) RF.Props.bell(b, e, G.gates, false);
@@ -80,8 +81,20 @@
     for (let k = 0; k < 3; k++) c.fillRect(px - 4 + ((Math.floor(e.t * 3) + k * 3) % 7) - 3, wy + 3 + d + k * 4, 4 + k, 1);
   }
 
+  // 连续踩拍 4 次以上：身后拖出几道残影（像素游戏里常见的“进入状态”反馈）
+  const trail = [];
   function player(G, cam) {
     const ri = LV.regionAt(G.px);
+    if (G.state === 'running') { trail.push({ px: G.px, foot: G.foot, g: G.onGround, vy: G.vy }); if (trail.length > 13) trail.shift(); } else trail.length = 0;
+    if (G.combo >= 4 && !G.reduceMotion && G.state === 'running') {
+      for (let k = 0; k < trail.length - 3; k += 4) {
+        const t = trail[k];
+        RF.Traveler.draw(t.px - cam - (trail.length - k) * 3, t.foot, {
+          weather: G.weather[ri], region: ri, state: t.g ? 'run' : 'air', dist: t.px, night: true, vy: t.vy, t: e.t,
+          alpha: 0.1 + 0.06 * k / 4 + Math.min(0.1, (G.combo - 4) * 0.02), noGlow: true
+        });
+      }
+    }
     const st = G.state === 'running' ? (G.riding ? 'idle' : G.onGround ? 'run' : 'air') : (G.state === 'failing' && !G.onGround ? 'air' : 'idle');
     RF.Traveler.draw(G.px - cam, G.foot, {
       weather: G.weather[ri], region: ri, state: st, dist: G.px, alpha: G.playerAlpha, night: G.world === 'night',
@@ -153,6 +166,11 @@
     if (G.onBeatFx > 0 && !opt.title) X.glow(cx, cy - e.camYpix, 18, [255, 240, 200], G.onBeatFx * 0.5);
     RF.Particles.draw(c, e.camPix);
     if (!opt.title) keyTip(G, cam);
+    if (!opt.title && G.judge) {        // 踩拍判定字：妙 / 好，往上飘一点再淡掉
+      const k = G.judge.t / 0.7, jx = Math.round((G.px - cam) / P) + 2, jy = Math.round(G.foot / P) - 30 - Math.round(U.ease(Math.min(1, k * 2)) * 5);
+      RF.Props.spr(G.judge.k === 'miao' ? 'j_miao' : 'j_hao', jx, jy, false, k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4);
+      if (G.judge.k === 'miao' && k < 0.4) X.glow(jx, jy - 6, 10, [255, 220, 140], (0.4 - k) * 1.5);
+    }
     c.restore(); X.oy = 0;
     // 近处的天气（落在人物前面）与近景剪影
     RG.weatherFront(c, G.weather[LV.regionAt(cam + C.W / 2)], G.world, e.t, e.camPix, e.reduce);

@@ -127,7 +127,9 @@
       G.riding = false;
       for (const h of LV.rollers) placeRoller(h, cp.x);
       for (const sk of LV.sinkers) { sk.y = sk.by; sk.stood = 0; sk.gone = false; }
-      G.coinRun = 0; G.lastCoin = -9;
+      for (const ev of LV.eaves) ev.y = cp.world === 'day' ? ev.yd : ev.yn;
+      for (const cl of LV.calls) { cl.heard = cl.x < cp.x ? cl.notes.length : 0; cl.echo = 0; }
+      G.coinRun = 0; G.jumpRise = false; G.lastCoin = -9;
       G.wipe = null; G.playerAlpha = 1; G.pendingSwitch = false; G.flashes = {};
       G.regionIndex = LV.regionAt(G.px);
     };
@@ -251,6 +253,13 @@
       else if (G.state === 'running') G.jumpBuf = C.JUMP_BUFFER;
       else if (G.state === 'ready' && G.timer > 0.15) endReady();
     };
+    // 松开跳键：还在往上冲就收一收，跳得矮一点（只管主动起跳，借力那一下不受影响）
+    G.inputJumpRelease = function () {
+      if (G.state !== 'running') return;
+      G.jumpBuf = 0;
+      if (G.jumpRise && G.vy < -C.JUMP_V * C.JUMP_CUT) G.vy = -C.JUMP_V * C.JUMP_CUT;
+      G.jumpRise = false;
+    };
     G.inputRetry = function () {
       if (G.state === 'running') G.retry();
       else if (G.state === 'ready' && G.timer > 0.15) endReady();
@@ -277,6 +286,12 @@
         G.wipe = { from, t: 0, onBeat: off < 0.14 };
         if (off < 0.14) G.onBeatFx = 1;
         G.emit('switched', G.world, off < 0.14);
+        if (off < 0.14) { G.judge = { k: off < 0.07 ? 'miao' : 'hao', t: 0 }; G.emit('judge', G.judge.k); }
+        // 编钟应和：在应和段里切换，就接着敲出对应的那个音
+        for (const cl of LV.calls) {
+          if (G.px < cl.x0 - C.BEAT_PX * 0.6 || G.px > cl.x1) continue;
+          if (cl.echo < cl.notes.length) { G.emit('echo', cl, cl.echo, cl.notes[cl.echo]); G.flashes['ce' + cl.id + '_' + cl.echo] = 0.6; cl.echo++; }
+        }
         if (G.stats.reg && G.stats.reg[LV.regionAt(G.px)]) {
           const rs = G.stats.reg[LV.regionAt(G.px)];
           rs.sw++; if (off < 0.14) rs.beat++;
@@ -293,7 +308,7 @@
         if (!G.onGround && !G.hopUsed) {
           G.hopUsed = true;
           G.vy = Math.min(G.vy, -C.JUMP_V * C.SHIFT_HOP);
-          G.coyote = 0; G.jumpBuf = 0;
+          G.coyote = 0; G.jumpBuf = 0; G.jumpRise = false;
           G.emit('hop');
         }
       }
@@ -302,8 +317,19 @@
         G.jumpBuf -= dt;
         if (G.onGround || G.coyote > 0) {
           G.vy = -C.JUMP_V; G.onGround = false; G.coyote = 0; G.jumpBuf = 0; G.airT = 0; G.hopUsed = false;
+          G.jumpRise = true;
           G.emit('jump');
         }
+      }
+      // 2.5) 飞檐：白天升到 yd，夜里落到 yn；站在上面的人跟着一起走
+      for (const ev of LV.eaves) {
+        const tgt = G.world === 'day' ? ev.yd : ev.yn;
+        if (ev.y === tgt) continue;
+        const on = G.onGround && G.px >= ev.x0 - C.HALF_W && G.px <= ev.x1 + C.HALF_W && Math.abs(G.foot - ev.y) < 0.6;
+        const st = C.EAVE_V * dt;
+        ev.y = Math.abs(tgt - ev.y) <= st ? tgt : ev.y + Math.sign(tgt - ev.y) * st;
+        ev.moving = ev.y !== tgt;
+        if (on) G.foot = ev.y;
       }
       // 3) 前进 + 撞墙 / 迈上小台阶
       let sp = C.SPEED * LV.paceAt(G.px);
@@ -327,6 +353,11 @@
         }
       }
       G.phase += sp * dt * 0.075;
+      for (const cl of LV.calls) {
+        while (cl.heard < cl.notes.length && G.px >= cl.x + cl.beats[cl.heard] * C.BEAT_PX) {
+          G.flashes['ch' + cl.id] = 0.22; G.emit('chime', cl, cl.heard, cl.notes[cl.heard]); cl.heard++;
+        }
+      }
       for (const f of LV.ferries) if (f.on) placeFerry(f, G.px);
       const s = Q.solidInBody(G.world, G.px, G.foot);
       if (s) {
@@ -354,7 +385,7 @@
             if (t.x1 < G.px - C.HALF_W || !active(t, G.world)) continue;
             if (t.y >= G.foot - 0.01 && t.y <= nf && (land === null || t.y < land)) land = t.y;
           }
-          if (land !== null) { G.foot = land; G.vy = 0; G.onGround = true; G.landT = 0; G.emit('land'); }
+          if (land !== null) { G.foot = land; G.vy = 0; G.onGround = true; G.landT = 0; G.jumpRise = false; G.emit('land'); }
           else G.foot = nf;
         } else G.foot = nf;
       }
@@ -401,6 +432,7 @@
       if (G.state === 'paused') return;
       G.animT += dt; G.landT = (G.landT === undefined ? 9 : G.landT) + dt;
       if (G.wipe) { G.wipe.t += dt; if (G.wipe.t >= C.SWITCH_WIPE) G.wipe = null; }
+      if (G.judge) { G.judge.t += dt; if (G.judge.t > 0.7) G.judge = null; }
       if (G.onBeatFx > 0) G.onBeatFx = Math.max(0, G.onBeatFx - dt * 2.5);
       for (const k in G.flashes) { G.flashes[k] -= dt; if (G.flashes[k] <= 0) delete G.flashes[k]; }
       if (G.state === 'title' || G.state === 'ended') return;
@@ -482,12 +514,14 @@
     };
 
     // ------------------------------------------------------------ 供自动验证使用的快照
-    const KEYS = ['state', 'px', 'foot', 'vy', 'onGround', 'coyote', 'jumpBuf', 'world', 'cpIndex', 'pendingSwitch', 'airT', 'hopUsed', 'riding'];
+    const KEYS = ['state', 'px', 'foot', 'vy', 'onGround', 'coyote', 'jumpBuf', 'world', 'cpIndex', 'pendingSwitch', 'airT', 'hopUsed', 'riding', 'jumpRise'];
     G.snapshot = function () {
       const s = {}; for (const k of KEYS) s[k] = G[k];
       s.gates = Object.assign({}, G.gates); s.got = Object.assign({}, G.got);
       s.ferries = LV.ferries.map(f => [f.on, f.p0]);
       s.sinkers = LV.sinkers.map(k => [k.y, k.stood, k.gone]);
+      s.eaves = LV.eaves.map(k => k.y);
+      s.calls = LV.calls.map(k => [k.heard, k.echo]);
       return s;
     };
     G.restore = function (s) {
@@ -495,6 +529,8 @@
       G.gates = Object.assign({}, s.gates); G.got = Object.assign({}, s.got);
       LV.ferries.forEach((f, i) => { f.on = s.ferries[i][0]; f.p0 = s.ferries[i][1]; placeFerry(f, G.px); });
       LV.sinkers.forEach((k, i) => { [k.y, k.stood, k.gone] = s.sinkers[i]; });
+      LV.eaves.forEach((k, i) => { k.y = s.eaves[i]; });
+      LV.calls.forEach((k, i) => { [k.heard, k.echo] = s.calls[i]; });
       for (const r of LV.rollers) placeRoller(r, G.px);
     };
     G.physicsOnly = function (dt) {   // 不触发界面事件的快速模拟

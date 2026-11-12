@@ -141,6 +141,30 @@
         if (night) X.glow((x0 + x1) / 2, y, 12, [170, 210, 255], 0.35);
         break;
       }
+      case 'eave': {       // 飞檐：琉璃瓦顶 + 红柱，白天升、夜里落；另一面的高度用虚线预告
+        const img = night ? RG.spritesNight : RG.sprites, a = RF.ATLAS.eave;
+        const ox = 1, oy = 1, tw = a[2] - 2;                 // 跳过描边那一圈，按瓦片平铺
+        // 两根红柱，从檐下一直伸到画面底
+        const pc = night ? ['#7a3a4a', '#4a2030'] : ['#c8402e', '#7a1e1c'];
+        for (const px of [x0 + 3, x1 - 6]) { r(px, y + 7, 3, PH + 16 - y, pc[0]); r(px + 2, y + 7, 1, PH + 16 - y, pc[1]); r(px, y + 7, 1, PH + 16 - y, pc[1]); }
+        if (img && a) {
+          for (let xx = x0; xx < x1; xx += tw) {
+            const ww = Math.min(tw, x1 - xx);
+            c.drawImage(img, a[0] + ox, a[1] + oy - 1, ww, a[3] - 1, xx, y - 1, ww, a[3] - 1);
+          }
+          r(x0 - 2, y - 2, 3, 1, night ? '#8a7a50' : '#f0c858'); r(x1 - 1, y - 2, 3, 1, night ? '#8a7a50' : '#f0c858');   // 两角起翘
+          r(x0 - 3, y - 3, 1, 1, night ? '#8a7a50' : '#f0c858'); r(x1 + 2, y - 3, 1, 1, night ? '#8a7a50' : '#f0c858');
+        }
+        const oy2 = Math.round((e.world === 'day' ? s.yn : s.yd) / P);
+        const ga = e.ghostA(s.x0, s.x1);
+        if (oy2 !== Math.round((e.world === 'day' ? s.yd : s.yn) / P) && ga > 0.02) {
+          c.globalAlpha = ga; dashH(x0, x1, oy2, previewCol(e), 3, 2); dashH(x0, x1, oy2 + 1, previewCol(e), 3, 2);
+          dashV(x0, Math.min(oy2, y), Math.max(oy2, y), previewCol(e)); dashV(x1 - 1, Math.min(oy2, y), Math.max(oy2, y), previewCol(e));
+          c.globalAlpha = 1;
+        }
+        if (s.moving && !e.reduce) for (let k = 0; k < 4; k++) r(x0 + 2 + Math.floor(U.hash(k, (e.t * 20) | 0) * (w - 4)), y + 8 + k * 3, 1, 2, 'rgba(255,255,255,0.35)');
+        break;
+      }
       case 'ice': {        // 夜里结冰的湖面
         r(x0, y, w, 3, 'rgba(190,220,250,0.8)'); r(x0, y, w, 1, '#eef6ff');
         for (let k = x0 + 4; k < x1 - 4; k += 11) { r(k, y + 1, 3, 1, '#ffffff'); }
@@ -444,5 +468,31 @@
     }
   }
 
-  RF.Props = { spr, solid, ghostSolid, hazard, bell, lantern, mirage, decorations, coins, moongate, roller };
+  // ------------------------------------------------------------ 编钟架：敲响时最右那口钟荡一下；应和段地上的拍点
+  function chimes(e, x0, x1) {
+    const G = e.G, night = e.world === 'night';
+    for (const ch of LV.chimes) {
+      if (ch.x < x0 - 60 || ch.x > x1 + 60) continue;
+      const gy = RF.Q.groundAt(e.world, ch.x); if (gy === null || gy === undefined) continue;
+      const fl = e.flash('ch' + ch.id) || 0;
+      const sx = Math.round(ch.x / P) - e.camPix, sy = Math.round(gy / P);
+      spr(fl > 0 ? 'chime1' : 'chime0', sx, sy, night);
+      if (fl > 0) X.glow(sx + 5, sy - 14, 10 + fl * 30, [200, 255, 210], fl * 2.5);
+    }
+    for (const cl of LV.calls) {
+      if (cl.x1 < x0 || cl.x > x1) continue;
+      cl.beats.forEach((b, i) => {
+        const bx = cl.x0 + b * C.BEAT_PX, sx = Math.round(bx / P) - e.camPix;
+        const gy = RF.Q.groundAt('day', bx) || RF.Q.groundAt('night', bx); if (!gy) return;
+        const sy = Math.round(gy / P) - 3;
+        const heard = cl.heard > i, done = cl.echo > i, fl = e.flash('ce' + cl.id + '_' + i) || 0;
+        const col = done ? '#fff2b0' : heard ? '#9ae0c0' : 'rgba(255,255,255,0.35)';
+        r(sx, sy - 1, 1, 1, col); r(sx - 1, sy, 3, 1, col); r(sx, sy + 1, 1, 1, col);     // 小菱形拍点
+        if (heard && !done) X.glow(sx, sy, 5, [160, 255, 200], 0.4 + (e.reduce ? 0 : 0.2 * Math.sin(e.t * 8)));
+        if (fl > 0) X.glow(sx, sy, 6 + fl * 20, [255, 240, 170], fl * 1.6);
+      });
+    }
+  }
+
+  RF.Props = { spr, solid, ghostSolid, hazard, bell, lantern, mirage, decorations, coins, moongate, roller, chimes };
 })();

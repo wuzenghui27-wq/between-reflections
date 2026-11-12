@@ -527,6 +527,17 @@ _sw = word('SHIFT')
 ICONS['k_shift'] = keycap(_sw, len(_sw[0]) + 2)
 ICONS['k_space'] = keycap(["pppppppppppppppppppppp", "ppkpppppppppppppppkppp", "ppkkkkkkkkkkkkkkkkkppp", "pppppppppppppppppppppp"], 24)
 
+# ---------------------------------------------------------------- v3 美术：人物与道具重画（tools/traveler_art.py、tools/props_art.py）
+# 上面的旧画法留作参考；打包时用 v3 的版本覆盖同名图块。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import traveler_art, props_art
+from pixelkit import sel_outline
+traveler_frame = traveler_art.traveler_frame
+TRAVELER_ROWS, TRAVELER_COLS = traveler_art.TRAVELER_ROWS, traveler_art.TRAVELER_COLS
+V3 = dict(props_art.PROPS); V3.update(props_art.DECO_STELE); V3.update(props_art.COINS); V3.update(props_art.JUDGE)
+for k in list(V3):
+    PROPS.pop(k, None); DECO.pop(k, None)
+
 # ---------------------------------------------------------------- 打包
 def pack():
     items = []
@@ -537,6 +548,9 @@ def pack():
         for k, im in group.items():
             o = outline(im)
             items.append((k, o, (o.size[0] // 2, o.size[1] - 2)))
+    for k, im in V3.items():             # v3：同色系的选择性描边
+        o = sel_outline(im)
+        items.append((k, o, (o.size[0] // 2, o.size[1] - 2)))
     for k, im in ICONS.items():
         o = outline(im)
         items.append((k, o, (o.size[0] // 2, o.size[1] - 2)))

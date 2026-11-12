@@ -75,6 +75,8 @@
     $('worldName').textContent = w === 'night' ? '夜晚' : '白天';
   });
   G.on('switched', (w, onBeat) => A.sfx('switch', { night: w === 'night', onBeat }));
+  G.on('chime', (cl, i, n) => A.sfx('chime', n));
+  G.on('echo', (cl, i, n) => A.sfx('chime', n + 5));
   G.on('intro', () => $('introLine').classList.add('show'));
   G.on('run', () => $('introLine').classList.remove('show'));
   // 粒子与手感
@@ -150,7 +152,7 @@
   G.on('region', reg => { showChapter(reg); A.sfx('region'); setWeather(); });
   G.on('hint', (t, d, tag) => {
     showHint(t, d);
-    const key = tag === 'switch' || tag === 'switch2' || tag === 'hop' || tag === 'bridge' || tag === 'gate2' ? 'k_shift' : tag === 'jump' || tag === 'lotus' || tag === 'roll' ? 'k_space' : null;
+    const key = tag === 'switch' || tag === 'switch2' || tag === 'hop' || tag === 'bridge' || tag === 'gate2' || tag === 'eave' || tag === 'eave2' || tag === 'chime' ? 'k_shift' : tag === 'jump' || tag === 'lotus' || tag === 'roll' ? 'k_space' : null;
     G.keyTip = key && !touchUI ? { key, t: Math.min(d, 3.5) } : null;
   });
   G.on('switched', () => { if (G.keyTip && G.keyTip.key === 'k_shift') G.keyTip.t = 0; });
@@ -252,6 +254,10 @@
       startJourney();
     }
   });
+  window.addEventListener('keyup', e => {
+    const k = e.code;
+    if ((k === 'Space' || k === 'ArrowUp' || k === 'KeyW') && inGame()) G.inputJumpRelease();
+  });
   // 触屏 / 鼠标：左半屏切换，右半屏跳
   let touchUI = false;
   canvas.addEventListener('pointerdown', e => {
@@ -259,8 +265,10 @@
     if (e.pointerType === 'touch') touchUI = true;
     e.preventDefault();
     const r = canvas.getBoundingClientRect();
-    if (e.clientX - r.left < r.width / 2) G.inputSwitch(); else G.inputJump();
+    if (e.clientX - r.left < r.width / 2) G.inputSwitch(); else { G.inputJump(); jumpPtr = e.pointerId; }
   });
+  let jumpPtr = null;
+  window.addEventListener('pointerup', e => { if (e.pointerId === jumpPtr) { jumpPtr = null; if (inGame()) G.inputJumpRelease(); } });
   window.addEventListener('blur', () => G.pause());
   document.addEventListener('visibilitychange', () => { if (document.hidden) G.pause(); });
 

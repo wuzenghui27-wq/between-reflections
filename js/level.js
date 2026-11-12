@@ -4,7 +4,7 @@
 (function () {
   const C = RF.CFG, B = C.BEAT_PX, G0 = C.GROUND;
 
-  const LISTS = ['solids', 'hazards', 'bells', 'lanterns', 'mirages', 'ferries', 'moongates', 'rollers', 'sinkers', 'zones', 'checkpoints', 'regions', 'texts'];
+  const LISTS = ['solids', 'hazards', 'bells', 'lanterns', 'mirages', 'ferries', 'moongates', 'rollers', 'sinkers', 'eaves', 'calls', 'chimes', 'zones', 'checkpoints', 'regions', 'texts'];
   const L = { endX: 0, version: 0, mode: 'journey' };
   LISTS.forEach(k => { L[k] = []; });
   let x = 0, gy = G0, gateN = 0;
@@ -57,6 +57,33 @@
   }
   // 让滚木正好在 o 拍处和人相遇（相遇点只由位置决定，跟步速无关）
   const rollAt = (o, w, kind) => roller(o + 980 * 0.55 / 1.55 / B, w, kind);
+  // 飞檐：两面都在，白天升到 yd、夜里落到 yn；站在上面切换，就被抬上去或放下来（下面是空的）
+  function eave(beats, yd, yn) {
+    const s = seg(beats, 'both', 'eave', yd);
+    s.thin = true; s.eave = true; s.yd = yd; s.yn = yn;
+    L.eaves.push(s); x += beats * B; return s;
+  }
+  // 编钟应和：编钟先敲一小节（bounds 是相对这一小节开头的拍数），下一小节同样的拍子上就是要切换的地方。
+  // 每两次切换之间放一个“另一面才有”的障碍，所以照着编钟的节奏切，正好躲开。
+  function callResp(bounds, w0) {
+    const id = L.calls.length, x0 = x + 4 * B;
+    const notes = bounds.map((b, i) => [0, 2, 4, 3, 5, 4, 7][i % 7]);   // 五声音阶上的音级
+    const cl = { id, x, x0, beats: bounds.slice(), notes, heard: 0, echo: 0 };
+    L.chimes.push({ x: at(-0.6), id });
+    let w = w0;
+    haz(4 - 0.5, w === 'day' ? 'night' : 'day', w === 'day' ? 'door' : 'stall');   // 进应和段之前先固定在 w0 这一面
+    for (let i = 0; i < bounds.length; i++) {
+      w = w === 'day' ? 'night' : 'day';
+      const a = bounds[i], b = i + 1 < bounds.length ? bounds[i + 1] : a + 1.5;
+      haz(4 + (a + b) / 2, w === 'day' ? 'night' : 'day', w === 'day' ? 'door' : 'stall');
+    }
+    const last = bounds[bounds.length - 1] + 1.5;
+    cl.x1 = x0 + last * B;
+    seg(4 + last, 'both', 'ground');
+    L.calls.push(cl);
+    x += (4 + last) * B;
+    return w;
+  }
   // 速度区：mult 倍速（音乐也跟着变快）
   const zone = (beats, mult) => L.zones.push({ x0: x, x1: x + beats * B, mult });
 
@@ -146,6 +173,32 @@
     text(-4.5, '院门上了锁。去另一面碰响铜铃，门就开了。', 5, 'bell');
     bellGate(-2.5, 'night', -0.5);
     walk(4);
+    // ---- 飞檐升降：白天升起、夜里落下。夜里走上去，切回白天就被抬上高处
+    cp('day');
+    walk(3);
+    text(-2.5, '飞檐白天升起、夜里落下。夜里走上去，再切回白天，它会把你抬上高墙。', 6, 'eave');
+    walk(1.5);
+    eave(2.5, G0 - 130, G0);
+    height(G0 - 130); walk(3);
+    lantern(-1.5, 'both', 40);
+    height(G0); walk(3);
+    text(-2.5, '两段飞檐一高一低：夜里上、白天换、再夜里，一级一级往上走。', 6, 'eave2');
+    walk(1);
+    eave(2, G0 - 90, G0);
+    eave(2, G0 - 90, G0 - 180);
+    height(G0 - 180); walk(2.5);
+    lantern(-1, 'night', 50);
+    height(G0); walk(4);
+    // ---- 编钟应和：编钟先敲一小节，下一小节照着同样的节奏切换
+    cp('day');
+    walk(3);
+    text(-2.5, '编钟先敲一小节，你在下一小节照着同样的拍子切换，跟它应和。', 7, 'chime');
+    walk(1);
+    { let w = callResp([0, 1, 2, 3], 'day');
+      walk(2);
+      w = callResp([0, 1.5, 2.5, 3.5], w);
+      lantern(-0.75, 'both', 60);
+      walk(3); }
     // ---- 月洞门：穿过就自动翻面，进门前要先想好出门是哪一面
     cp('day');
     walk(3);

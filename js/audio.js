@@ -220,6 +220,11 @@
         case 'layerDown': tone(mtof(cur.chord), t, { to: mtof(cur.chord - 5), glide: 0.3, type: 'triangle', g: 0.04, d: 0.4 }); break;
         case 'land': noise(t, 0.06, 0.04, 500, sfxBus, 1); break;
         case 'board': tone(180, t, { to: 120, glide: 0.08, type: 'triangle', g: 0.06, d: 0.18 }); noise(t + 0.02, 0.3, 0.05, 900, sfxBus, 0.6); break;
+        case 'chime': {        // 编钟：五声音阶上的一个音，基音 + 不协和的泛音，衰减长
+          const PENT = [0, 2, 4, 7, 9], n = arg | 0, f = 392 * Math.pow(2, (PENT[n % 5] + 12 * Math.floor(n / 5)) / 12);
+          tone(f, t, { g: 0.09, d: 1.8 }); tone(f * 2.76, t, { g: 0.025, d: 0.5 }); tone(f * 5.4, t, { g: 0.012, d: 0.2 });
+          break;
+        }
         case 'bell': [988, 1319, 1976].forEach((f, k) => tone(f, t + k * 0.04, { g: 0.06, d: 1.6 })); break;
         case 'lantern': [1568, 2093].forEach((f, k) => tone(f, t + k * 0.07, { type: 'triangle', g: 0.05, d: 0.5 })); break;
         case 'fail': tone(330, t, { to: 196, glide: 0.4, type: 'triangle', g: 0.07, a: 0.02, d: 0.6 }); break;
