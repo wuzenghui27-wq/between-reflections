@@ -26,7 +26,16 @@
 
   // ---------------------------------------------------------------- 文字
   let hintT = 0, chapterTimer = null;
-  function showHint(text, dur) { const h = $('hint'); h.textContent = text; h.classList.add('show'); hintT = dur; }
+  // 提示条：宣纸小签，左边一方朱印（画的是要做的动作：日月互换 / 向上一跃 / 一只眼睛表示“看”），
+  // 句子里的按键换成键帽，底下一道朱线随时间缩短。
+  const esc = t => t.replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+  function showHint(text, dur, tag) {
+    const h = $('hint');
+    const seal = /Shift|切/.test(text) ? 'swap' : /空格|跳/.test(text) ? 'leap' : 'look';
+    const body = esc(text).replace(/Shift/g, '<kbd>Shift</kbd>').replace(/空格（或 ↑）/g, '<kbd>空格</kbd>');
+    h.innerHTML = `<i class="seal seal-${seal}" aria-hidden="true"></i><span class="hint-text">${body}</span><b class="hint-timer" style="animation-duration:${dur}s"></b>`;
+    h.classList.remove('show'); void h.offsetWidth; h.classList.add('show'); hintT = dur;
+  }
   function hideHint() { $('hint').classList.remove('show'); hintT = 0; }
   function showReason(main, tip) {
     const r = $('reason');
@@ -151,9 +160,9 @@
   }
   G.on('region', reg => { showChapter(reg); A.sfx('region'); setWeather(); });
   G.on('hint', (t, d, tag) => {
-    showHint(t, d);
+    showHint(t, d, tag);
     const key = tag === 'switch' || tag === 'switch2' || tag === 'hop' || tag === 'bridge' || tag === 'gate2' || tag === 'eave' || tag === 'eave2' || tag === 'chime' || tag === 'wheel' || tag === 'swing' || tag === 'drift' ? 'k_shift' : tag === 'jump' || tag === 'lotus' || tag === 'roll' ? 'k_space' : null;
-    G.keyTip = key && !touchUI ? { key, t: Math.min(d, 3.5) } : null;
+    G.keyTip = key && !touchUI ? { key, tag, t: Math.min(d, 4.5) } : null;
   });
   G.on('switched', () => { if (G.keyTip && G.keyTip.key === 'k_shift') G.keyTip.t = 0; });
   G.on('jump', () => { if (G.keyTip && G.keyTip.key === 'k_space') G.keyTip.t = 0; });

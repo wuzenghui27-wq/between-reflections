@@ -536,8 +536,10 @@ traveler_frame = traveler_art.traveler_frame
 TRAVELER_ROWS, TRAVELER_COLS = traveler_art.TRAVELER_ROWS, traveler_art.TRAVELER_COLS
 FW, FH, FOOT = traveler_art.FW, traveler_art.FH, traveler_art.FOOT
 V3 = dict(props_art.PROPS); V3.update(props_art.DECO_STELE); V3.update(props_art.COINS)
+import props_ming                     # v4：障碍、收集物、检查点、按键提示按明代样式重画
+V3.update(props_ming.ART)
 for k in list(V3):
-    PROPS.pop(k, None); DECO.pop(k, None)
+    PROPS.pop(k, None); DECO.pop(k, None); ICONS.pop(k, None)
 
 # ---------------------------------------------------------------- 打包
 def pack():

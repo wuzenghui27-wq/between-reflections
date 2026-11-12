@@ -104,19 +104,66 @@
     // 脚下记号：另一面此刻能不能站
     if ((G.state === 'running' || G.state === 'ready') && G.onGround) {
       const x = Math.round((G.px - cam) / P), y = Math.round(G.foot / P) + 3;
-      const col = G.world === 'day' ? '#2a4cc0' : '#ffd88a';
-      X.ctx.fillStyle = col;
-      if (G.otherSafe()) { X.ctx.fillRect(x - 1, y, 3, 1); X.ctx.fillRect(x - 2, y + 1, 1, 1); X.ctx.fillRect(x + 2, y + 1, 1, 1); X.ctx.fillRect(x - 1, y + 2, 3, 1); }
-      else { for (let k = -1; k <= 1; k++) { X.ctx.fillRect(x + k, y + 1 + k, 1, 1); X.ctx.fillRect(x - k, y + 1 + k, 1, 1); } }
+      const c = X.ctx, safe = G.otherSafe();
+      if (safe) {        // 另一面能站：脚下一道细细的倒影光，像水面上映出的另一块地
+        const col = G.world === 'day' ? [110, 140, 255] : [255, 216, 138];
+        c.fillStyle = `rgb(${col})`; c.fillRect(x - 2, y + 1, 5, 1);
+        c.fillStyle = `rgba(${col},0.45)`; c.fillRect(x - 4, y + 1, 2, 1); c.fillRect(x + 3, y + 1, 2, 1);
+        c.fillStyle = '#ffffff'; c.fillRect(x, y + 1, 1, 1);
+        X.glow(x, y + 1, 5, col, 0.35);
+      } else {           // 另一面是空的 / 有东西挡着：两截断开的暗线
+        c.fillStyle = 'rgba(200,70,70,0.75)'; c.fillRect(x - 3, y + 1, 2, 1); c.fillRect(x + 2, y + 1, 2, 1);
+      }
     }
   }
 
-  // 教学提示：人物头顶浮着一个按键
+  // 教学提示：不在头顶飘字，而是在“该按的地方”立一道光、地上一枚记号、上面一块按键牌。
+  // 人走近时按键牌跟着拍子按下去，过了这个点就收起来；找不到落点（看时机的机关）才退回人物头顶。
+  const AIM = { switch: 1, switch2: 1, bridge: 1, hop: 0, jump: 1, lotus: 0, roll: 0 };
+  function findCue(G, k) {
+    if (!AIM[k.tag]) return null;
+    const cur = G.world, oth = cur === 'day' ? 'night' : 'day', Q = RF.Q, foot = G.foot;
+    for (let x = G.px + 24; x < G.px + C.BEAT_PX * 6; x += 6) {
+      const gc = Q.groundAt(cur, x), haz = Q.hazardHit(cur, x, foot, G.gates);
+      if (k.key === 'k_shift') {
+        const bad = gc === null || gc > foot + C.STEP_UP || haz || Q.solidInBody(cur, x, foot - C.STEP_UP);
+        const go = Q.groundAt(oth, x);
+        if (bad && go !== null && !Q.hazardHit(oth, x, go, G.gates)) return { x: x - 28, y: Q.groundAt(cur, x - 28) ?? go };
+      } else if (gc === null || gc < foot - C.STEP_UP || haz) {
+        const fx = x - 34; return { x: fx, y: Q.groundAt(cur, fx) ?? foot };
+      }
+    }
+    return null;
+  }
   function keyTip(G, cam) {
-    const k = G.keyTip; if (!k || k.t <= 0 || G.state !== 'running') return;
-    const x = Math.round((G.px - cam) / P) + 8, y = Math.round(G.foot / P) - 32 + (G.reduceMotion ? 0 : Math.round(Math.sin(e.t * 6)));
-    const press = Math.floor(e.t * 2.5) % 2;     // 一按一放
-    RF.Props.spr(k.key, x, y + press, false);
+    const k = G.keyTip; if (!k || k.t <= 0 || G.state !== 'running') { if (k) k.cue = null; return; }
+    if (k.cue === undefined || (k.cue && k.cue.x < G.px - 40)) k.cue = k.cue === undefined ? findCue(G, k) : null;
+    const c = X.ctx, bob = G.reduceMotion ? 0 : Math.round(Math.sin(e.t * 5) * 1);
+    const age = Math.min(1, (k.age = (k.age || 0) + 1 / 60) * 5);         // 出场：从下往上弹一下
+    const pop = Math.round((1 - age) * 6 - (age > 0.6 && age < 0.9 ? 1 : 0));
+    const col = k.key === 'k_shift' ? (G.world === 'day' ? [120, 150, 255] : [255, 216, 138]) : [255, 244, 214];
+    const rgba = a => `rgba(${col[0]},${col[1]},${col[2]},${a.toFixed(3)})`;
+    if (k.cue) {
+      const x = Math.round((k.cue.x - cam) / P), gy = Math.round(k.cue.y / P);
+      const near = (k.cue.x - G.px) < C.BEAT_PX * 0.9, ph = (G.beat() % 1);
+      c.globalAlpha = Math.min(1, k.t * 2) * age;
+      for (let y = 0; y < 30; y++) {                                       // 光柱：底下实、往上散
+        const a = 0.85 * (1 - y / 30) * (0.75 + 0.25 * Math.sin(e.t * 6));
+        c.fillStyle = rgba(a); c.fillRect(x - 1, gy - y, 3, 1);
+        c.fillStyle = rgba(a * 0.45); c.fillRect(x - 3, gy - y, 1, 1); c.fillRect(x + 3, gy - y, 1, 1);
+      }
+      X.glow(x, gy - 2, 9, col, 0.5);
+      const rr = near ? 4 : 5 + Math.round((1 - ph) * 3);                  // 地上的记号：一圈跟着拍子收拢的光点
+      for (let a = 0; a < 12; a++) { const t = a / 12 * Math.PI * 2; c.fillStyle = rgba(0.85); c.fillRect(Math.round(x + Math.cos(t) * rr), Math.round(gy + 1 + Math.sin(t) * rr * 0.35), 1, 1); }
+      c.fillStyle = rgba(1); c.fillRect(x, gy - 1, 1, 3); c.fillRect(x - 1, gy, 3, 1);
+      const press = near && ph < 0.35 ? 2 : 0;
+      RF.Props.spr(k.key, x, gy - 33 + bob + pop + press, false);
+      c.globalAlpha = 1;
+      return;
+    }
+    const x = Math.round((G.px - cam) / P) + 2, y = Math.round(G.foot / P) - 40 + bob + pop;
+    const press = Math.floor(e.t * 2.5) % 2;
+    c.globalAlpha = age; RF.Props.spr(k.key, x, y + press * 2, false); c.globalAlpha = 1;
   }
 
   function ring(cx, cy, rr, col) {

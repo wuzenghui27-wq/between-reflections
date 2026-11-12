@@ -15,6 +15,7 @@
   }
 
   // ------------------------------------------------------------ 地面
+  const TILED = { ground: 1, shore: 1, slide: 1 };
   function solid(s, e) {
     const x0 = Math.round(s.x0 / P) - e.camPix, x1 = Math.round(s.x1 / P) - e.camPix, y = Math.round(s.y / P);
     if (x1 < -4 || x0 > PW + 4) return;
@@ -27,8 +28,14 @@
           // 拼接图块：顶一排（左端、中间两种交替、右端），下面身块一直铺到画面底；按世界坐标挑花样，镜头动时不会闪
           const bottom = PH + 16, wx0 = x0 + e.camPix;
           const put = (ti, row, dx, dy, sw) => c.drawImage(ts, ti * 16, 0, sw, 16, dx, dy, sw, 16);
+          const jk = '_j' + e.world;               // 和同高的邻段首尾相接时不画端头，免得中间出现一道竖缝
+          if (!s[jk]) {
+            const vis = q => q !== s && TILED[q.kind] && (q.w === 'both' || q.w === e.world) && Math.abs(q.y - s.y) < 1;
+            s[jk] = { l: LV.solids.some(q => vis(q) && Math.abs(q.x1 - s.x0) < 3), r: LV.solids.some(q => vis(q) && Math.abs(q.x0 - s.x1) < 3) };
+          }
+          const J = s[jk];
           for (let yy = y - 3, row = 0; yy < bottom; yy += 16, row++) {
-            const top = row === 0, L = top ? 0 : 4, Rt = top ? 3 : 7;
+            const top = row === 0, L = J.l ? (top ? 1 : 5) : (top ? 0 : 4), Rt = J.r ? (top ? 2 : 6) : (top ? 3 : 7);
             if (w <= 16) {
               const h = w >> 1;
               c.drawImage(ts, L * 16, 0, h, 16, x0, yy, h, 16);
@@ -170,7 +177,12 @@
         const ox = 1, oy = 1, tw = a[2] - 2;                 // 跳过描边那一圈，按瓦片平铺
         // 两根红柱，从檐下一直伸到画面底
         const pc = night ? ['#7a3a4a', '#4a2030'] : ['#c8402e', '#7a1e1c'];
-        for (const px of [x0 + 3, x1 - 6]) { r(px, y + 7, 3, PH + 16 - y, pc[0]); r(px + 2, y + 7, 1, PH + 16 - y, pc[1]); r(px, y + 7, 1, PH + 16 - y, pc[1]); }
+        for (const px of [x0 + 3, x1 - 6]) {           // 柱脚立在地面上，不再穿过石台
+          let gb = null;
+          for (const q of LV.solids) if (q !== s && !q.thin && (q.w === 'both' || q.w === e.world) && (px + e.camPix) * P >= q.x0 && (px + e.camPix) * P <= q.x1 && q.y > s.y && (gb === null || q.y < gb)) gb = q.y;
+          const h = (gb === null ? PH + 16 : Math.round(gb / P)) - y - 7;
+          if (h > 0) { r(px, y + 7, 3, h, pc[0]); r(px + 2, y + 7, 1, h, pc[1]); r(px, y + 7, 1, h, pc[1]); }
+        }
         if (img && a) {
           for (let xx = x0; xx < x1; xx += tw) {
             const ww = Math.min(tw, x1 - xx);
@@ -265,7 +277,7 @@
     if (!img || !at) return false;
     const c = X.ctx, t = e.reduce ? 0 : e.t;
     const dx = Math.round(Math.sin(t * 5) * 0.8);
-    c.globalAlpha = a * 0.55;
+    c.globalAlpha = Math.min(1, a * 0.9);
     c.drawImage(img, at[0], at[1], at[2], at[3], Math.round(x - at[4]) + dx, Math.round(y - at[5]), at[2], at[3]);
     c.globalAlpha = a * 0.35;
     for (let k = 0; k < at[3]; k += 3)                              // 水平的亮纹，一条条往上走
@@ -390,10 +402,7 @@
         X.glow(x, y, 5, [255, 210, 110], night ? 0.35 : 0.15);
       } else if (!e.noGhost) {
         const a = e.ghostA(c.x, c.x); if (a < 0.05) continue;
-        const c2 = X.ctx; c2.globalAlpha = a * 0.8;
-        r(x - 1, y - 1, 3, 1, e.world === 'day' ? '#2a4cc0' : '#ffd88a'); r(x - 1, y + 1, 3, 1, e.world === 'day' ? '#2a4cc0' : '#ffd88a');
-        r(x - 1, y, 1, 1, e.world === 'day' ? '#2a4cc0' : '#ffd88a'); r(x + 1, y, 1, 1, e.world === 'day' ? '#2a4cc0' : '#ffd88a');
-        c2.globalAlpha = 1;
+        ghostSprite('coin0', x, y + 3, Math.min(1, a * 1.3), e);       // 另一面的铜钱：一枚淡淡的剪影
       }
     }
   }

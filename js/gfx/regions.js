@@ -82,11 +82,25 @@
     x.globalCompositeOperation = 'source-atop'; x.globalAlpha = a; x.fillStyle = col; x.fillRect(0, 0, c.width, c.height);
     return c;
   }
-  // 剪影：保留形状，整块填成一种颜色（另一面的预告用）
+  // 剪影：另一面的预告用。描边那一圈（最暗的像素）提成亮色，里面按原图明暗留一层淡淡的单色，
+  // 远看是一道发光的轮廓，近看还认得出门钉、窗格这些细节，像水里映出来的东西。
   function silhouette(im, col) {
-    const c = X.canvas(im.width, im.height), x = c.getContext('2d');
-    x.drawImage(im, 0, 0);
-    x.globalCompositeOperation = 'source-in'; x.fillStyle = col; x.fillRect(0, 0, c.width, c.height);
+    // 只用合成模式（不读像素），本地直接打开 index.html 也能用
+    const W = im.width, H = im.height;
+    const flat = X.canvas(W, H), f = flat.getContext('2d');
+    f.drawImage(im, 0, 0); f.globalCompositeOperation = 'source-in'; f.fillStyle = col; f.fillRect(0, 0, W, H);
+    const ero = X.canvas(W, H), o = ero.getContext('2d');              // 往里收一圈
+    o.drawImage(flat, 0, 0); o.globalCompositeOperation = 'destination-in';
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) o.drawImage(flat, dx, dy);
+    const ring = X.canvas(W, H), r = ring.getContext('2d');            // 本体减去收进去的那块 = 最外一圈发光轮廓
+    r.drawImage(flat, 0, 0); r.globalCompositeOperation = 'destination-out'; r.drawImage(ero, 0, 0);
+    const body = X.canvas(W, H), b = body.getContext('2d');            // 本体：保留明暗的单色
+    b.drawImage(im, 0, 0); b.globalCompositeOperation = 'color'; b.fillStyle = col; b.fillRect(0, 0, W, H);
+    b.globalCompositeOperation = 'screen'; b.globalAlpha = 0.35; b.drawImage(flat, 0, 0);
+    b.globalCompositeOperation = 'destination-in'; b.globalAlpha = 1; b.drawImage(im, 0, 0);
+    const c = X.canvas(W, H), x = c.getContext('2d');
+    x.globalAlpha = 0.42; x.drawImage(body, 0, 0);
+    x.globalAlpha = 1; x.drawImage(ring, 0, 0);
     return c;
   }
   function tint(im, col) {
