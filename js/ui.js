@@ -152,7 +152,7 @@
   G.on('region', reg => { showChapter(reg); A.sfx('region'); setWeather(); });
   G.on('hint', (t, d, tag) => {
     showHint(t, d);
-    const key = tag === 'switch' || tag === 'switch2' || tag === 'hop' || tag === 'bridge' || tag === 'gate2' || tag === 'eave' || tag === 'eave2' || tag === 'chime' ? 'k_shift' : tag === 'jump' || tag === 'lotus' || tag === 'roll' ? 'k_space' : null;
+    const key = tag === 'switch' || tag === 'switch2' || tag === 'hop' || tag === 'bridge' || tag === 'gate2' || tag === 'eave' || tag === 'eave2' || tag === 'chime' || tag === 'wheel' || tag === 'swing' || tag === 'drift' ? 'k_shift' : tag === 'jump' || tag === 'lotus' || tag === 'roll' ? 'k_space' : null;
     G.keyTip = key && !touchUI ? { key, t: Math.min(d, 3.5) } : null;
   });
   G.on('switched', () => { if (G.keyTip && G.keyTip.key === 'k_shift') G.keyTip.t = 0; });

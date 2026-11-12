@@ -10,7 +10,7 @@ function plan(goal) {
   const seen = new Set(), out = [];
   const st0 = G.state; G.state = 'running';
   function dfs(tick) {
-    const key = tick + '|' + G.world + '|' + Math.round(G.foot / 3) + '|' + Math.round(G.vy / 80) + '|' + G.onGround + '|' + Object.keys(G.gates).length;
+    const key = tick + '|' + G.world + '|' + Math.round((G.dclock || 0) * 8) + '|' + Math.round(G.foot / 3) + '|' + Math.round(G.vy / 80) + '|' + G.onGround + '|' + Object.keys(G.gates).length;
     if (seen.has(key)) return false; seen.add(key);
     const snap = G.snapshot();
     for (const [sw, jp] of ACTS) {

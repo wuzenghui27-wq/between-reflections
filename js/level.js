@@ -4,7 +4,7 @@
 (function () {
   const C = RF.CFG, B = C.BEAT_PX, G0 = C.GROUND;
 
-  const LISTS = ['solids', 'hazards', 'bells', 'lanterns', 'mirages', 'ferries', 'moongates', 'rollers', 'sinkers', 'eaves', 'calls', 'chimes', 'zones', 'checkpoints', 'regions', 'texts'];
+  const LISTS = ['solids', 'hazards', 'bells', 'lanterns', 'mirages', 'ferries', 'moongates', 'rollers', 'sinkers', 'eaves', 'calls', 'chimes', 'movers', 'zones', 'checkpoints', 'regions', 'texts'];
   const L = { endX: 0, version: 0, mode: 'journey' };
   LISTS.forEach(k => { L[k] = []; });
   let x = 0, gy = G0, gateN = 0;
@@ -63,6 +63,14 @@
     s.thin = true; s.eave = true; s.yd = yd; s.yn = yn;
     L.eaves.push(s); x += beats * B; return s;
   }
+  // 昼动夜静：这些踏板白天跟着拍子动（period 拍一个来回），夜里停在那一刻。都在两面存在。
+  //   水车：n 块踏板绕 (cx, cy) 转，半径 r；秋千：从 (cx, cy) 垂下 r 长的绳，摆幅 amp 弧度；浮木：在 cx 左右漂 amp。
+  function wheelAt(cx, cy, r, n, period, hw) {
+    const g = L.movers.length;
+    for (let k = 0; k < n; k++) L.movers.push({ kind: 'wheel', cx, cy, r, period, phase: k / n * Math.PI * 2, hw: hw || 22, group: g, w: 'both', x0: 0, x1: 0, y: 0 });
+  }
+  const swingAt = (cx, cy, r, amp, period, phase, hw) => L.movers.push({ kind: 'swing', cx, cy, r, amp, period, phase: phase || 0, hw: hw || 26, w: 'both', x0: 0, x1: 0, y: 0 });
+  const driftAt = (cx, cy, amp, period, phase, hw) => L.movers.push({ kind: 'drift', cx, cy, amp, period, phase: phase || 0, hw: hw || 38, w: 'both', x0: 0, x1: 0, y: 0 });
   // 编钟应和：编钟先敲一小节（bounds 是相对这一小节开头的拍数），下一小节同样的拍子上就是要切换的地方。
   // 每两次切换之间放一个“另一面才有”的障碍，所以照着编钟的节奏切，正好躲开。
   function callResp(bounds, w0) {
@@ -153,7 +161,16 @@
     }
     walk(2);
     split(3, { kind: 'boat', y: G0 + 2 }, { kind: 'steps', y: G0 + 6 });   // 两面都能走：喘口气
-    walk(5);
+    walk(3);
+    // ---- 水车：白天转、夜里停。看准了切到夜里，让踏板停成过河的台阶
+    cp('day');
+    walk(3);
+    text(-2.5, '水车白天转个不停，夜里就停在那一刻。看准时机切到夜里，让踏板停成过河的台阶。', 7, 'wheel');
+    walk(1);
+    { const x0 = x; gap(3.5); wheelAt(x0 + 1.75 * B, G0 - 30, 84, 4, 8, 24); }
+    walk(3);
+    lantern(-1.5, 'both', 40);
+    walk(4);
 
     // ============================================================ 2 徽派与晋派古建：门与铃
     region('garden', '第二站', '宫苑园林', '白天货摊挡路，夜里宫门紧闭', { clear: 4, snow: 3, rain: 2 }, 0.9);
@@ -199,6 +216,17 @@
       w = callResp([0, 1.5, 2.5, 3.5], w);
       lantern(-0.75, 'both', 60);
       walk(3); }
+    // ---- 花灯秋千：白天荡、夜里停在半空
+    cp('day');
+    walk(3);
+    text(-2.5, '秋千白天荡来荡去，切到夜里就停在半空。趁它荡到合适的地方让它停下。', 7, 'swing');
+    walk(1);
+    { const x0 = x; gap(3); swingAt(x0 + 1.5 * B, G0 - 170, 150, 0.8, 4, 0, 30); }
+    walk(2.5);
+    { const x0 = x; gap(3.4); swingAt(x0 + 1.0 * B, G0 - 160, 130, 0.7, 4, Math.PI, 28); swingAt(x0 + 2.4 * B, G0 - 160, 130, 0.7, 4, 0, 28); }
+    walk(3);
+    lantern(-1.5, 'night', 40);
+    walk(2);
     // ---- 月洞门：穿过就自动翻面，进门前要先想好出门是哪一面
     cp('day');
     walk(3);
@@ -301,6 +329,15 @@
       gap(0.5); sinker(1, 'lotus', LY).w = 'day'; lantern(-0.5, 'day', 40);
       gap(0.5); sinker(1, 'lotus', LY);
       gap(0.5); }
+    walk(3);
+    // ---- 浮木：白天在湖上漂来漂去，夜里湖面一静它也停住
+    cp('day');
+    walk(2);
+    text(-1.5, '浮木白天漂来漂去，夜里湖面一静，它也停住。等它漂到正中再切。', 6, 'drift');
+    walk(1);
+    { const x0 = x; gap(2.5); driftAt(x0 + 1.25 * B, G0 + 16, 80, 4, 0, 40); }
+    walk(2);
+    { const x0 = x; gap(2.5); driftAt(x0 + 1.25 * B, G0 + 16, 80, 3, Math.PI / 2, 40); }
     walk(3);
     cp('day');
     text(-2.5, '跳到空中再切换昼夜，能借力多跳一段。', 5, 'hop');

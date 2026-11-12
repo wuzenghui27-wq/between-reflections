@@ -30,6 +30,10 @@
         if (s.x1 < x - C.HALF_W || !active(s, world)) continue;
         if (s.y >= foot - tol && s.y <= foot + 1) { if (best === null || s.y < best) best = s.y; }
       }
+      for (const m of LV.movers) {
+        if (m.x1 < x - C.HALF_W || m.x0 > x + C.HALF_W) continue;
+        if (m.y >= foot - tol && m.y <= foot + 1) { if (best === null || m.y < best) best = m.y; }
+      }
       return best;
     },
     // 实心地面是否插进身体（薄平台不算）
@@ -81,6 +85,16 @@
   }
   RF.placeRoller = placeRoller;
   const SINK_DELAY = 0.28, SINK_V = 70;
+  // 昼动夜静：白天的“时钟”跟着路程走（一拍一格），夜里停住。会动的踏板按这个时钟摆放。
+  function placeMover(m, clock) {
+    const ph = clock / m.period * Math.PI * 2 + (m.phase || 0);
+    let x, y;
+    if (m.kind === 'wheel') { x = m.cx + m.r * Math.cos(ph); y = m.cy + m.r * Math.sin(ph); }
+    else if (m.kind === 'swing') { const th = m.amp * Math.sin(ph); x = m.cx + m.r * Math.sin(th); y = m.cy + m.r * Math.cos(th); m.th = th; }
+    else { x = m.cx + m.amp * Math.sin(ph); y = m.cy; }
+    m.x0 = x - m.hw; m.x1 = x + m.hw; m.y = y; m.ang = ph;
+  }
+  RF.placeMover = placeMover;
 
   function createGame() {
     const handlers = {};
@@ -128,6 +142,8 @@
       for (const h of LV.rollers) placeRoller(h, cp.x);
       for (const sk of LV.sinkers) { sk.y = sk.by; sk.stood = 0; sk.gone = false; }
       for (const ev of LV.eaves) ev.y = cp.world === 'day' ? ev.yd : ev.yn;
+      G.dclock = cp.x / C.BEAT_PX;
+      for (const m of LV.movers) placeMover(m, G.dclock);
       for (const cl of LV.calls) { cl.heard = cl.x < cp.x ? cl.notes.length : 0; cl.echo = 0; }
       G.coinRun = 0; G.jumpRise = false; G.lastCoin = -9;
       G.wipe = null; G.playerAlpha = 1; G.pendingSwitch = false; G.flashes = {};
@@ -332,6 +348,8 @@
         if (on) G.foot = ev.y;
       }
       // 3) 前进 + 撞墙 / 迈上小台阶
+      let rideM = null;
+      if (G.onGround) for (const m of LV.movers) if (G.px >= m.x0 - C.HALF_W && G.px <= m.x1 + C.HALF_W && Math.abs(G.foot - m.y) < 0.6) { rideM = m; break; }
       let sp = C.SPEED * LV.paceAt(G.px);
       const toEnd = LV.endX - G.px;
       if (toEnd < 300) sp = sp * Math.max(0.05, toEnd / 300);
@@ -353,6 +371,9 @@
         }
       }
       G.phase += sp * dt * 0.075;
+      if (G.world === 'day') G.dclock += (G.px - prevPx) / C.BEAT_PX;
+      for (const m of LV.movers) placeMover(m, G.dclock);
+      if (rideM) G.foot = rideM.y;
       for (const cl of LV.calls) {
         while (cl.heard < cl.notes.length && G.px >= cl.x + cl.beats[cl.heard] * C.BEAT_PX) {
           G.flashes['ch' + cl.id] = 0.22; G.emit('chime', cl, cl.heard, cl.notes[cl.heard]); cl.heard++;
@@ -384,6 +405,10 @@
             if (t.x0 > G.px + C.HALF_W) break;
             if (t.x1 < G.px - C.HALF_W || !active(t, G.world)) continue;
             if (t.y >= G.foot - 0.01 && t.y <= nf && (land === null || t.y < land)) land = t.y;
+          }
+          for (const t of LV.movers) {
+            if (t.x1 < G.px - C.HALF_W || t.x0 > G.px + C.HALF_W) continue;
+            if (t.y >= G.foot - 0.01 - 6 && t.y <= nf && (land === null || t.y < land)) land = t.y;
           }
           if (land !== null) { G.foot = land; G.vy = 0; G.onGround = true; G.landT = 0; G.jumpRise = false; G.emit('land'); }
           else G.foot = nf;
@@ -514,7 +539,7 @@
     };
 
     // ------------------------------------------------------------ 供自动验证使用的快照
-    const KEYS = ['state', 'px', 'foot', 'vy', 'onGround', 'coyote', 'jumpBuf', 'world', 'cpIndex', 'pendingSwitch', 'airT', 'hopUsed', 'riding', 'jumpRise'];
+    const KEYS = ['state', 'px', 'foot', 'vy', 'onGround', 'coyote', 'jumpBuf', 'world', 'cpIndex', 'pendingSwitch', 'airT', 'hopUsed', 'riding', 'jumpRise', 'dclock'];
     G.snapshot = function () {
       const s = {}; for (const k of KEYS) s[k] = G[k];
       s.gates = Object.assign({}, G.gates); s.got = Object.assign({}, G.got);
@@ -532,6 +557,7 @@
       LV.eaves.forEach((k, i) => { k.y = s.eaves[i]; });
       LV.calls.forEach((k, i) => { [k.heard, k.echo] = s.calls[i]; });
       for (const r of LV.rollers) placeRoller(r, G.px);
+      for (const m of LV.movers) placeMover(m, G.dclock);
     };
     G.physicsOnly = function (dt) {   // 不触发界面事件的快速模拟
       if (G.state !== 'running') return;

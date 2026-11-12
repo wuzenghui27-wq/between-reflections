@@ -18,7 +18,7 @@ function solveFrom(x, world) {
   const seen = new Set(); let nodes = 0;
   function dfs(tick) {
     if (++nodes > 400000) return false;
-    const key = tick + '|' + G.world + '|' + Math.round(G.foot / 3) + '|' + Math.round(G.vy / 80) + '|' + G.onGround + '|' + !!G.hopUsed + '|' + Object.keys(G.gates).length + '|' + LV.ferries.map(f => f.on ? 1 : 0).join('') + '|' + LV.sinkers.filter(k => k.stood > 0).length;
+    const key = tick + '|' + G.world + '|' + Math.round((G.dclock || 0) * 8) + '|' + Math.round(G.foot / 3) + '|' + Math.round(G.vy / 80) + '|' + G.onGround + '|' + !!G.hopUsed + '|' + Object.keys(G.gates).length + '|' + LV.ferries.map(f => f.on ? 1 : 0).join('') + '|' + LV.sinkers.filter(k => k.stood > 0).length;
     if (seen.has(key)) return false; seen.add(key);
     const snap = G.snapshot();
     for (const [sw, jp] of ACTS) {

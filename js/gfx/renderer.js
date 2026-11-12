@@ -49,6 +49,7 @@
     for (const s of LV.solids) if (on(s, world) && s.x1 > x0 && s.x0 < x1) RF.Props.solid(s, e);
     RF.Props.decorations(e, x0, x1);
     RF.Props.chimes(e, x0, x1);
+    RF.Props.movers(e, x0, x1);
     for (const mg of LV.moongates) if (mg.x > x0 && mg.x < x1) RF.Props.moongate(mg, e);
     for (const h of LV.hazards) if (on(h, world) && h.x1 > x0 && h.x0 < x1) RF.Props.hazard(h, e, G.gates, false);
     for (const b of LV.bells) if (on(b, world) && b.x > x0 && b.x < x1) RF.Props.bell(b, e, G.gates, false);
@@ -166,10 +167,13 @@
     if (G.onBeatFx > 0 && !opt.title) X.glow(cx, cy - e.camYpix, 18, [255, 240, 200], G.onBeatFx * 0.5);
     RF.Particles.draw(c, e.camPix);
     if (!opt.title) keyTip(G, cam);
-    if (!opt.title && G.judge) {        // 踩拍判定字：妙 / 好，往上飘一点再淡掉
-      const k = G.judge.t / 0.7, jx = Math.round((G.px - cam) / P) + 2, jy = Math.round(G.foot / P) - 30 - Math.round(U.ease(Math.min(1, k * 2)) * 5);
-      RF.Props.spr(G.judge.k === 'miao' ? 'j_miao' : 'j_hao', jx, jy, false, k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4);
-      if (G.judge.k === 'miao' && k < 0.4) X.glow(jx, jy - 6, 10, [255, 220, 140], (0.4 - k) * 1.5);
+    if (!opt.title && G.judge) {        // 踩准拍子：脚下溅起一圈光点（不出字）
+      const k = G.judge.t / 0.7, jx = Math.round((G.px - cam) / P), jy = Math.round(G.foot / P) - 1;
+      const n = G.judge.k === 'miao' ? 14 : 8, rr = 3 + U.ease(Math.min(1, k * 1.6)) * (G.judge.k === 'miao' ? 13 : 9);
+      const col = G.world === 'night' ? [200, 220, 255] : [255, 226, 150], a = (1 - k) * (G.judge.k === 'miao' ? 1 : 0.7);
+      c.fillStyle = U.rgb(col, a);
+      for (let i = 0; i < n; i++) { const t = i / n * Math.PI * 2; c.fillRect(Math.round(jx + Math.cos(t) * rr), Math.round(jy + Math.sin(t) * rr * 0.35), 1, 1); }
+      if (k < 0.35) X.glow(jx, jy - 8, 14, col, (0.35 - k) * (G.judge.k === 'miao' ? 2 : 1.2));
     }
     c.restore(); X.oy = 0;
     // 近处的天气（落在人物前面）与近景剪影

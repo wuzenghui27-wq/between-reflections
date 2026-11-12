@@ -494,5 +494,84 @@
     }
   }
 
-  RF.Props = { spr, solid, ghostSolid, hazard, bell, lantern, mirage, decorations, coins, moongate, roller, chimes };
+  // ------------------------------------------------------------ 昼动夜静的踏板：水车、秋千、浮木
+  // 白天沿着要走的轨迹画一串淡点（能预判它会停在哪），夜里停住时踏板边上结一点霜光。
+  const WD = ['#c08a58', '#93623c', '#6a4228', '#3a2216'], WDN = ['#8a7a8a', '#625468', '#463a50', '#241c2c'];
+  function board(x0, x1, y, night, e) {
+    const W = night ? WDN : WD, w = x1 - x0;
+    r(x0 - 1, y - 1, w + 2, 5, '#17131c');
+    r(x0, y, w, 1, W[0]); r(x0, y + 1, w, 1, W[1]); r(x0, y + 2, w, 1, W[2]);
+    for (let k = x0 + 3; k < x1 - 1; k += 4) r(k, y + 1, 1, 2, W[3]);          // 木板缝
+    r(x0, y, 1, 3, W[2]); r(x1 - 1, y, 1, 3, W[3]);
+  }
+  function still(x0, x1, y, e) {          // 夜里：停住的踏板上几粒静止的冷光
+    if (e.world !== 'night') return;
+    for (let k = x0 + 2; k < x1; k += 5) r(k, y - 1, 1, 1, 'rgba(210,230,255,0.85)');
+    X.glow((x0 + x1) / 2, y, 10, [170, 200, 255], 0.25);
+  }
+  function movers(e, x0, x1) {
+    const night = e.world === 'night', done = {};
+    const sx = x => Math.round(x / P) - e.camPix, sy = y => Math.round(y / P);
+    for (const m of LV.movers) {
+      if (m.cx + 400 < x0 || m.cx - 400 > x1) continue;
+      if (m.kind === 'wheel') {
+        if (done[m.group]) continue; done[m.group] = 1;
+        const ms = LV.movers.filter(q => q.group === m.group), cx = sx(m.cx), cy = sy(m.cy), R = m.r / P;
+        const W = night ? WDN : WD;
+        r(cx - 1, cy, 3, PH + 16 - cy, W[2]); r(cx + 1, cy, 1, PH + 16 - cy, W[3]);   // 立柱
+        if (!night) for (let k = 0; k < 48; k += 2) { const a = k / 48 * Math.PI * 2; r(Math.round(cx + Math.cos(a) * R), Math.round(cy + Math.sin(a) * R) + 1, 1, 1, 'rgba(255,255,255,0.25)'); }
+        for (let k = 0; k < 64; k++) {                                   // 轮辋
+          const a = k / 64 * Math.PI * 2 + ms[0].ang * 0;
+          r(Math.round(cx + Math.cos(a) * (R - 2)), Math.round(cy + Math.sin(a) * (R - 2)), 1, 1, W[1]);
+        }
+        for (let s2 = 0; s2 < 8; s2++) {                                 // 辐条跟着转
+          const a = ms[0].ang + s2 / 8 * Math.PI * 2;
+          for (let t = 2; t < R - 2; t++) r(Math.round(cx + Math.cos(a) * t), Math.round(cy + Math.sin(a) * t), 1, 1, s2 % 2 ? W[2] : W[1]);
+        }
+        r(cx - 2, cy - 2, 5, 5, '#17131c'); r(cx - 1, cy - 1, 3, 3, night ? '#9a8a6a' : '#e8c25a');   // 轴
+        for (const q of ms) {
+          const bx0 = sx(q.x0), bx1 = sx(q.x1), by = sy(q.y);
+          r(Math.round((bx0 + bx1) / 2), by + 3, 1, 3, W[3]);
+          board(bx0, bx1, by, night, e);
+          r(bx0 + 2, by + 3, bx1 - bx0 - 4, 2, night ? '#3a5068' : '#4a7a9a');   // 挂着的水斗
+          still(bx0, bx1, by, e);
+        }
+        continue;
+      }
+      if (m.kind === 'swing') {
+        const px = sx(m.cx), py = sy(m.cy), bx0 = sx(m.x0), bx1 = sx(m.x1), by = sy(m.y);
+        // 两根红柱撑着横梁，柱脚没进水里
+        for (const qx of [px - 10, px + 9]) { r(qx, py - 2, 2, PH + 16 - py, night ? '#5a2a3a' : '#a8302a'); r(qx, py - 2, 1, PH + 16 - py, night ? '#7a3a4a' : '#d04a3a'); }
+        // 横梁：小檐头
+        r(px - 9, py - 3, 19, 2, night ? '#2a2c40' : '#3a3c50'); r(px - 8, py - 1, 17, 2, night ? '#7a3a4a' : '#b8302a');
+        r(px - 10, py - 4, 1, 1, '#e8c25a'); r(px + 10, py - 4, 1, 1, '#e8c25a');
+        if (!night) {                                                    // 摆动的弧线
+          for (let k = -10; k <= 10; k++) { const th = m.amp * k / 10; r(Math.round(px + Math.sin(th) * m.r / P), Math.round(py + Math.cos(th) * m.r / P) + 4, 1, 1, 'rgba(255,255,255,0.22)'); }
+        }
+        const rope = night ? '#8a8070' : '#d8c8a0';
+        for (const [ax, bx] of [[px - 2, bx0 + 2], [px + 2, bx1 - 3]]) {
+          const n = Math.max(Math.abs(bx - ax), Math.abs(by - py));
+          for (let k = 0; k <= n; k++) r(Math.round(ax + (bx - ax) * k / n), Math.round(py + (by - py) * k / n), 1, 1, rope);
+        }
+        board(bx0, bx1, by, night, e);
+        const lx = Math.round((bx0 + bx1) / 2);                          // 板下挂一盏小红灯
+        r(lx, by + 3, 1, 2, '#3a2216'); spr('lantern', lx, by + 14, night);
+        X.glow(lx, by + 9, 8, [255, 180, 110], night ? 0.6 : 0.3);
+        still(bx0, bx1, by, e);
+        continue;
+      }
+      // 浮木：一截圆木，两头有年轮，下面一圈水纹
+      const bx0 = sx(m.x0), bx1 = sx(m.x1), by = sy(m.y), w = bx1 - bx0;
+      if (!night) for (let k = sx(m.cx - m.amp - m.hw); k <= sx(m.cx + m.amp + m.hw); k += 3) r(k, by + 5, 1, 1, 'rgba(255,255,255,0.25)');
+      const L1 = night ? ['#8a7a7a', '#5e5260', '#3e3446'] : ['#b88a5a', '#8a5e38', '#5e3c24'];
+      r(bx0 - 1, by - 1, w + 2, 6, '#17131c');
+      r(bx0, by, w, 1, L1[0]); r(bx0, by + 1, w, 2, L1[1]); r(bx0, by + 3, w, 1, L1[2]);
+      for (let k = bx0 + 4; k < bx1 - 3; k += 7) r(k, by + 1, 3, 1, L1[2]);    // 树皮纹
+      r(bx1 - 2, by, 2, 4, night ? '#c8b8a0' : '#f0d8a8'); r(bx1 - 2, by + 1, 1, 2, L1[1]);   // 截面年轮
+      if (!night && !e.reduce) { const k = (e.t * 6) | 0; r(bx0 - 3 - k % 3, by + 4, 3, 1, 'rgba(255,255,255,0.5)'); r(bx1 + 1 + k % 3, by + 4, 3, 1, 'rgba(255,255,255,0.5)'); }
+      still(bx0, bx1, by, e);
+    }
+  }
+
+  RF.Props = { movers, spr, solid, ghostSolid, hazard, bell, lantern, mirage, decorations, coins, moongate, roller, chimes };
 })();

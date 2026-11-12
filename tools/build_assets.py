@@ -534,7 +534,7 @@ import traveler_art, props_art
 from pixelkit import sel_outline
 traveler_frame = traveler_art.traveler_frame
 TRAVELER_ROWS, TRAVELER_COLS = traveler_art.TRAVELER_ROWS, traveler_art.TRAVELER_COLS
-V3 = dict(props_art.PROPS); V3.update(props_art.DECO_STELE); V3.update(props_art.COINS); V3.update(props_art.JUDGE)
+V3 = dict(props_art.PROPS); V3.update(props_art.DECO_STELE); V3.update(props_art.COINS)
 for k in list(V3):
     PROPS.pop(k, None); DECO.pop(k, None)
 
