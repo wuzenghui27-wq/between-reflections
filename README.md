@@ -59,8 +59,9 @@ v1.2 失误回溯：失误后画面倒带，回到失误点往回至少 3 拍、
 | --- |
 | ![融合](docs/blend.png) |
 
-夜景（v1.2）：夜里换成实拍的中国夜景像素画，每站一到三张：周庄与西塘水巷、故宫角楼、西江千户苗寨、凤凰古城、婺源婺女洲、居庸关长城星空、纳木错星轨、银河、布达拉宫。
-照片来自 Wikimedia Commons（自由许可），由 `tools/night_pixel.py` 裁剪并像素化，来源与署名见 [CREDITS.md](CREDITS.md)。夜景图没载入时退回把白天的图压暗。
+背景（v1.3）：白天 21 张、夜里 12 张全部换成 `新背景像素` 里的像素画（2560×1440，每 8 像素一格，128 色）。
+按像素游戏的通行做法：背景是贴图，按原生 320×180 存一份，游戏里整数倍最近邻放大；代码只管摆放、切换、调色。
+夜景按画面分到各站（见 `js/gfx/regions.js` 的 `NIGHT_BG`），夜景图没载入时退回把白天的图压暗。
 
 | 夜景 |
 | --- |
@@ -115,10 +116,10 @@ v1.2 失误回溯：失误后画面倒带，回到失误点往回至少 3 拍、
 
 ## 素材
 
-- `assets/bg/`：背景像素画，由 `tools/build_assets.py` 从“背景像素”文件夹里的 1280×720 图还原成原生 320×180。哪一站、哪种天气用哪几张图，写在 `js/gfx/regions.js` 开头。
+- `assets/bg/`：背景像素画，由 `tools/build_assets.py` 从“新背景像素”文件夹里的图（320×180 的整数倍）还原成原生 320×180；白天 `IMG_xxxx_pixel.png` → `bg/xxxx.png`，夜里 `夜间真实N_pixel.png` → `bg/night/nN.png`。哪一站、哪种天气用哪几张图，写在 `js/gfx/regions.js` 开头。
 - `assets/sprites.png`：旅人（7 套衣服 × 13 帧）、障碍、道具、路边摆件、石碑、按键图标，全部带 1 像素深色描边。
 - `assets/ui/`：界面用的九宫格边框（frame / btn / paper）和像素图标。`sprites@4x-preview.png` 是放大 4 倍的预览。
-- 想改人物或道具：改 `tools/build_assets.py` 里的像素定义后运行 `python3 tools/build_assets.py`；换背景：`python3 tools/build_assets.py ~/游戏/背景像素`。
+- 想改人物或道具：改 `tools/build_assets.py` 里的像素定义后运行 `python3 tools/build_assets.py`；换背景：`python3 tools/build_assets.py ~/游戏/新背景像素` 后再跑 `python3 tools/bgtone.py`。
 
 ## 运行
 

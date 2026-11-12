@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """生成游戏素材。
 
-用法：python3 tools/build_assets.py <背景像素文件夹>
+用法：python3 tools/build_assets.py <新背景像素文件夹>
 
-1. 把背景图（1280×720，每 4 像素一格）还原成原生的 320×180，存到 assets/bg/。
+1. 把背景图（320×180 的整数倍放大，如 2560×1440 每 8 像素一格）还原成原生的 320×180：
+   白天 IMG_xxxx_pixel.png → assets/bg/xxxx.png，夜里 夜间真实N_pixel.png → assets/bg/night/nN.png。
+   哪张图用在哪一站写在 js/gfx/regions.js 开头。
 2. 用下面的像素定义画出唐朝旅人的帧动画与障碍、道具，拼成 assets/sprites.png，
    并写出 js/atlas.js（每个图块的位置与锚点）。
 
@@ -16,19 +18,55 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_BG = os.path.join(ROOT, 'assets', 'bg')
 
 # ---------------------------------------------------------------- 背景
+# 行内通行做法：背景是画师画好的贴图，按原生分辨率（320×180，一格一像素）存一份，
+# 游戏里再整数倍、最近邻放大；代码只负责摆放、切换、调色，不改画面本身。
+NATIVE = (320, 180)
+
+def to_native(im):
+    """把放大过的像素画（每 N×N 一格）还原成 320×180，每格取中心像素（避开格边）。"""
+    w, h = im.size
+    n = w // NATIVE[0]
+    if n < 1 or (w, h) != (NATIVE[0] * n, NATIVE[1] * n):
+        raise SystemExit('背景尺寸 %dx%d 不是 320×180 的整数倍' % (w, h))
+    small = Image.new('RGB', NATIVE)
+    px, sp = im.load(), small.load()
+    for y in range(NATIVE[1]):
+        for x in range(NATIVE[0]):
+            sp[x, y] = px[x * n + n // 2, y * n + n // 2]
+    return small
+
+def indexed(im):
+    """≤256 色就存成调色板 PNG：颜色一点不变，文件更小。"""
+    cols = im.getcolors(256)
+    if not cols:
+        return im
+    pal = [c for _, c in cols]
+    idx = {c: i for i, c in enumerate(pal)}
+    out = Image.new('P', im.size)
+    out.putpalette([v for c in pal for v in c])
+    out.putdata([idx[c] for c in im.getdata()])
+    return out
+
+def bg_name(f):
+    """IMG_8536_pixel.png → 8536（白天）；夜间真实7_pixel.png → night/n7（夜里）"""
+    base = os.path.basename(f).rsplit('.', 1)[0].replace('_pixel', '')
+    if base.startswith('IMG_'):
+        return base[4:]
+    if base.startswith('夜间真实'):
+        return 'night/n' + base[len('夜间真实'):]
+    return None
+
 def build_backgrounds(src):
-    os.makedirs(OUT_BG, exist_ok=True)
+    """python3 tools/build_assets.py <新背景像素文件夹>：白天 IMG_xxxx、夜里 夜间真实N 都在这一个文件夹里。"""
+    os.makedirs(os.path.join(OUT_BG, 'night'), exist_ok=True)
     for f in sorted(glob.glob(os.path.join(src, '*.png'))):
-        im = Image.open(f).convert('RGB')
-        w, h = im.size
-        small = Image.new('RGB', (w // 4, h // 4))
-        px, sp = im.load(), small.load()
-        for y in range(h // 4):
-            for x in range(w // 4):
-                sp[x, y] = px[x * 4 + 2, y * 4 + 2]     # 取每格中心，避开格边
-        # 原样还原：每格一个像素，不锐化、不调色、不压色（v1.2 起；之前压成 40 色会丢细节）
-        name = os.path.basename(f).split('_')[1] + '.png'   # IMG_8536_pixel.png → 8536.png
-        small.save(os.path.join(OUT_BG, name), optimize=True)
+        name = bg_name(f)
+        if not name:
+            print('skip', os.path.basename(f)); continue
+        small = to_native(Image.open(f).convert('RGB'))
+        # 原样还原：不锐化、不调色、不压色
+        small = indexed(small)
+        small.save(os.path.join(OUT_BG, name + '.png'), optimize=True)
         print('bg', name, small.size)
 
 # ---------------------------------------------------------------- 调色板
