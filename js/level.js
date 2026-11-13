@@ -6,13 +6,13 @@
 (function () {
   const C = RF.CFG, B = C.BEAT_PX, G0 = C.GROUND, RW = C.W;
 
-  const LISTS = ['solids', 'hazards', 'bells', 'lanterns', 'mirages', 'ferries', 'moongates', 'rollers', 'sinkers', 'eaves', 'calls', 'chimes', 'movers', 'zones', 'checkpoints', 'regions', 'texts', 'rooms'];
+  const LISTS = ['solids', 'hazards', 'bells', 'lanterns', 'mirages', 'ferries', 'moongates', 'rollers', 'sinkers', 'eaves', 'calls', 'chimes', 'movers', 'zones', 'checkpoints', 'regions', 'texts', 'rooms', 'decos'];
   const L = { endX: 0, version: 0, mode: 'rooms', diff: 1 };
   LISTS.forEach(k => { L[k] = []; });
   let ox = 0, gateN = 0, room = null;
 
   // ------------------------------------------------------------ 一关里能放的东西（x 都是相对本关左边）
-  const THIN = { boat: 1, firefly: 1, ice: 1, plank: 1, eave: 1 };
+  const THIN = { boat: 1, firefly: 1, ice: 1, plank: 1, eave: 1, moored: 1 };
   // 地面 / 平台：从 x0 到 x1，顶面在 y
   function ground(x0, x1, y, w, kind) {
     const s = { x0: ox + x0, x1: ox + x1, y: y === undefined ? G0 : y, w: w || 'both', kind: kind || 'ground' };
@@ -71,47 +71,66 @@
     L.regions.push({ id, no, name, line, weathers, pace: 1, x0: ox, x1: Infinity });
   }
 
+  // 陈设（不挡路，只是布景）：willow 柳树、rail 石栏杆、lotus 荷叶、spr 图集里的小物件
+  function deco(kind, x, x1, o) {
+    L.decos.push(Object.assign({ kind, x: ox + x, x1: ox + (x1 === undefined ? x : x1), y: G0, w: 'both' }, o || {}));
+  }
+  const sprite = (name, x, y) => deco('spr', x, undefined, { name, y: y === undefined ? G0 : y });
+
   // ============================================================ 关卡
+  const TIDE = G0 + 10;      // 落潮才露出来的石板：白天刚好没在水面下
   function build() {
     // ------------------------------------------------------------ 第一站 江南烟雨：白天水涨，夜里落潮
     region('jiangnan', '第一站', '江南烟雨', '白天水涨，夜里落潮', { rain: 5, fog: 3, clear: 2 });
 
     R('落潮', 'day', () => {
-      hint('← → 走，空格跳。点亮对岸的宫灯，院门就开了。河过不去？按 Shift 换到夜里看看。', 9, 'switch');
+      hint('← → 走，空格跳。河过不去？按 Shift 换到夜里看看。', 8, 'switch');
       ground(0, 430);
       box(250, 'both', 'block');
-      ground(430, 850, G0 + 6, 'night', 'steps');          // 落潮才露出来的石阶
+      ground(430, 850, TIDE, 'night', 'steps');             // 落潮才露出来的石板桥
       ground(850, 1280);
       lamp(1040);
+      deco('willow', 130); deco('rail', 300, 426); sprite('stonelamp', 60);
+      deco('lotus', 520); deco('lotus', 705); sprite('reed', 880);
+      deco('rail', 858, 960); deco('willow', 1150, undefined, { flip: true });
     });
 
     R('龙舟', 'day', () => {
-      hint('端午的龙舟白天来回划，夜里就停在那一刻。让它停在合适的地方，再踩着落潮露出的石墩上岸。', 9, 'drift');
+      hint('龙舟白天来回划，夜里停在那一刻。夜里，画舫也泊回了岸边。', 8, 'drift');
       ground(0, 300);
       drift(545, G0 + 2, 185, 10, -Math.PI / 2, 58, 'boat');
-      ground(850, 930, G0 - 62, 'night', 'steps');         // 夜里露出的石墩
+      ground(800, 926, G0 - 62, 'night', 'moored');        // 夜泊的画舫：舫顶可以站
       ground(930, 1110, G0 - 150);                         // 高岸
       ground(1110, 1280);
       lamp(1010, G0 - 150);
+      deco('willow', 110); deco('rail', 190, 296); sprite('post', 286);
+      deco('lotus', 380); deco('lotus', 640);
+      deco('rail', 940, 1100, { y: G0 - 150 }); sprite('stonelamp', 1160);
     });
 
     R('水车', 'day', () => {
-      hint('水车白天转个不停。对岸的石滩只在夜里露出来：乘着踏板转过去，看准了再换到夜里。', 9, 'wheel');
+      hint('水车白天转，夜里停。石滩要等落潮才露出来。', 8, 'wheel');
       ground(0, 420);
       wheel(630, G0 - 40, 96, 4, 10, 26);
-      ground(830, 1100, G0 - 40, 'night', 'steps');
+      ground(830, 1100, TIDE, 'night', 'steps');
       ground(1100, 1280);
-      lamp(980, G0 - 40);
+      lamp(980, TIDE);
+      deco('willow', 150); deco('rail', 250, 416); sprite('stonelamp', 40);
+      deco('lotus', 470); deco('lotus', 790); sprite('reed', 1120);
+      deco('willow', 1170, undefined, { flip: true });
     });
 
     R('夜铃', 'day', () => {
-      hint('院门锁着，铜铃挂在河心，只在夜里才有。淡淡的轮廓是另一面的东西。', 8, 'drift');
+      hint('铜铃只在夜里才有。敲响它，锁着的门才开。', 8, 'drift');
       ground(0, 300);
       drift(520, G0 + 2, 160, 10, -Math.PI / 2, 56, 'boat');
-      ground(770, 850, G0 - 14, 'night', 'steps');
+      ground(770, 850, TIDE, 'night', 'steps');
       ground(890, 1280);
       bellGate(500, G0 - 150, 'night', 990, G0);
       lamp(1100);
+      deco('willow', 120); deco('rail', 180, 296); sprite('post', 284);
+      deco('lotus', 400); deco('lotus', 700); sprite('reed', 905);
+      deco('rail', 1030, 1070); sprite('stonelamp', 1160);
     });
   }
 

@@ -67,7 +67,7 @@
       world: 'day', room: 0, camX: 0, dclock: 0, mclock: 0,
       gates: {}, got: {}, cpIndex: 0, regionIndex: 0,
       animT: 0, timer: 0,
-      pendingSwitch: false, wipe: null, fade: 0, playerAlpha: 1, flashes: {}, onBeatFx: 0, blockedT: 0,
+      pendingSwitch: false, swT: 9, roomT: 0, wipe: null, fade: 0, playerAlpha: 1, flashes: {}, onBeatFx: 0, blockedT: 0,
       shown: {}, reduceMotion: false, lowFx: false, ghostMul: 1,
       stats: { fails: 0, switches: 0, time: 0 }, combo: 0, cgot: {},
       on(ev, fn) { (handlers[ev] = handlers[ev] || []).push(fn); },
@@ -123,7 +123,7 @@
     function enterRoom(i) {
       const r = LV.rooms[i];
       if (!G.shown['r' + r.region]) { G.shown['r' + r.region] = 1; G.emit('region', LV.regions[r.region], r.region); }
-      G.emit('room', r);
+      G.roomT = 0; G.emit('room', r);
       if (r.hint && !G.shown['h' + i]) { G.shown['h' + i] = 1; G.emit('hint', r.hint.text, r.hint.dur, r.hint.tag); }
     }
     G.start = function () { G.rollWeather(); G.reset(); G.state = 'intro'; G.timer = 0; G.emit('intro'); };
@@ -173,7 +173,7 @@
           setWorld(to);
           if (up !== null) { G.foot = up; G.vy = 0; G.onGround = true; }
           G.stats.switches++;
-          G.wipe = { from, t: 0, onBeat: false };
+          G.wipe = { from, t: 0, onBeat: false }; G.swT = 0;
           G.emit('switched', G.world, false);
         }
       }
@@ -284,6 +284,7 @@
       G.animT += dt; G.landT = (G.landT === undefined ? 9 : G.landT) + dt;
       if (G.wipe) { G.wipe.t += dt; if (G.wipe.t >= C.SWITCH_WIPE) G.wipe = null; }
       if (G.blockedT > 0) G.blockedT -= dt;
+      G.swT += dt; G.roomT += dt;
       for (const k in G.flashes) { G.flashes[k] -= dt; if (G.flashes[k] <= 0) delete G.flashes[k]; }
       if (G.state === 'title' || G.state === 'ended') return;
       G.stats.time += dt;

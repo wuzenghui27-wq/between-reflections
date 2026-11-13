@@ -7,7 +7,7 @@
   // ------------------------------------------------------------ 区域设定
   const R = {
     jiangnan: { bg: { rain: ['8536', '8537'], fog: ['8538', '8539'], clear: ['8539', '8535', '8538'] },
-      water: { day: 584, night: 626 }, waterCol: ['#5d7f88', '#1f2d4a'], tile: 'stone', glow: 0.7 },
+      water: { day: 566, night: 592 }, waterCol: ['#5d7f88', '#1f2d4a'], tile: 'stone', glow: 0.7 },
     garden: { bg: { clear: ['8532', '8531', '8535'], snow: ['8534', '8533'], rain: ['8531', '8532'] },
       water: { day: 600, night: 600 }, waterCol: ['#5a8aa8', '#1a2848'], tile: 'marble', glow: 0.7 },
     autumn: { bg: { clear: ['8522', '8519', '8521'], wind: ['8520', '8522', '8521'], snow: ['8518', '8519'] },

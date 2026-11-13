@@ -75,16 +75,8 @@
         }
         break;
       }
-      case 'steps': {      // 夜里露出的青石阶
-        for (let bx = x0 + 1; bx < x1 - 2; bx += 9) {
-          const bw = Math.min(8, x1 - 1 - bx);
-          r(bx + 1, y + 3, bw - 2, PH + 16 - y, night ? '#2a3448' : '#5c6466');
-          r(bx, y, bw, 3, night ? '#7884a0' : '#a8aca4');
-          r(bx, y, bw, 1, night ? '#9aa6c4' : '#c8ccc4');
-          r(bx + 1, y + 3, bw - 2, 1, '#4a6a4a');
-        }
-        break;
-      }
+      case 'steps': RF.Scene.tideSteps(s, x0, x1, y, rid, e); break;      // 落潮露出的石板桥
+      case 'moored': RF.Scene.huafang(s, x0, x1, y, rid, e); break;      // 夜泊的画舫
       case 'boat': {       // 乌篷船：船尾有船夫撑篙，载人时随拍子撑一下
         const moving = !!s.moving;
         const bob = e.reduce ? 0 : Math.round(Math.sin(e.t * (moving ? 3.2 : 1.8) + (s.bx0 || s.x0) * 0.01) * 0.6);
@@ -257,6 +249,9 @@
     const x0 = Math.round(s.x0 / P) - e.camPix, x1 = Math.round(s.x1 / P) - e.camPix, y = Math.round(s.y / P);
     if (x1 < 0 || x0 > PW) return;
     const c = X.ctx, col = previewCol(e), t = e.reduce ? 0 : e.t;
+    const rid = LV.regions[LV.regionAt(s.x0)].id;
+    if (s.kind === 'steps' && y >= RF.Scene.waterY(rid, e.world)) { RF.Scene.tideGhost(s, x0, x1, y, rid, e, a); return; }   // 沉在水下的石板
+    if (s.kind === 'moored') { ghostRect(x0, y + 1, x1, RF.Scene.waterY(rid, e.world), a * 0.45, e); }
     c.globalAlpha = Math.min(1, a * 1.1);
     for (let x = x0; x < x1; x++) {                               // 地面线：亮线 + 轻微的波动
       const wv = Math.round(Math.sin(x * 0.35 + t * 4) * 0.6);
@@ -309,7 +304,7 @@
     }
     const night = e.world === 'night';
     if (h.gate) {
-      const open = gates[h.gate];
+      const open = gates[h.gate] && !(e.flash(h.gate) > 0.5);     // 光点飞到了门才开
       spr(open ? 'gate_open' : 'gate', cx, y1, night);
       if (!open) X.glow(cx, y0 + (y1 - y0) * 0.45, 6, [255, 200, 90], 0.5);
       return;
@@ -408,7 +403,7 @@
       return;
     }
     spr('lantern', x, y + 8, false);
-    X.glow(x, y, 14 + fl * 16, [255, 190, 110], 0.85 + fl * 0.3);
+    X.glow(x, y, 11 + fl * 7, [255, 190, 110], 0.6 + fl * 0.2);
     if (fl > 0) { const rr = Math.round((1 - fl) * 30) + 4, col = `rgba(255,220,150,${(fl * 0.8).toFixed(2)})`;
       for (let k = 0; k < 28; k++) { const a = k / 28 * Math.PI * 2; r(Math.round(x + Math.cos(a) * rr), Math.round(y + Math.sin(a) * rr), 1, 1, col); } }
   }
@@ -542,6 +537,7 @@
   function decorations(e, x0, x1) {
     if (!decos || decosV !== LV.version) buildDecos();     // 换了模式，关卡重建过
     const night = e.world === 'night';
+    if (LV.decos && LV.decos.length) { RF.Scene.decos(e, x0, x1, spr); return; }
     for (const d of decos) {
       if (d.x < x0 || d.x > x1 || !(d.w === 'both' || d.w === e.world)) continue;
       spr(d.name, Math.round(d.x / P) - e.camPix, Math.round(d.y / P) - (d.name === 'stones' || d.name === 'post' ? 0 : e.pulse), night);
@@ -617,7 +613,9 @@
     const w = x1 - x0, ph = e.G.beat() % 1, hit = moving && !e.reduce && ph < 0.18;
     const RED = night ? ['#9a4a52', '#6a2a38', '#3e1824'] : ['#e04a34', '#b02a24', '#6a1418'];
     const GD = night ? '#b0a070' : '#f2c850', INKC = '#17131c';
-    r(x0 - 1, yy - 1, w + 2, 7, INKC);
+    r(x0 - 1, yy - 1, w + 2, 8, INKC); r(x0 + 4, yy + 6, w - 8, 1, RED[2]);
+    { const dc = e.G.dclock, wc = night ? 'rgba(200,220,255,0.75)' : 'rgba(255,255,255,0.8)';      // 船边的水纹：白天往后荡开，夜里停住
+      for (let k = 0; k < 5; k++) { const ph = (dc * 0.8 + k * 0.2) % 1; r(x0 - 3 - Math.round(ph * 12), yy + 6 - (k & 1), 3 + Math.round(ph * 4), 1, wc); r(x1 + 2 + Math.round(ph * 8), yy + 6 - (k & 1), 2 + Math.round(ph * 3), 1, wc); } }
     r(x0, yy, w, 1, GD);                                                 // 金色船舷
     r(x0, yy + 1, w, 2, RED[0]); r(x0 + 1, yy + 3, w - 2, 2, RED[1]); r(x0 + 3, yy + 5, w - 6, 1, RED[2]);
     for (let k = x0 + 2; k < x1 - 2; k += 3) { r(k, yy + 2, 1, 1, GD); r(k + 1, yy + 3, 1, 1, RED[2]); }   // 鳞
@@ -724,22 +722,11 @@
           for (const q of ms) { const bx0 = sx(q.x0), bx1 = sx(q.x1), by = sy(q.y); board(bx0, bx1, by, night, e); spr('lantern', Math.round((bx0 + bx1) / 2), by + 16, night); still(bx0, bx1, by, e); }
           continue;
         }
-        r(cx - 1, cy, 3, PH + 16 - cy, W[2]); r(cx + 1, cy, 1, PH + 16 - cy, W[3]);   // 立柱
-        if (!night) for (let k = 0; k < 48; k += 2) { const a = k / 48 * Math.PI * 2; r(Math.round(cx + Math.cos(a) * R), Math.round(cy + Math.sin(a) * R) + 1, 1, 1, 'rgba(255,255,255,0.25)'); }
-        for (let k = 0; k < 64; k++) {                                   // 轮辋
-          const a = k / 64 * Math.PI * 2 + ms[0].ang * 0;
-          r(Math.round(cx + Math.cos(a) * (R - 2)), Math.round(cy + Math.sin(a) * (R - 2)), 1, 1, W[1]);
-        }
-        for (let s2 = 0; s2 < 8; s2++) {                                 // 辐条跟着转
-          const a = ms[0].ang + s2 / 8 * Math.PI * 2;
-          for (let t = 2; t < R - 2; t++) r(Math.round(cx + Math.cos(a) * t), Math.round(cy + Math.sin(a) * t), 1, 1, s2 % 2 ? W[2] : W[1]);
-        }
-        r(cx - 2, cy - 2, 5, 5, '#17131c'); r(cx - 1, cy - 1, 3, 3, night ? '#9a8a6a' : '#e8c25a');   // 轴
+        RF.Scene.waterwheel(ms, cx, cy, R, LV.regions[LV.regionAt(m.cx)].id, e);
         for (const q of ms) {
           const bx0 = sx(q.x0), bx1 = sx(q.x1), by = sy(q.y);
-          r(Math.round((bx0 + bx1) / 2), by + 3, 1, 3, W[3]);
+          r(bx0 + 2, by + 3, 1, 2, W[3]); r(bx1 - 3, by + 3, 1, 2, W[3]);              // 踏板底下的两个托
           board(bx0, bx1, by, night, e);
-          r(bx0 + 2, by + 3, bx1 - bx0 - 4, 2, night ? '#3a5068' : '#4a7a9a');   // 挂着的水斗
           still(bx0, bx1, by, e);
         }
         continue;
@@ -770,7 +757,11 @@
       const bx0 = sx(m.x0), bx1 = sx(m.x1), by = sy(m.y), w = bx1 - bx0;
       if (m.style) {
         if (!night) for (let k = sx(m.cx - m.amp - m.hw); k <= sx(m.cx + m.amp + m.hw); k += 3) r(k, by + (m.style === 'kite' ? -3 : 5), 1, 1, 'rgba(255,255,255,0.25)');
-        if (m.style === 'boat') { dragonBoat(bx0, bx1, by, night, !night, e); continue; }
+        if (m.style === 'boat') {                 // 龙头朝着划的方向
+          if (m.dir < 0) { const c = X.ctx; c.save(); c.translate(bx0 + bx1, 0); c.scale(-1, 1); dragonBoat(bx0, bx1, by, night, !night, e); c.restore(); }
+          else dragonBoat(bx0, bx1, by, night, !night, e);
+          continue;
+        }
         if (m.style === 'kite') kite(m, bx0, bx1, by, night, e);
         else if (m.style === 'sled') sled(m, bx0, bx1, by, night, e);
         else riverLamp(m, bx0, bx1, by, night, e);

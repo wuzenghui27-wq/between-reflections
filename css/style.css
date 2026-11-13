@@ -417,3 +417,5 @@ button.round { width: calc(13 * var(--px)) !important; height: calc(13 * var(--p
 #pad > div { display: flex; gap: calc(4 * var(--px)); pointer-events: auto; }
 #pad button { width: calc(22 * var(--px)); height: calc(20 * var(--px)); font-size: calc(22 * var(--u)); color: #f2e8cc; border-radius: 0; touch-action: none; user-select: none; -webkit-user-select: none; opacity: 0.82; font-family: inherit; }
 #pad button.on { opacity: 1; transform: translateY(var(--px)); }
+#chapterCard .ch-no { font-size: calc(15 * var(--u)); font-weight: 700; color: #fff6e0; opacity: 0.92; letter-spacing: 0.4em; }
+#chapterCard .ch-line:empty { display: none; }

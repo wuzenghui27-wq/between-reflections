@@ -13,7 +13,7 @@
     ghostA(x0, x1) {            // 另一面的东西：本关里的都看得见
       if (e.noGhost) return 0;
       const r = LV.rooms[e.G.room];
-      return x1 < r.x0 || x0 > r.x1 ? 0 : 0.85;
+      return x1 < r.x0 || x0 > r.x1 ? 0 : 0.7;
     }
   };
 
@@ -51,7 +51,7 @@
     for (const b of LV.bells) if (on(b, world) && b.x > x0 && b.x < x1) RF.Props.bell(b, e, G.gates, false);
     for (const h of LV.rollers) if (on(h, world)) RF.Props.roller(h, e, false);
     for (const l of LV.lanterns) if (on(l, world) && l.x > x0 && l.x < x1) RF.Props.lantern(l, e, G.got, false);
-    if (!e.noGhost) RF.Props.coins(e, x0, x1);
+    if (!e.noGhost) RF.Scene.clearFx(G, e);
     c.restore(); X.oy = 0;
     X.mute = false;
     return m;
@@ -84,7 +84,7 @@
     const bx = G.blockedT > 0 && !G.reduceMotion ? Math.round(Math.sin(G.blockedT * 60) * 3) : 0;     // 切不过去：人晃一下
     RF.Traveler.draw(G.px - cam + bx, G.foot, {
       weather: G.weather[ri], region: ri, state: pose(G), dist: G.walkDist, flip: G.face < 0, alpha: G.playerAlpha, night: G.world === 'night',
-      vy: G.vy, landT: G.landT, t: e.t
+      vy: G.vy, landT: G.landT, t: e.t, still: G.reduceMotion
     });
     // 脚下记号：另一面此刻能不能站
     if (G.state === 'running') {
@@ -108,7 +108,7 @@
   function findCue(G, k) {
     if (!AIM[k.tag]) return null;
     const cur = G.world, oth = cur === 'day' ? 'night' : 'day', Q = RF.Q, foot = G.foot;
-    for (let x = G.px + 24; x < LV.rooms[G.room].x1; x += 6) {
+    for (let x = LV.rooms[G.room].x0 + 30; x < LV.rooms[G.room].x1; x += 6) {
       const gc = Q.groundAt(cur, x), haz = Q.hazardHit(cur, x, foot, G.gates);
       if (k.key === 'k_shift') {
         const bad = gc === null;
@@ -122,7 +122,7 @@
   }
   function keyTip(G, cam) {
     const k = G.keyTip; if (!k || k.t <= 0 || G.state !== 'running') { if (k) k.cue = null; return; }
-    if (k.cue === undefined || (k.cue && k.cue.x < G.px - 40)) k.cue = k.cue === undefined ? findCue(G, k) : null;
+    if (k.cue === undefined) k.cue = findCue(G, k);
     const c = X.ctx, bob = G.reduceMotion ? 0 : Math.round(Math.sin(e.t * 5) * 1);
     const age = Math.min(1, (k.age = (k.age || 0) + 1 / 60) * 5);         // 出场：从下往上弹一下
     const pop = Math.round((1 - age) * 6 - (age > 0.6 && age < 0.9 ? 1 : 0));

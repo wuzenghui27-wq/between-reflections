@@ -37,14 +37,17 @@
     h.classList.remove('show'); void h.offsetWidth; h.classList.add('show'); hintT = dur;
   }
   function hideHint() { $('hint').classList.remove('show'); hintT = 0; }
-  function showChapter(reg) {
+  // 题名：进站时“第一站 · 江南烟雨 / 落潮”，之后每一景“第二景 / 龙舟”
+  const NUM = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十', '二十一', '二十二', '二十三', '二十四'];
+  let hintTimer = null;
+  function showCard(no, name, line, ms) {
     const c = $('chapterCard');
-    c.querySelector('.ch-no').textContent = reg.no;
-    c.querySelector('.ch-name').textContent = reg.name;
-    c.querySelector('.ch-line').textContent = reg.line;
-    c.classList.add('show');
+    c.querySelector('.ch-no').textContent = no;
+    c.querySelector('.ch-name').textContent = name;
+    c.querySelector('.ch-line').textContent = line;
+    c.classList.remove('show'); void c.offsetWidth; c.classList.add('show');
     clearTimeout(chapterTimer);
-    chapterTimer = setTimeout(() => c.classList.remove('show'), 3200);
+    chapterTimer = setTimeout(() => c.classList.remove('show'), ms);
   }
   // ---------------------------------------------------------------- 唐诗：旅途中随机浮现
   const MT = RF.Meta;
@@ -74,8 +77,12 @@
     $('worldPill').dataset.world = w;
     $('worldName').textContent = w === 'night' ? '夜晚' : '白天';
   });
-  G.on('switched', w => A.sfx('switch', { night: w === 'night', onBeat: false }));
-  G.on('blocked', () => A.sfx('layerDown'));                 // 另一面这里是实心的，切不过去
+  G.on('switched', w => {
+    A.sfx('switch', { night: w === 'night', onBeat: false });
+    const r = LV.rooms[G.room];
+    if (w === 'night' && LV.movers.some(m => m.cx >= r.x0 && m.cx < r.x1)) A.sfx('freeze');
+  });
+  G.on('blocked', () => { A.sfx('blocked'); PT.dust(G.px, G.foot, 4, ['#ffffff', '#c8d0e0'], 0.4); });                 // 另一面这里是实心的，切不过去
   G.on('intro', () => $('introLine').classList.add('show'));
   G.on('run', () => $('introLine').classList.remove('show'));
   // 粒子与手感
@@ -93,16 +100,17 @@
   });
   // 这一关的灯亮了：院门打开，音乐加一层
   G.on('roomClear', r => {
-    setTimeout(() => A.sfx('checkpoint'), 260);
+    setTimeout(() => A.sfx('gate'), 700);
+    setTimeout(() => PT.sparks(r.x0 + 1225, r.exitY - 70, '#ffe8a8', 16), 700);
     A.setLayer(3);
-    PT.sparks(r.x0 + 1225, r.exitY - 70, '#ffe8a8', 16);
     G.keyTip = null;
   });
   G.on('room', r => {
     A.setLayer(G.room === 0 ? 1 : 2);
-    $('roomName').textContent = '第 ' + (r.i + 1) + ' 景 · ' + r.name;
+    $('roomName').textContent = '第 ' + NUM[r.i + 1] + ' 景 · ' + r.name;
+    if (!$('chapterCard').classList.contains('show')) showCard('第' + NUM[r.i + 1] + '景', r.name, '', 2200);
     const p = $('roomPill'); p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump');
-    setLanterns(); hideHint(); G.keyTip = null;
+    setLanterns(); hideHint(); clearTimeout(hintTimer); G.keyTip = null;
   });
   const WNAME = { clear: '晴', rain: '雨', snow: '雪', fog: '雾', wind: '风' };
   function setWeather() {
@@ -112,15 +120,16 @@
     $('weatherIcon').src = 'assets/ui/' + (w || 'clear') + '.png';
     A.setWeather(w);
   }
-  G.on('region', reg => { showChapter(reg); A.sfx('region'); setWeather(); });
+  G.on('region', reg => { showCard(reg.no + ' · ' + reg.name, LV.rooms[G.room].name, reg.line, 3000); A.sfx('region'); setWeather(); });
   G.on('hint', (t, d, tag) => {
-    showHint(t, d, tag);
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => { if (G.state === 'running' || G.state === 'paused') showHint(t, d, tag); }, $('chapterCard').classList.contains('show') ? 2600 : 300);
     // 只有第一关在河边立一块 Shift 键帽，其余的关让人自己琢磨
     G.keyTip = tag === 'switch' && !touchUI ? { key: 'k_shift', tag, t: 30 } : null;
   });
   G.on('switched', () => { if (G.keyTip) G.keyTip.t = 0; });
   // 掉进水里：溅一下水，回到这一关开头
-  G.on('fail', () => { A.sfx('board'); PT.splash(G.px, C.GROUND + 30, 'rgba(230,240,255,0.9)'); });
+  G.on('fail', () => { A.sfx('splash'); const wy = RF.Scene.waterY(LV.regions[G.regionIndex].id, G.world) * C.PIX; PT.splash(G.px, wy, 'rgba(230,240,255,0.9)'); PT.splash(G.px + 8, wy, 'rgba(200,225,255,0.9)'); });
   G.on('retry', () => { setLanterns(); });
   G.on('arrive', () => { A.sfx('arrive'); hideHint(); });
   G.on('ended', () => {
@@ -282,6 +291,7 @@
   resize();
 
   // ---------------------------------------------------------------- 主循环（固定步长）
+  let stepN = 0;
   let last = performance.now(), acc = 0, frameAvg = 1 / 60, titleFlip = 0;
   const dbg = $('debug');
   function frame(now) {
@@ -296,6 +306,11 @@
       if (G.state !== 'paused') {
         RF.Particles.update(C.STEP);
         tickPoem(C.STEP);
+        // 脚步：每走一小段落一次脚，带一点声音和尘土
+        if (G.state === 'running' && G.onGround && Math.abs(G.vx) > 60) {
+          const n = Math.floor(G.walkDist / 34);
+          if (n !== stepN) { stepN = n; A.sfx('step', n); if (!G.riding) PT.dust(G.px - G.face * 6, G.foot, 1, dustCols(), 0.3); }
+        }
         if (G.keyTip) G.keyTip.t -= G.state === 'running' ? C.STEP : 0;
       }
       if (hintT > 0 && G.state === 'running') { hintT -= C.STEP; if (hintT <= 0) hideHint(); }
