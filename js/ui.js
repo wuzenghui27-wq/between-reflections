@@ -71,12 +71,12 @@
   }
   // 一排小灯：每景一盏，点亮的亮着，当前这一景的轻轻跳
   function setLanterns() {
-    $('pips').innerHTML = LV.rooms.map(r => `<i class="${r.lamps.every(k => G.got[k]) ? 'lit' : ''}${r.i === G.room ? ' now' : ''}"></i>`).join('');
+    $('markPips').innerHTML = $('pips').innerHTML = LV.rooms.map(r => `<i class="${r.lamps.every(k => G.got[k]) ? 'lit' : ''}${r.i === G.room ? ' now' : ''}"></i>`).join('');
   }
   function showSlip(no, name, line) {
     const h = $('hint');
-    h.innerHTML = `<i class="seal seal-look" aria-hidden="true"></i><span class="slip-no">${esc(no)}</span><span class="slip-name">${esc(name)}</span><span class="slip-line">${esc(line || '')}</span>`;
-    h.classList.remove('show'); void h.offsetWidth; h.classList.add('show'); hintT = 4.2;
+    h.innerHTML = `<span class="slip-no">${esc(no)}</span><span class="slip-name">${[...name].map(ch => `<i>${esc(ch)}</i>`).join('')}</span><span class="slip-line">${esc(line || '')}</span>`;
+    h.classList.remove('show'); void h.offsetWidth; h.classList.add('show'); hintT = 3.6;
   }
 
   // ---------------------------------------------------------------- 事件 → 界面 / 声音
@@ -116,6 +116,7 @@
   G.on('room', r => {
     A.setLayer(G.room === 0 ? 1 : 2);
     $('roomNo').textContent = NUM[r.i + 1]; $('roomName').textContent = r.name;
+    $('markNo').textContent = NUM[r.i + 1]; $('markName').textContent = r.name;
     showSlip('第' + NUM[r.i + 1] + '景', r.name, r.line);
     $('keys').classList.toggle('show', r.i === 0 && !touchUI);
     const p = $('roomPill'); p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump');

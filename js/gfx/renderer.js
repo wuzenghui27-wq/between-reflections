@@ -143,7 +143,7 @@
       for (let a = 0; a < 12; a++) { const t = a / 12 * Math.PI * 2; c.fillStyle = rgba(0.85); c.fillRect(Math.round(x + Math.cos(t) * rr), Math.round(gy + 1 + Math.sin(t) * rr * 0.35), 1, 1); }
       c.fillStyle = rgba(1); c.fillRect(x, gy - 1, 1, 3); c.fillRect(x - 1, gy, 3, 1);
       const press = near && ph < 0.35 ? 2 : 0;
-      sealTag(k.key === 'k_shift' ? 'SHIFT' : 'SPACE', x, gy - 33 + bob + pop + press);
+      { const sy = gy - 32 + bob + pop + press; c.fillStyle = '#b83a28'; c.fillRect(x - 2, sy - 4, 5, 5); c.fillStyle = '#f6ead0'; c.fillRect(x - 1, sy - 3, 1, 1); c.fillRect(x + 1, sy - 1, 1, 1); }   // 光柱顶上一枚小朱印
       c.globalAlpha = 1;
       return;
     }
