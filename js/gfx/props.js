@@ -388,14 +388,29 @@
   // ------------------------------------------------------------ 灯（收集物）
   function lantern(l, e, got, ghost) {
     const x = Math.round(l.x / P) - e.camPix;
-    if (x < -8 || x > PW + 8) return;
-    const fl = e.flash('l' + l.i) || 0;
-    if (got[l.i] && fl <= 0) return;
-    const bob = e.reduce ? 0 : Math.round(Math.sin(e.t * 2 + l.i));
-    const y = Math.round(l.y / P) + bob - (got[l.i] ? Math.round((1 - fl) * 14) : 0);
-    if (ghost) { const a = e.ghostA(l.x, l.x); if (a > 0.02 && !got[l.i]) ghostSprite('lantern', x, y + 4, a, e); return; }
-    spr('lantern', x, y + 4 - e.pulse, false, got[l.i] ? fl : 1);
-    X.glow(x, y, 9 + fl * 10, [255, 190, 110], (0.7 + fl * 0.3) * (got[l.i] ? fl : 1));
+    if (x < -12 || x > PW + 12) return;
+    const fl = e.flash('l' + l.i) || 0, lit = !!got[l.i], night = e.world === 'night';
+    const y = Math.round(l.y / P), base = y + 9;                 // 灯挂在一根灯杆上，杆脚落在地面
+    if (ghost) { const a = e.ghostA(l.x, l.x); if (a > 0.02 && !lit) ghostSprite('lantern', x, y + 8, a, e); return; }
+    const wood = night ? '#4a3a40' : '#7a4a2e', wood2 = night ? '#2e2228' : '#4a2a1a', gold = night ? '#a89a68' : '#f2c850';
+    r(x + 7, y - 12, 2, base - y + 12, wood); r(x + 8, y - 12, 1, base - y + 12, wood2);   // 灯杆
+    r(x - 1, y - 12, 9, 1, wood); r(x - 1, y - 11, 1, 2, wood2); r(x + 6, y - 13, 4, 1, gold);   // 挑出的横臂
+    r(x + 5, base - 1, 6, 1, wood2);
+    if (!lit) {                                                    // 没点的灯：暗着，偶尔晃一下提醒
+      const img = RG.spritesDim || RG.sprites, a = RF.ATLAS.lantern;
+      const c = X.ctx; c.globalAlpha = 0.9;
+      if (img && a) c.drawImage(img, a[0], a[1], a[2], a[3], x - a[4], y + 8 - a[5], a[2], a[3]);
+      c.globalAlpha = 1;
+      const tw = e.reduce ? 0.5 : 0.5 + 0.5 * Math.sin(e.t * 3);
+      X.glow(x, y, 6, [255, 220, 150], 0.12 + 0.12 * tw);
+      const cy = y - 20 - Math.round(tw * 2);                      // 头顶一个小小的目标记号
+      r(x, cy, 1, 3, '#fff2c0'); r(x - 1, cy + 1, 3, 1, '#fff2c0');
+      return;
+    }
+    spr('lantern', x, y + 8, false);
+    X.glow(x, y, 14 + fl * 16, [255, 190, 110], 0.85 + fl * 0.3);
+    if (fl > 0) { const rr = Math.round((1 - fl) * 30) + 4, col = `rgba(255,220,150,${(fl * 0.8).toFixed(2)})`;
+      for (let k = 0; k < 28; k++) { const a = k / 28 * Math.PI * 2; r(Math.round(x + Math.cos(a) * rr), Math.round(y + Math.sin(a) * rr), 1, 1, col); } }
   }
 
   // ------------------------------------------------------------ 铜钱：这一面的转着发光，另一面的只留一个小点
@@ -755,6 +770,7 @@
       const bx0 = sx(m.x0), bx1 = sx(m.x1), by = sy(m.y), w = bx1 - bx0;
       if (m.style) {
         if (!night) for (let k = sx(m.cx - m.amp - m.hw); k <= sx(m.cx + m.amp + m.hw); k += 3) r(k, by + (m.style === 'kite' ? -3 : 5), 1, 1, 'rgba(255,255,255,0.25)');
+        if (m.style === 'boat') { dragonBoat(bx0, bx1, by, night, !night, e); continue; }
         if (m.style === 'kite') kite(m, bx0, bx1, by, night, e);
         else if (m.style === 'sled') sled(m, bx0, bx1, by, night, e);
         else riverLamp(m, bx0, bx1, by, night, e);

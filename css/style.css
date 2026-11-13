@@ -406,3 +406,14 @@ button.round { width: calc(13 * var(--px)) !important; height: calc(13 * var(--p
 #hint.show .hint-timer { animation-name: hintTimer; animation-timing-function: linear; animation-fill-mode: both; }
 @keyframes hintTimer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @media (prefers-reduced-motion: reduce) { #hint.show .seal, #hint.show kbd { animation: none; } }
+
+/* ---------- v1.6 一景一题：关名牌与触屏按键 ---------- */
+#roomPill { display: flex; align-items: center; padding: 0 calc(3 * var(--px)) !important; height: calc(13 * var(--px)) !important; box-sizing: border-box; margin: 0 !important; color: #f2e8cc; font-size: calc(15 * var(--u)); letter-spacing: 0.08em; white-space: nowrap; }
+#roomPill.bump { animation: pillBump 0.4s steps(4); }
+@keyframes pillBump { 0% { transform: translateY(calc(-2 * var(--px))); } 100% { transform: none; } }
+#pad { display: none; position: absolute; left: 0; right: 0; bottom: calc(6 * var(--px)); padding: 0 calc(8 * var(--px)); justify-content: space-between; pointer-events: none; z-index: 5; }
+#stage.touch #pad { display: flex; }
+#hud.hidden ~ #pad { display: none !important; }
+#pad > div { display: flex; gap: calc(4 * var(--px)); pointer-events: auto; }
+#pad button { width: calc(22 * var(--px)); height: calc(20 * var(--px)); font-size: calc(22 * var(--u)); color: #f2e8cc; border-radius: 0; touch-action: none; user-select: none; -webkit-user-select: none; opacity: 0.82; font-family: inherit; }
+#pad button.on { opacity: 1; transform: translateY(var(--px)); }

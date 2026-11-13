@@ -27,7 +27,8 @@
     if (!a || !img) return;
     const c = X.ctx, x = Math.round(sx / P), y = Math.round(foot / P);
     c.globalAlpha = o.alpha === undefined ? 1 : o.alpha;
-    c.drawImage(img, a[0], a[1], a[2], a[3], x - a[4], y - a[5], a[2], a[3]);
+    if (o.flip) { c.save(); c.translate(x, 0); c.scale(-1, 1); c.drawImage(img, a[0], a[1], a[2], a[3], -a[4], y - a[5], a[2], a[3]); c.restore(); }
+    else c.drawImage(img, a[0], a[1], a[2], a[3], x - a[4], y - a[5], a[2], a[3]);
     c.globalAlpha = 1;
     if (o.night && !o.noGlow) X.glow(x, y - 12, 12, [190, 205, 255], 0.08 * (o.alpha || 1));
   }

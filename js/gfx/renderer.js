@@ -10,14 +10,10 @@
     world: 'day', t: 0, camPix: 0, reduce: false, G: null, noGhost: false,
     camY: 0, camYpix: 0, dip: 0, lastT: null, pulse: 0,
     flash(k) { return e.G.flashes[k]; },
-    ghostA(x0, x1) {
+    ghostA(x0, x1) {            // 另一面的东西：本关里的都看得见
       if (e.noGhost) return 0;
-      const px = e.G.px, A = C.PREVIEW_AHEAD;
-      if (x1 < px - 140) return 0;
-      const d = x0 - px;
-      const far = d < A * 0.75 ? 1 : U.clamp(1 - (d - A * 0.75) / (A * 0.4), 0, 1);
-      const near = x1 < px ? U.clamp((x1 - (px - 140)) / 140, 0, 1) : 1;
-      return Math.min(1, 0.85 * far * near * (e.G.ghostMul || 1) * (px < (e.G.assistUntil || 0) ? 1.5 : 1));     // 难度：轻松看得更清楚，困难更淡
+      const r = LV.rooms[e.G.room];
+      return x1 < r.x0 || x0 > r.x1 ? 0 : 0.85;
     }
   };
 
@@ -67,12 +63,12 @@
     const wy = Math.round(wl[world] / P), fy = Math.round(G.foot / P);
     if (fy > wy + 1) return;
     const c = X.ctx, ri = LV.regionAt(G.px);
-    const st = G.state === 'running' ? (G.riding ? 'idle' : G.onGround ? 'run' : 'air') : 'idle';
+    const st = pose(G);
     c.save();
     c.beginPath(); c.rect(0, wy + 1, PW, PH + 16 - wy); c.clip();
     c.translate(0, wy * 2 + 1); c.scale(1, -1);
     RF.Traveler.draw(G.px - cam, G.foot, {
-      weather: G.weather[ri], region: ri, state: st, dist: G.px, night: world === 'night', vy: G.vy, landT: G.landT, t: e.t,
+      weather: G.weather[ri], region: ri, state: st, dist: G.walkDist, flip: G.face < 0, night: world === 'night', vy: G.vy, landT: G.landT, t: e.t,
       alpha: 0.32 * (G.playerAlpha === undefined ? 1 : G.playerAlpha), noGlow: true
     });
     c.restore();
@@ -82,27 +78,16 @@
     for (let k = 0; k < 3; k++) c.fillRect(px - 4 + ((Math.floor(e.t * 3) + k * 3) % 7) - 3, wy + 3 + d + k * 4, 4 + k, 1);
   }
 
-  // 连续踩拍 4 次以上：身后拖出几道残影（像素游戏里常见的“进入状态”反馈）
-  const trail = [];
+  const pose = G => (G.state === 'running' || G.state === 'failing') ? (!G.onGround ? 'air' : Math.abs(G.vx) > 20 ? 'run' : 'idle') : 'idle';
   function player(G, cam) {
     const ri = LV.regionAt(G.px);
-    if (G.state === 'running') { trail.push({ px: G.px, foot: G.foot, g: G.onGround, vy: G.vy }); if (trail.length > 13) trail.shift(); } else trail.length = 0;
-    if (G.combo >= 4 && !G.reduceMotion && G.state === 'running') {
-      for (let k = 0; k < trail.length - 3; k += 4) {
-        const t = trail[k];
-        RF.Traveler.draw(t.px - cam - (trail.length - k) * 3, t.foot, {
-          weather: G.weather[ri], region: ri, state: t.g ? 'run' : 'air', dist: t.px, night: true, vy: t.vy, t: e.t,
-          alpha: 0.1 + 0.06 * k / 4 + Math.min(0.1, (G.combo - 4) * 0.02), noGlow: true
-        });
-      }
-    }
-    const st = G.state === 'running' ? (G.riding ? 'idle' : G.onGround ? 'run' : 'air') : (G.state === 'failing' && !G.onGround ? 'air' : 'idle');
-    RF.Traveler.draw(G.px - cam, G.foot, {
-      weather: G.weather[ri], region: ri, state: st, dist: G.px, alpha: G.playerAlpha, night: G.world === 'night',
-      vy: G.vy, landT: G.landT, t: e.t, slide: G.state === 'running' && G.onGround && !G.riding && LV.paceAt(G.px) > 1.2
+    const bx = G.blockedT > 0 && !G.reduceMotion ? Math.round(Math.sin(G.blockedT * 60) * 3) : 0;     // 切不过去：人晃一下
+    RF.Traveler.draw(G.px - cam + bx, G.foot, {
+      weather: G.weather[ri], region: ri, state: pose(G), dist: G.walkDist, flip: G.face < 0, alpha: G.playerAlpha, night: G.world === 'night',
+      vy: G.vy, landT: G.landT, t: e.t
     });
     // 脚下记号：另一面此刻能不能站
-    if ((G.state === 'running' || G.state === 'ready') && G.onGround) {
+    if (G.state === 'running') {
       const x = Math.round((G.px - cam) / P), y = Math.round(G.foot / P) + 3;
       const c = X.ctx, safe = G.otherSafe();
       if (safe) {        // 另一面能站：脚下一道细细的倒影光，像水面上映出的另一块地
@@ -119,14 +104,14 @@
 
   // 教学提示：不在头顶飘字，而是在“该按的地方”立一道光、地上一枚记号、上面一块按键牌。
   // 人走近时按键牌跟着拍子按下去，过了这个点就收起来；找不到落点（看时机的机关）才退回人物头顶。
-  const AIM = { switch: 1, switch2: 1, bridge: 1, hop: 0, jump: 1, lotus: 0, roll: 0 };
+  const AIM = { switch: 1 };
   function findCue(G, k) {
     if (!AIM[k.tag]) return null;
     const cur = G.world, oth = cur === 'day' ? 'night' : 'day', Q = RF.Q, foot = G.foot;
-    for (let x = G.px + 24; x < G.px + C.BEAT_PX * 6; x += 6) {
+    for (let x = G.px + 24; x < LV.rooms[G.room].x1; x += 6) {
       const gc = Q.groundAt(cur, x), haz = Q.hazardHit(cur, x, foot, G.gates);
       if (k.key === 'k_shift') {
-        const bad = gc === null || gc > foot + C.STEP_UP || haz || Q.solidInBody(cur, x, foot - C.STEP_UP);
+        const bad = gc === null;
         const go = Q.groundAt(oth, x);
         if (bad && go !== null && !Q.hazardHit(oth, x, go, G.gates)) return { x: x - 28, y: Q.groundAt(cur, x - 28) ?? go };
       } else if (gc === null || gc < foot - C.STEP_UP || haz) {
@@ -184,7 +169,7 @@
     e.camPix = Math.round(cam / P);
     // 镜头上下平滑跟随：人物爬高时画面跟着往下送一点；落地时轻轻一沉
     const dt = e.lastT === null ? 0 : U.clamp(e.t - e.lastT, 0, 0.05); e.lastT = e.t;
-    const target = opt.title ? 0 : U.clamp((C.GROUND - G.foot) * 0.42, -20, 64);
+    const target = 0;          // 每关固定一屏，镜头不上下跟
     e.camY += (target - e.camY) * (1 - Math.exp(-dt * 3.2));
     e.dip *= Math.exp(-dt * 9);
     e.camYpix = Math.round(e.camY / P + (G.reduceMotion ? 0 : e.dip));
@@ -214,7 +199,7 @@
     if (G.onBeatFx > 0 && !opt.title) X.glow(cx, cy - e.camYpix, 18, [255, 240, 200], G.onBeatFx * 0.5);
     RF.Particles.draw(c, e.camPix);
     if (!opt.title) keyTip(G, cam);
-    if (!opt.title && G.judge) {        // 踩准拍子：脚下溅起一圈光点（不出字）
+    if (!opt.title && G.judge && false) {        // 踩准拍子：脚下溅起一圈光点（不出字）
       const k = G.judge.t / 0.7, jx = Math.round((G.px - cam) / P), jy = Math.round(G.foot / P) - 1;
       const n = G.judge.k === 'miao' ? 14 : 8, rr = 3 + U.ease(Math.min(1, k * 1.6)) * (G.judge.k === 'miao' ? 13 : 9);
       const col = G.world === 'night' ? [200, 220, 255] : [255, 226, 150], a = (1 - k) * (G.judge.k === 'miao' ? 1 : 0.7);
