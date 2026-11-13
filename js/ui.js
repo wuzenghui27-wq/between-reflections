@@ -134,7 +134,7 @@
     // 只有第一关在河边立一块 Shift 键帽，其余的关让人自己琢磨
     G.keyTip = tag === 'switch' && !touchUI ? { key: 'k_shift', tag, t: 30 } : null;
   });
-  G.on('switched', () => { if (G.keyTip) G.keyTip.t = 0; });
+  G.on('switched', () => { if (G.keyTip) G.keyTip.t = 0; if (G.room === 0) setTimeout(() => $('keys').classList.remove('show'), 5000); });
   // 掉进水里：溅一下水，回到这一关开头
   G.on('fail', () => { A.sfx('splash'); const wy = RF.Scene.waterY(LV.regions[G.regionIndex].id, G.world) * C.PIX; PT.splash(G.px, wy, 'rgba(230,240,255,0.9)'); PT.splash(G.px + 8, wy, 'rgba(200,225,255,0.9)'); });
   G.on('retry', () => { setLanterns(); });

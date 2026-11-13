@@ -127,14 +127,14 @@
     const c = X.ctx, bob = G.reduceMotion ? 0 : Math.round(Math.sin(e.t * 5) * 1);
     const age = Math.min(1, (k.age = (k.age || 0) + 1 / 60) * 5);         // 出场：从下往上弹一下
     const pop = Math.round((1 - age) * 6 - (age > 0.6 && age < 0.9 ? 1 : 0));
-    const col = k.key === 'k_shift' ? (G.world === 'day' ? [120, 150, 255] : [255, 216, 138]) : [255, 244, 214];
+    const col = [255, 214, 140];                                          // 一缕暖光，和朱印、灯色一个调子
     const rgba = a => `rgba(${col[0]},${col[1]},${col[2]},${a.toFixed(3)})`;
     if (k.cue) {
       const x = Math.round((k.cue.x - cam) / P), gy = Math.round(k.cue.y / P);
       const near = (k.cue.x - G.px) < C.BEAT_PX * 0.9, ph = (G.beat() % 1);
       c.globalAlpha = Math.min(1, k.t * 2) * age;
       for (let y = 0; y < 30; y++) {                                       // 光柱：底下实、往上散
-        const a = 0.85 * (1 - y / 30) * (0.75 + 0.25 * Math.sin(e.t * 6));
+        const a = 0.5 * (1 - y / 30) * (0.75 + 0.25 * Math.sin(e.t * 3));
         c.fillStyle = rgba(a); c.fillRect(x - 1, gy - y, 3, 1);
         c.fillStyle = rgba(a * 0.45); c.fillRect(x - 3, gy - y, 1, 1); c.fillRect(x + 3, gy - y, 1, 1);
       }
@@ -143,13 +143,29 @@
       for (let a = 0; a < 12; a++) { const t = a / 12 * Math.PI * 2; c.fillStyle = rgba(0.85); c.fillRect(Math.round(x + Math.cos(t) * rr), Math.round(gy + 1 + Math.sin(t) * rr * 0.35), 1, 1); }
       c.fillStyle = rgba(1); c.fillRect(x, gy - 1, 1, 3); c.fillRect(x - 1, gy, 3, 1);
       const press = near && ph < 0.35 ? 2 : 0;
-      RF.Props.spr(k.key, x, gy - 33 + bob + pop + press, false);
+      sealTag(k.key === 'k_shift' ? 'SHIFT' : 'SPACE', x, gy - 33 + bob + pop + press);
       c.globalAlpha = 1;
       return;
     }
     const x = Math.round((G.px - cam) / P) + 2, y = Math.round(G.foot / P) - 40 + bob + pop;
     const press = Math.floor(e.t * 2.5) % 2;
-    c.globalAlpha = age; RF.Props.spr(k.key, x, y + press * 2, false); c.globalAlpha = 1;
+    c.globalAlpha = age; sealTag(k.key === 'k_shift' ? 'SHIFT' : 'SPACE', x, y + press * 2); c.globalAlpha = 1;
+  }
+
+  // 朱文印：纸色印面、朱红印边（有几处磨损）、朱色 3×5 小字；底边中点对准 (x, y)，下面垂一截红穗
+  const GL = { S: '111100111001111', H: '101101111101101', I: '111010010010111', F: '111100110100100', T: '111010010010010', P: '111101111100100', A: '010101111101101', C: '111100100100111', E: '111100110100111' };
+  function sealTag(txt, x, y) {
+    const c = X.ctx, w = txt.length * 4 + 5, h = 11, x0 = Math.round(x - w / 2), y0 = y - h - 3;
+    const ZHU = '#b83a28', ZHU2 = '#d0644a', PAPER = '#f2e6cc';
+    c.fillStyle = 'rgba(23,19,28,0.55)'; c.fillRect(x0 + 1, y0 + 1, w, h);                  // 一点投影
+    c.fillStyle = ZHU; c.fillRect(x0 + 1, y0, w - 2, h); c.fillRect(x0, y0 + 1, w, h - 2);
+    c.fillStyle = PAPER; c.fillRect(x0 + 2, y0 + 2, w - 4, h - 4);
+    c.fillStyle = ZHU2; for (const [dx, dy] of [[3, 0], [w - 5, h - 1], [0, 5], [w - 1, 3]]) c.fillRect(x0 + dx, y0 + dy, 1, 1);   // 磨损
+    c.fillStyle = ZHU;
+    let cx = x0 + 3;
+    for (const ch of txt) { const g = GL[ch] || ''; for (let i = 0; i < 15; i++) if (g[i] === '1') c.fillRect(cx + (i % 3), y0 + 3 + ((i / 3) | 0), 1, 1); cx += 4; }
+    c.fillStyle = '#e8c070'; c.fillRect(x - 1, y0 + h, 2, 1);                                  // 穗
+    c.fillStyle = ZHU; c.fillRect(x - 1, y0 + h + 1, 2, 2); c.fillStyle = ZHU2; c.fillRect(x - 1, y0 + h + 3, 1, 1); c.fillRect(x, y0 + h + 3, 1, 1);
   }
 
   function ring(cx, cy, rr, col) {

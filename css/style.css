@@ -292,17 +292,17 @@ img.pxi { image-rendering: pixelated; width: calc(9 * var(--px)); height: calc(9
   box-shadow: 0 var(--px) 0 0 rgba(0,0,0,0.35) !important;
   background: none !important;
   border: calc(4 * var(--px)) solid transparent !important;
-  border-image: url(../assets/ui/frame.png) 4 fill / calc(4 * var(--px)) stretch !important;
+  border-image: url(../assets/ui/wood.png) 4 fill / calc(4 * var(--px)) stretch !important;
   image-rendering: pixelated;
 }
 .pill.primary {
   box-shadow: 0 var(--px) 0 0 rgba(0,0,0,0.35) !important; background: none !important;
   border: calc(4 * var(--px)) solid transparent !important;
-  border-image: url(../assets/ui/btn.png) 4 fill / calc(4 * var(--px)) stretch !important;
+  border-image: url(../assets/ui/lacquer.png) 4 fill / calc(4 * var(--px)) stretch !important;
   image-rendering: pixelated;
 }
-.pill.primary:hover, .pill.primary:focus-visible { border-image-source: url(../assets/ui/btn_hover.png) !important; background: none !important; outline: none; }
-.pill.ghost:hover, .pill.ghost:focus-visible { border-image-source: url(../assets/ui/paper.png) !important; color: var(--ink) !important; outline: none; }
+.pill.primary:hover, .pill.primary:focus-visible { border-image-source: url(../assets/ui/lacquer_hover.png) !important; background: none !important; outline: none; }
+.pill.ghost:hover, .pill.ghost:focus-visible { border-image-source: url(../assets/ui/wood_hover.png) !important; color: #fff2d0 !important; outline: none; }
 #worldPill, #lanternPill, #weatherPill, #comboPill, #coinPill { padding: 0 calc(3 * var(--px)) 0 calc(1 * var(--px)) !important; height: calc(13 * var(--px)) !important; box-sizing: border-box; margin: 0 !important; gap: calc(2 * var(--px)) !important; }
 .hud-left { gap: calc(2 * var(--px)) !important; align-items: center; }
 #comboPill { display: flex; align-items: center; color: #fff2c0; font-weight: 700; font-size: calc(15 * var(--u)); }
@@ -474,3 +474,30 @@ h2.big { -webkit-text-stroke: calc(2 * var(--u)) currentColor; }
 .list li { padding: calc(5 * var(--u)) calc(14 * var(--u)) !important; white-space: nowrap; }
 .keys { flex: none; } kbd { white-space: nowrap; }
 .note { white-space: normal; margin: calc(4 * var(--u)) 0 !important; }
+
+/* ---------- v2.1 明式界面：紫檀描金木框、朱漆按钮；按键说明是一张小笺，键名写在朱文印里 ---------- */
+#stage { --gold: #e8c070; }
+#roomPill b { color: var(--gold) !important; }
+.pill.ghost, .row-btn, #roomPill { color: #f2e6c8 !important; }
+#keys {
+  --hp: calc(2 * var(--u));
+  background: url(../assets/ui/jian_tex.png) 0 0 / calc(64 * var(--hp)) calc(32 * var(--hp)) repeat !important;
+  background-clip: padding-box !important;
+  border: calc(8 * var(--hp)) solid transparent; border-image: url(../assets/ui/jian_frame.png) 8 / calc(8 * var(--hp)) repeat;
+  image-rendering: pixelated; box-shadow: 0 var(--hp) 0 0 rgba(40, 24, 16, 0.3) !important;
+  color: #2a1e18 !important; gap: calc(22 * var(--u)) !important; padding: 0 calc(10 * var(--u)) !important;
+  bottom: calc(6 * var(--px)) !important;
+}
+#keys span { gap: calc(5 * var(--u)) !important; }
+#keys kbd, #stage .list kbd {
+  background: none !important; box-shadow: none !important; color: #b83a28 !important;
+  border: calc(3 * var(--hp, 2px)) solid transparent !important; border-image: url(../assets/ui/seal_key.png) 3 fill / calc(3 * var(--hp, 2px)) stretch !important;
+  image-rendering: pixelated; padding: 0 calc(2 * var(--u)) !important; line-height: 1.25 !important; margin: 0 !important;
+}
+#stage .list kbd { --hp: calc(2 * var(--u)); }
+#keys .sep { width: calc(2 * var(--u)); height: calc(24 * var(--u)); background: rgba(184, 58, 40, 0.35); }
+.list, .group { background: rgba(255, 240, 210, 0.06) !important; box-shadow: none !important; }
+.list li { border-bottom: var(--u) solid rgba(232, 192, 112, 0.18) !important; }
+.row-btn { background: transparent !important; border-bottom: var(--u) solid rgba(232, 192, 112, 0.18) !important; }
+.row-btn:hover, .row-btn:focus-visible, .row-btn.strong { background: rgba(232, 192, 112, 0.12) !important; outline: none; }
+.row-btn.danger { color: #f0a088 !important; }
