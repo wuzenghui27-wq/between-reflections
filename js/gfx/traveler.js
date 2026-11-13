@@ -27,7 +27,17 @@
     if (!a || !img) return;
     const c = X.ctx, x = Math.round(sx / P), y = Math.round(foot / P);
     c.globalAlpha = o.alpha === undefined ? 1 : o.alpha;
-    c.drawImage(img, a[0], a[1], a[2], a[3], x - a[4], y - a[5], a[2], a[3]);
+    let kx = 1, ky = 1;
+    if (!o.still) {
+      if (o.state === 'air' && (o.vy || 0) < -380) { kx = 0.9; ky = 1.1; }
+      else if (o.state !== 'air' && o.landT !== undefined && o.landT < 0.11) { const k = 1 - o.landT / 0.11; kx = 1 + 0.14 * k; ky = 1 - 0.14 * k; }
+    }
+    if (o.flip || kx !== 1) {
+      const w = Math.round(a[2] * kx), h = Math.round(a[3] * ky), ax = Math.round(a[4] * kx), ay = a[5] - (a[3] - h);
+      c.save(); c.translate(x, 0); if (o.flip) c.scale(-1, 1);
+      c.drawImage(img, a[0], a[1], a[2], a[3], -ax, y - ay, w, h); c.restore();
+    }
+    else c.drawImage(img, a[0], a[1], a[2], a[3], x - a[4], y - a[5], a[2], a[3]);
     c.globalAlpha = 1;
     if (o.night && !o.noGlow) X.glow(x, y - 12, 12, [190, 205, 255], 0.08 * (o.alpha || 1));
   }

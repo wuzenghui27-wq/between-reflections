@@ -292,17 +292,17 @@ img.pxi { image-rendering: pixelated; width: calc(9 * var(--px)); height: calc(9
   box-shadow: 0 var(--px) 0 0 rgba(0,0,0,0.35) !important;
   background: none !important;
   border: calc(4 * var(--px)) solid transparent !important;
-  border-image: url(../assets/ui/frame.png) 4 fill / calc(4 * var(--px)) stretch !important;
+  border-image: url(../assets/ui/wood.png) 4 fill / calc(4 * var(--px)) stretch !important;
   image-rendering: pixelated;
 }
 .pill.primary {
   box-shadow: 0 var(--px) 0 0 rgba(0,0,0,0.35) !important; background: none !important;
   border: calc(4 * var(--px)) solid transparent !important;
-  border-image: url(../assets/ui/btn.png) 4 fill / calc(4 * var(--px)) stretch !important;
+  border-image: url(../assets/ui/lacquer.png) 4 fill / calc(4 * var(--px)) stretch !important;
   image-rendering: pixelated;
 }
-.pill.primary:hover, .pill.primary:focus-visible { border-image-source: url(../assets/ui/btn_hover.png) !important; background: none !important; outline: none; }
-.pill.ghost:hover, .pill.ghost:focus-visible { border-image-source: url(../assets/ui/paper.png) !important; color: var(--ink) !important; outline: none; }
+.pill.primary:hover, .pill.primary:focus-visible { border-image-source: url(../assets/ui/lacquer_hover.png) !important; background: none !important; outline: none; }
+.pill.ghost:hover, .pill.ghost:focus-visible { border-image-source: url(../assets/ui/wood_hover.png) !important; color: #fff2d0 !important; outline: none; }
 #worldPill, #lanternPill, #weatherPill, #comboPill, #coinPill { padding: 0 calc(3 * var(--px)) 0 calc(1 * var(--px)) !important; height: calc(13 * var(--px)) !important; box-sizing: border-box; margin: 0 !important; gap: calc(2 * var(--px)) !important; }
 .hud-left { gap: calc(2 * var(--px)) !important; align-items: center; }
 #comboPill { display: flex; align-items: center; color: #fff2c0; font-weight: 700; font-size: calc(15 * var(--u)); }
@@ -359,3 +359,191 @@ button.round { width: calc(13 * var(--px)) !important; height: calc(13 * var(--p
 #poemLine .pl-text { writing-mode: vertical-rl; font-size: calc(24 * var(--u)); letter-spacing: 0.32em; line-height: 1.6; font-weight: 600; }
 #poemLine .pl-src { writing-mode: vertical-rl; font-size: calc(13 * var(--u)); letter-spacing: 0.2em; opacity: 0.85; margin-top: calc(10 * var(--px)); }
 #poemLine .pl-src b { display: inline-block; background: #c8402e; color: #fff2dc; padding: calc(1 * var(--px)) 0; margin-top: calc(2 * var(--px)); }
+
+/* ---------------------------------------------------------------- v1.5 提示签：明代笺纸
+   竹纸底（帘纹、纤维、洒金）+ 朱丝栏边框（毛边、外粗内细、回纹角）+ 角上一枝饾版折枝梅 + 白文方印。
+   纸用比游戏画面细一倍的像素（--hp = 2u），近看有纸的质感。 */
+#hint {
+  --hp: calc(2 * var(--u));
+  display: flex !important; align-items: center; gap: calc(10 * var(--u));
+  top: calc(84 * var(--u)) !important; font-size: calc(15 * var(--u)) !important;
+  padding: calc(2 * var(--u)) calc(58 * var(--u)) calc(2 * var(--u)) calc(4 * var(--u)) !important;
+  color: #2a1e18 !important; font-weight: 600; letter-spacing: 0.08em;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", serif;
+  border: calc(8 * var(--hp)) solid transparent !important;
+  border-image: url(../assets/ui/jian_frame.png) 8 / calc(8 * var(--hp)) repeat !important;
+  background: url(../assets/ui/jian_plum.png) right calc(-2 * var(--hp)) bottom calc(-3 * var(--hp)) / calc(30 * var(--hp)) calc(16 * var(--hp)) no-repeat,
+              url(../assets/ui/jian_tex.png) 0 0 / calc(64 * var(--hp)) calc(32 * var(--hp)) repeat !important;
+  background-clip: padding-box, border-box !important; background-origin: padding-box, border-box !important;
+  image-rendering: pixelated;
+  box-shadow: 0 calc(2 * var(--hp)) 0 0 rgba(40, 24, 16, 0.25) !important;
+  transform: translate(-50%, calc(10 * var(--u))) !important;
+  transition: opacity .35s var(--ease), transform .45s cubic-bezier(.2, 1.6, .4, 1) !important;
+}
+#hint.show { transform: translate(-50%, 0) !important; }
+#hint .seal {
+  flex: none; width: calc(13 * var(--hp)); height: calc(13 * var(--hp));
+  background: none center / 100% 100% no-repeat; image-rendering: pixelated; transform: rotate(-3deg);
+}
+#hint .seal-swap { background-image: url(../assets/ui/seal_swap.png); }
+#hint .seal-leap { background-image: url(../assets/ui/seal_leap.png); }
+#hint .seal-look { background-image: url(../assets/ui/seal_look.png); }
+#hint.show .seal { animation: sealIn .45s steps(3) both; }
+@keyframes sealIn { 0% { transform: rotate(-3deg) scale(1.5); opacity: 0; } 70% { transform: rotate(-3deg) scale(0.94); opacity: 1; } 100% { transform: rotate(-3deg); } }
+#hint kbd {
+  display: inline-block; margin: 0 calc(4 * var(--u)); padding: 0 calc(7 * var(--u));
+  font: 800 1em/1.5 system-ui, sans-serif; letter-spacing: 0.04em;
+  background: #fffaf0 !important; color: #2a1e18;
+  box-shadow: 0 var(--hp) 0 0 #b83a28, 0 0 0 calc(var(--hp) / 2) #c8ac7c !important;
+  transform: translateY(calc(-1 * var(--hp) / 2));
+}
+#hint.show kbd { animation: kbdTap 1.2s steps(1) .6s 3; }
+@keyframes kbdTap { 0%, 100% { transform: translateY(calc(-1 * var(--hp) / 2)); } 50% { transform: translateY(calc(var(--hp) / 2)); box-shadow: 0 0 0 0 #b83a28, 0 0 0 calc(var(--hp) / 2) #c8ac7c; } }
+#hint .hint-timer {
+  position: absolute; left: 0; right: 0; bottom: calc(-4 * var(--hp));
+  height: var(--hp); background: #b83a28; opacity: 0.55; transform-origin: left center;
+}
+#hint.show .hint-timer { animation-name: hintTimer; animation-timing-function: linear; animation-fill-mode: both; }
+@keyframes hintTimer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { #hint.show .seal, #hint.show kbd { animation: none; } }
+
+/* ---------- v1.6 一景一题：关名牌与触屏按键 ---------- */
+#roomPill { display: flex; align-items: center; padding: 0 calc(3 * var(--px)) !important; height: calc(13 * var(--px)) !important; box-sizing: border-box; margin: 0 !important; color: #f2e8cc; font-size: calc(15 * var(--u)); letter-spacing: 0.08em; white-space: nowrap; }
+#roomPill.bump { animation: pillBump 0.4s steps(4); }
+@keyframes pillBump { 0% { transform: translateY(calc(-2 * var(--px))); } 100% { transform: none; } }
+#pad { display: none; position: absolute; left: 0; right: 0; bottom: calc(6 * var(--px)); padding: 0 calc(8 * var(--px)); justify-content: space-between; pointer-events: none; z-index: 5; }
+#stage.touch #pad { display: flex; }
+#hud.hidden ~ #pad { display: none !important; }
+#pad > div { display: flex; gap: calc(4 * var(--px)); pointer-events: auto; }
+#pad button { width: calc(22 * var(--px)); height: calc(20 * var(--px)); font-size: calc(22 * var(--u)); color: #f2e8cc; border-radius: 0; touch-action: none; user-select: none; -webkit-user-select: none; opacity: 0.82; font-family: inherit; }
+#pad button.on { opacity: 1; transform: translateY(var(--px)); }
+#chapterCard .ch-no { font-size: calc(15 * var(--u)); font-weight: 700; color: #fff6e0; opacity: 0.92; letter-spacing: 0.4em; }
+#chapterCard .ch-line:empty { display: none; }
+
+/* ================================================================ v2 像素字体与界面重排
+   全部文字换成缝合像素字体（12 像素一格，按 2 倍、3 倍、4 倍……放大），和画面的像素对齐；
+   状态栏只留日月、景名、一排小灯和暂停；提示只剩一张题名笺和第一景底部的按键条。 */
+@font-face { font-family: "Fusion Pixel"; src: url(../assets/fonts/fusion-pixel-12.woff2) format("woff2"); font-display: block; }
+#stage, #stage button, #stage kbd, #stage h1, #stage h2 {
+  font-family: "Fusion Pixel", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+  font-weight: 400 !important; -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; font-smooth: never; text-rendering: optimizeSpeed;
+}
+#stage { --f1: calc(24 * var(--u)); --f2: calc(36 * var(--u)); --f3: calc(48 * var(--u)); }
+.pill, .row-btn, .note, .list, .list li, kbd, .stats span, .tagline, .sub, .eyebrow, #introLine, #debug, #pad button, #roomPill, #poemLine .pl-src { font-size: var(--f1) !important; letter-spacing: 0.04em !important; line-height: 1.5; }
+.sheet h2, .stats b, #poemLine .pl-text { font-size: var(--f2) !important; letter-spacing: 0.08em !important; }
+h1 { font-size: calc(120 * var(--u)) !important; letter-spacing: 0.12em !important; padding-left: 0.12em; line-height: 1.1 !important; }
+h2.big { font-size: calc(72 * var(--u)) !important; letter-spacing: 0.1em !important; }
+.sub { letter-spacing: 0.3em !important; }
+.sheet { max-width: calc(880 * var(--u)) !important; }
+.note { margin: calc(10 * var(--u)) 0 !important; }
+.list kbd { padding: 0 calc(8 * var(--u)) !important; margin-right: calc(4 * var(--u)); }
+
+/* 状态栏 */
+#weatherPill, #worldName, #journey, #chapterCard, #lanternCount, #lanternPill > img { display: none !important; }
+#worldPill { padding: 0 !important; width: calc(13 * var(--px)); justify-content: center; }
+#roomPill { padding: 0 calc(4 * var(--px)) !important; }
+#roomPill b { color: #ffd27a; font-weight: 400; margin-right: calc(3 * var(--px)); }
+#hud { align-items: flex-start; }
+#lanternPill { margin-left: auto !important; margin-right: calc(2 * var(--px)) !important; padding: 0 calc(3 * var(--px)) !important; gap: calc(2 * var(--px)) !important; }
+#pips { display: flex; gap: calc(2 * var(--px)); align-items: center; }
+#pips i { display: block; width: calc(5 * var(--px)); height: calc(7 * var(--px)); background: url(../assets/ui/lantern.png) center / calc(9 * var(--px)) calc(9 * var(--px)) no-repeat; image-rendering: pixelated; filter: grayscale(1) brightness(0.55); }
+#pips i.lit { filter: none; }
+#pips i.now { animation: pipNow 1s steps(2) infinite; }
+@keyframes pipNow { 50% { transform: translateY(calc(-1 * var(--px))); } }
+
+/* 题名笺：一方朱印、景名、一句题记 */
+#hint { font-size: var(--f1) !important; letter-spacing: 0.06em !important; gap: calc(14 * var(--u)) !important; padding: calc(4 * var(--u)) calc(64 * var(--u)) calc(4 * var(--u)) calc(8 * var(--u)) !important; top: calc(92 * var(--u)) !important; white-space: nowrap; }
+#hint .slip-no { color: #b83a28; }
+#hint .slip-name { font-size: var(--f3); letter-spacing: 0.14em; color: #1d1410; line-height: 1.1; }
+#hint .slip-line { color: #5a4634; padding-left: calc(14 * var(--u)); border-left: calc(2 * var(--u)) solid #b83a28; }
+#hint .slip-line:empty { display: none; }
+
+/* 第一景底部的按键条 */
+#keys { position: absolute; left: 50%; bottom: calc(10 * var(--px)); transform: translate(-50%, calc(4 * var(--px))); display: flex; gap: calc(8 * var(--px)); align-items: center; opacity: 0; pointer-events: none; transition: opacity .4s, transform .4s; font-size: var(--f1); color: #f2e8cc; white-space: nowrap;
+  padding: calc(1 * var(--px)) calc(5 * var(--px)); background: rgba(23, 19, 28, 0.78); box-shadow: 0 0 0 var(--px) rgba(23, 19, 28, 0.78), 0 0 0 calc(1.5 * var(--px)) rgba(242, 232, 204, 0.5); }
+#keys.show { opacity: 1; transform: translate(-50%, 0); }
+#keys span { display: flex; align-items: center; gap: calc(2 * var(--px)); }
+#keys kbd { display: inline-block; padding: 0 calc(2 * var(--px)); background: #fffaf0; color: #2a1e18; box-shadow: 0 var(--px) 0 0 #b83a28; line-height: 1.4; }
+#stage.touch #keys { display: none; }
+#hud.hidden ~ #keys { display: none; }
+h1 { font-size: calc(96 * var(--u)) !important; -webkit-text-stroke: calc(4 * var(--u)) currentColor; paint-order: stroke fill; letter-spacing: 0.2em !important; padding-left: 0.2em; }
+h2.big { -webkit-text-stroke: calc(2 * var(--u)) currentColor; }
+#hint .slip-name { -webkit-text-stroke: calc(1 * var(--u)) currentColor; }
+.sheet { width: calc(600 * var(--u)) !important; padding: calc(18 * var(--u)) calc(22 * var(--u)) !important; gap: calc(8 * var(--u)) !important; }
+#helpScreen .sheet { width: calc(860 * var(--u)) !important; }
+.list li { padding: calc(5 * var(--u)) calc(14 * var(--u)) !important; white-space: nowrap; }
+.keys { flex: none; } kbd { white-space: nowrap; }
+.note { white-space: normal; margin: calc(4 * var(--u)) 0 !important; }
+
+/* ---------- v2.1 明式界面：紫檀描金木框、朱漆按钮；按键说明是一张小笺，键名写在朱文印里 ---------- */
+#stage { --gold: #e8c070; }
+#roomPill b { color: var(--gold) !important; }
+.pill.ghost, .row-btn, #roomPill { color: #f2e6c8 !important; }
+#keys {
+  --hp: calc(2 * var(--u));
+  background: url(../assets/ui/jian_tex.png) 0 0 / calc(64 * var(--hp)) calc(32 * var(--hp)) repeat !important;
+  background-clip: padding-box !important;
+  border: calc(8 * var(--hp)) solid transparent; border-image: url(../assets/ui/jian_frame.png) 8 / calc(8 * var(--hp)) repeat;
+  image-rendering: pixelated; box-shadow: 0 var(--hp) 0 0 rgba(40, 24, 16, 0.3) !important;
+  color: #2a1e18 !important; gap: calc(22 * var(--u)) !important; padding: 0 calc(10 * var(--u)) !important;
+  bottom: calc(6 * var(--px)) !important;
+}
+#keys span { gap: calc(5 * var(--u)) !important; }
+#keys kbd, #stage .list kbd {
+  background: none !important; box-shadow: none !important; color: #b83a28 !important;
+  border: calc(3 * var(--hp, 2px)) solid transparent !important; border-image: url(../assets/ui/seal_key.png) 3 fill / calc(3 * var(--hp, 2px)) stretch !important;
+  image-rendering: pixelated; padding: 0 calc(2 * var(--u)) !important; line-height: 1.25 !important; margin: 0 !important;
+}
+#stage .list kbd { --hp: calc(2 * var(--u)); }
+#keys .sep { width: calc(2 * var(--u)); height: calc(24 * var(--u)); background: rgba(184, 58, 40, 0.35); }
+.list, .group { background: rgba(255, 240, 210, 0.06) !important; box-shadow: none !important; }
+.list li { border-bottom: var(--u) solid rgba(232, 192, 112, 0.18) !important; }
+.row-btn { background: transparent !important; border-bottom: var(--u) solid rgba(232, 192, 112, 0.18) !important; }
+.row-btn:hover, .row-btn:focus-visible, .row-btn.strong { background: rgba(232, 192, 112, 0.12) !important; outline: none; }
+.row-btn.danger { color: #f0a088 !important; }
+
+/* ================================================================ v2.2 少即是多
+   游戏里不再用框：左上一方朱印写着第几景，旁边淡淡的景名和一排小灯；右上只有一个暂停记号。
+   题名是画面上方一行大字，靠一道淡墨晕托着，淡入淡出；按键说明是底部一行小字。都不画框、不加文字阴影。 */
+#hud .hud-left > *, #hud button.round { display: none !important; }
+#hud button.round { display: flex !important; border: 0 !important; border-image: none !important; background: none !important; box-shadow: none !important; opacity: 0.7; color: #f2e6c8; width: calc(10 * var(--px)) !important; height: calc(10 * var(--px)) !important; }
+#hud button.round:hover { opacity: 1; }
+#hud button.round svg { fill: currentColor; width: 70%; height: 70%; }
+#hud::before { content: ""; position: absolute; left: 0; top: 0; width: calc(110 * var(--px)); height: calc(34 * var(--px)); pointer-events: none;
+  background: radial-gradient(ellipse at 0 0, rgba(12, 10, 18, 0.55), rgba(12, 10, 18, 0.25) 45%, rgba(12, 10, 18, 0) 72%); }
+#mark { position: absolute; left: calc(6 * var(--px)); top: calc(5 * var(--px)); display: flex; align-items: flex-start; gap: calc(3 * var(--px)); pointer-events: none; }
+#mark .m-seal { display: flex; align-items: center; justify-content: center; width: calc(11 * var(--px)); height: calc(11 * var(--px)); background: #b83a28;
+  box-shadow: inset 0 0 0 calc(0.5 * var(--px)) #e0745a; transform: rotate(-2deg); }
+#mark .m-seal b { color: #f6ead0; font-size: var(--f1); line-height: 1; font-weight: 400; }
+#mark .m-txt { display: flex; flex-direction: column; gap: calc(1.5 * var(--px)); padding-top: calc(0.5 * var(--px)); }
+#markName { color: #f2e6c8; font-size: var(--f1); letter-spacing: 0.3em; line-height: 1; }
+#markPips { display: flex; gap: calc(1.5 * var(--px)); }
+#markPips i { width: calc(2 * var(--px)); height: calc(2 * var(--px)); background: rgba(242, 230, 200, 0.35); }
+#markPips i.lit { background: #ffc46a; box-shadow: 0 0 calc(2 * var(--px)) rgba(255, 196, 106, 0.8); }
+#markPips i.now:not(.lit) { background: rgba(242, 230, 200, 0.85); }
+#hud.hidden ~ #mark, #hud.hidden #mark { display: none; }
+
+/* 题名：不再是笺纸，是一行大字 */
+#hint { border: 0 !important; border-image: none !important; background: radial-gradient(ellipse at 50% 50%, rgba(12, 10, 18, 0.5), rgba(12, 10, 18, 0) 70%) !important;
+  box-shadow: none !important; padding: calc(6 * var(--px)) calc(40 * var(--px)) !important; top: calc(18 * var(--px)) !important;
+  flex-direction: column; gap: calc(2 * var(--px)) !important; color: #f6ead0 !important; align-items: center;
+  transition: opacity 0.9s ease, transform 0.9s ease !important; transform: translate(-50%, calc(2 * var(--px))) !important; }
+#hint.show { transform: translate(-50%, 0) !important; }
+#hint .slip-no { color: #ffb08a; font-size: var(--f1); letter-spacing: 0.5em; padding-left: 0.5em; }
+#hint .slip-name { color: #fff6e0; font-size: calc(72 * var(--u)) !important; letter-spacing: 0; -webkit-text-stroke: calc(2 * var(--u)) currentColor; line-height: 1.1; display: flex; gap: calc(6 * var(--px)); }
+#hint .slip-name i { font-style: normal; }
+#hint .slip-name i { animation: charIn 0.8s ease both; }
+#hint .slip-name i:nth-child(2) { animation-delay: 0.18s; } #hint .slip-name i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes charIn { from { opacity: 0; transform: translateY(calc(1 * var(--px))); } to { opacity: 1; transform: none; } }
+#hint .slip-line { color: rgba(246, 234, 208, 0.82); border: 0 !important; padding: 0 !important; font-size: var(--f1); letter-spacing: 0.2em; }
+#hint .hint-timer, #hint .seal { display: none !important; }
+
+/* 按键说明：底部一行小字，键名在小朱印里 */
+#keys { background: radial-gradient(ellipse at 50% 60%, rgba(12, 10, 18, 0.55), rgba(12, 10, 18, 0) 72%) !important; border: 0 !important; border-image: none !important; box-shadow: none !important;
+  color: #f2e6c8 !important; padding: calc(4 * var(--px)) calc(26 * var(--px)) !important; gap: calc(10 * var(--px)) !important; bottom: calc(2 * var(--px)) !important; }
+#keys .sep { display: none; }
+#keys kbd { --hp: calc(1.5 * var(--u)); font-size: var(--f1) !important; }
+#keys kbd { border: 0 !important; border-image: none !important; color: #ffc9a0 !important; padding: 0 !important; box-shadow: inset 0 calc(-1 * var(--u)) 0 rgba(255, 201, 160, 0.6) !important; }
+#keys span { gap: calc(4 * var(--u)) !important; }
+#mark .m-seal.long { width: auto; min-width: calc(11 * var(--px)); padding: 0 calc(2 * var(--px)); }
+#mark .m-seal b { white-space: nowrap; }

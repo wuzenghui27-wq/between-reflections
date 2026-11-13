@@ -527,16 +527,33 @@ _sw = word('SHIFT')
 ICONS['k_shift'] = keycap(_sw, len(_sw[0]) + 2)
 ICONS['k_space'] = keycap(["pppppppppppppppppppppp", "ppkpppppppppppppppkppp", "ppkkkkkkkkkkkkkkkkkppp", "pppppppppppppppppppppp"], 24)
 
+# ---------------------------------------------------------------- v3 美术：人物与道具重画（tools/traveler_art.py、tools/props_art.py）
+# 上面的旧画法留作参考；打包时用 v3 的版本覆盖同名图块。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import traveler_guan as traveler_art, props_art
+from pixelkit import sel_outline
+traveler_frame = traveler_art.traveler_frame
+TRAVELER_ROWS, TRAVELER_COLS = traveler_art.TRAVELER_ROWS, traveler_art.TRAVELER_COLS
+FW, FH, FOOT = traveler_art.FW, traveler_art.FH, traveler_art.FOOT
+V3 = dict(props_art.PROPS); V3.update(props_art.DECO_STELE); V3.update(props_art.COINS)
+import props_ming                     # v4：障碍、收集物、检查点、按键提示按明代样式重画
+V3.update(props_ming.ART)
+for k in list(V3):
+    PROPS.pop(k, None); DECO.pop(k, None); ICONS.pop(k, None)
+
 # ---------------------------------------------------------------- 打包
 def pack():
     items = []
     for ri, (outfit, pose) in enumerate(TRAVELER_ROWS):
         for ci, fr in enumerate(TRAVELER_COLS):
-            items.append((f't_{outfit}_{pose}_{fr}', traveler_frame(outfit, pose, fr), (15, FOOT)))
+            items.append((f't_{outfit}_{pose}_{fr}', traveler_frame(outfit, pose, fr), (FW // 2 - 1, FOOT)))
     for group in (PROPS, DECO):          # 障碍、道具、摆件都加深色描边
         for k, im in group.items():
             o = outline(im)
             items.append((k, o, (o.size[0] // 2, o.size[1] - 2)))
+    for k, im in V3.items():             # v3：同色系的选择性描边
+        o = sel_outline(im)
+        items.append((k, o, (o.size[0] // 2, o.size[1] - 2)))
     for k, im in ICONS.items():
         o = outline(im)
         items.append((k, o, (o.size[0] // 2, o.size[1] - 2)))
@@ -589,6 +606,7 @@ def build_ui():
     frame_png((200, 64, 46, 255), (244, 150, 110, 255), (122, 32, 20, 255)).save(os.path.join(d, 'btn.png'))
     frame_png((216, 80, 58, 255), (255, 186, 140, 255), (140, 40, 26, 255)).save(os.path.join(d, 'btn_hover.png'))
     frame_png((242, 232, 204, 255), (255, 252, 240, 255), (184, 168, 130, 255)).save(os.path.join(d, 'paper.png'))
+    import ui_jian; ui_jian.build(d)      # 提示签：明代笺纸
     for k, im in ICONS.items():
         if k.startswith('i_'): outline(im).save(os.path.join(d, k[2:] + '.png'))
     print('ui', len(ICONS))

@@ -26,28 +26,32 @@
 
   // ---------------------------------------------------------------- 文字
   let hintT = 0, chapterTimer = null;
-  function showHint(text, dur) { const h = $('hint'); h.textContent = text; h.classList.add('show'); hintT = dur; }
-  function hideHint() { $('hint').classList.remove('show'); hintT = 0; }
-  function showReason(main, tip) {
-    const r = $('reason');
-    r.querySelector('.r-main').textContent = main;
-    r.querySelector('.r-tip').textContent = tip || '';
-    r.classList.toggle('has-tip', !!tip);
-    r.classList.add('show');
+  // 提示条：宣纸小签，左边一方朱印（画的是要做的动作：日月互换 / 向上一跃 / 一只眼睛表示“看”），
+  // 句子里的按键换成键帽，底下一道朱线随时间缩短。
+  const esc = t => t.replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+  function showHint(text, dur, tag) {
+    const h = $('hint');
+    const seal = /Shift|切/.test(text) ? 'swap' : /空格|跳/.test(text) ? 'leap' : 'look';
+    const body = esc(text).replace(/Shift/g, '<kbd>Shift</kbd>').replace(/空格（或 ↑）/g, '<kbd>空格</kbd>');
+    h.innerHTML = `<i class="seal seal-${seal}" aria-hidden="true"></i><span class="hint-text">${body}</span><b class="hint-timer" style="animation-duration:${dur}s"></b>`;
+    h.classList.remove('show'); void h.offsetWidth; h.classList.add('show'); hintT = dur;
   }
-  function hideReason() { $('reason').classList.remove('show'); }
-  function showChapter(reg) {
+  function hideHint() { $('hint').classList.remove('show'); hintT = 0; }
+  // 题名：进站时“第一站 · 江南烟雨 / 落潮”，之后每一景“第二景 / 龙舟”
+  const D = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  const NUM = new Proxy({}, { get: (_, k) => { const n = +k; if (!(n >= 0)) return ''; if (n < 10) return D[n]; const t = Math.floor(n / 10), o = n % 10; return (t > 1 ? D[t] : '') + '十' + (o ? D[o] : ''); } });
+  let hintTimer = null;
+  function showCard(no, name, line, ms) {
     const c = $('chapterCard');
-    c.querySelector('.ch-no').textContent = reg.no;
-    c.querySelector('.ch-name').textContent = reg.name;
-    c.querySelector('.ch-line').textContent = reg.line;
-    c.classList.add('show');
+    c.querySelector('.ch-no').textContent = no;
+    c.querySelector('.ch-name').textContent = name;
+    c.querySelector('.ch-line').textContent = line;
+    c.classList.remove('show'); void c.offsetWidth; c.classList.add('show');
     clearTimeout(chapterTimer);
-    chapterTimer = setTimeout(() => c.classList.remove('show'), 3200);
+    chapterTimer = setTimeout(() => c.classList.remove('show'), ms);
   }
   // ---------------------------------------------------------------- 唐诗：旅途中随机浮现
   const MT = RF.Meta;
-  G.diff = MT.data.diff;
   let poemT = 0, poemUsed = {};
   const nextPoemIn = () => 16 + Math.random() * 18;          // 每隔十几到三十几秒，在空闲时浮现一联
   function showPoem() {
@@ -63,10 +67,18 @@
     poemT -= dt;
     if (poemT > 0) return;
     // 有提示、站名卡、印章正在显示时先等一等
-    if ($('hint').classList.contains('show') || $('chapterCard').classList.contains('show') || $('stamp').classList.contains('show')) { poemT = 2; return; }
+    if (['hint', 'chapterCard', 'stamp'].some(id => { const el = $(id); return el && el.classList.contains('show'); })) { poemT = 2; return; }
     showPoem(); poemT = nextPoemIn();
   }
-  function setLanterns() { $('lanternCount').textContent = G.lanternCount() + ' / ' + LV.lanterns.length; }
+  // 一排小灯：每景一盏，点亮的亮着，当前这一景的轻轻跳
+  function setLanterns() {
+    $('markPips').innerHTML = $('pips').innerHTML = LV.rooms.map(r => `<i class="${r.lamps.every(k => G.got[k]) ? 'lit' : ''}${r.i === G.room ? ' now' : ''}"></i>`).join('');
+  }
+  function showSlip(no, name, line) {
+    const h = $('hint');
+    h.innerHTML = `<span class="slip-no">${esc(no)}</span><span class="slip-name">${[...name].map(ch => `<i>${esc(ch)}</i>`).join('')}</span><span class="slip-line">${esc(line || '')}</span>`;
+    h.classList.remove('show'); void h.offsetWidth; h.classList.add('show'); hintT = 3.6;
+  }
 
   // ---------------------------------------------------------------- 事件 → 界面 / 声音
   G.on('world', w => {
@@ -74,7 +86,12 @@
     $('worldPill').dataset.world = w;
     $('worldName').textContent = w === 'night' ? '夜晚' : '白天';
   });
-  G.on('switched', (w, onBeat) => A.sfx('switch', { night: w === 'night', onBeat }));
+  G.on('switched', w => {
+    A.sfx('switch', { night: w === 'night', onBeat: false });
+    const r = LV.rooms[G.room];
+    if (w === 'night' && LV.movers.some(m => m.cx >= r.x0 && m.cx < r.x1)) A.sfx('freeze');
+  });
+  G.on('blocked', () => { A.sfx('blocked'); PT.dust(G.px, G.foot, 4, ['#ffffff', '#c8d0e0'], 0.4); });                 // 另一面这里是实心的，切不过去
   G.on('intro', () => $('introLine').classList.add('show'));
   G.on('run', () => $('introLine').classList.remove('show'));
   // 粒子与手感
@@ -82,62 +99,29 @@
   const DUST = { jiangnan: ['#b5b7b0', '#8a8c8c'], garden: ['#f4f1ea', '#c9c4b8'], autumn: ['#c8a070', '#d0682a', '#8a9a3a'],
     wall: ['#c0a888', '#8a6a4c'], glacier: ['#ffffff', '#c8e4f4'], tibet: ['#ffffff', '#dfe6ee'] };
   const dustCols = () => DUST[LV.regions[LV.regionAt(G.px)].id] || ['#cccccc'];
-  let slideN = 0;
   G.on('jump', () => { A.sfx('jump'); PT.dust(G.px, G.foot, 6, dustCols(), 0.6); });
-  G.on('land', () => { A.sfx('land'); PT.dust(G.px, G.foot, 10, dustCols(), 1); RF.Renderer.kick(1.2); });
-  G.on('bell', b => { A.sfx('bell'); if (b) PT.sparks(b.x, b.y + 0, '#ffe08a', 10); });
+  G.on('land', () => { A.sfx('land'); PT.dust(G.px, G.foot, 8, dustCols(), 0.8); });
+  G.on('bell', b => { A.sfx('bell'); if (b) PT.sparks(b.x, b.y, '#ffe08a', 10); });
   G.on('lantern', l => {
     A.sfx('lantern'); setLanterns();
     PT.sparks(l.x, l.y, '#ffd27a', 14);
-    PT.float(l.x, l.y - 30, '+1', '#ffe8a8');
-    setLayer(A.layer + 1);
     const p = $('lanternPill'); p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump');
   });
-  G.on('checkpoint', () => { A.sfx('checkpoint'); PT.sparks(G.px - 24, G.foot - 50, '#ffd890', 8); });
-  // 铜钱：一路吃过去就是一段旋律
-  function setCoins() { $('coinCount').textContent = G.coinCount(); }
-  G.on('coin', (c, run) => {
-    A.sfx('coin', run);
-    PT.sparks(c.x, c.y, run >= 4 ? '#fff2b0' : '#ffd27a', run >= 4 ? 6 : 4);
-    setCoins();
+  // 这一关的灯亮了：院门打开，音乐加一层
+  G.on('roomClear', r => {
+    setTimeout(() => A.sfx('gate'), 700);
+    setTimeout(() => PT.sparks(r.x0 + 1225, r.exitY - 70, '#ffe8a8', 16), 700);
+    A.setLayer(3);
+    G.keyTip = null;
   });
-  G.on('moongate', () => { A.sfx('switch', { night: G.world === 'night', onBeat: false }); PT.sparks(G.px, G.foot - 40, '#fff6e0', 10); });
-  // 上船：木头一响，溅点水
-  G.on('board', f => { A.sfx('board'); PT.splash(G.px - 20, f.y + 8, 'rgba(230,240,255,0.9)'); RF.Renderer.kick(1.5); });
-  // 空中翻面借力
-  G.on('hop', () => {
-    A.sfx('hop');
-    PT.sparks(G.px, G.foot - 10, G.world === 'night' ? '#c8d8ff' : '#ffe0a0', 12);
-    PT.dust(G.px, G.foot, 4, ['#ffffff', '#e8e0d0'], 0.5);
-  });
-  // 乐器层：收灯、连拍升一档，失误降一档
-  function setLayer(n, quiet) {
-    const old = A.layer; A.setLayer(n);
-    const el = $('comboPill');
-    el.querySelectorAll('.pip').forEach((p, i) => p.classList.toggle('on', i < A.layer));
-    if (quiet || A.layer === old) return;
-    A.sfx(A.layer > old ? 'layerUp' : 'layerDown');
-    el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
-    if (A.layer > old) PT.float(G.px, G.foot - 120, '+', '#fff2c0');
-  }
-  // 踩拍连击
-  G.on('combo', n => {
-    const el = $('comboPill');
-    $('comboNum').textContent = n >= 2 ? '×' + n : '';
-    if (n >= 2) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
-    if (n > 0 && n % 4 === 0) { PT.float(G.px, G.foot - 110, 'x' + n, '#fff2c0'); setLayer(A.layer + 1); }
-  });
-  // 每站结束盖一个印章：甲乙丙丁
-  let stampTimer = null;
-  G.on('regionDone', (ri, g) => {
-    if (!g) return;
-    const st = $('stamp');
-    st.querySelector('.st-mark').textContent = g.mark;
-    st.querySelector('.st-name').textContent = LV.regions[ri].name;
-    st.querySelector('.st-sub').textContent = '踩拍 ' + Math.round(g.beat * 100) + '% · 铜钱 ' + g.coins + '/' + g.coinsTotal + ' · 灯 ' + g.lanterns + '/' + g.lanternsTotal + ' · 失误 ' + g.fails;
-    st.classList.remove('show'); void st.offsetWidth; st.classList.add('show');
-    A.sfx('checkpoint');
-    clearTimeout(stampTimer); stampTimer = setTimeout(() => st.classList.remove('show'), 2600);
+  G.on('room', r => {
+    A.setLayer(G.room === 0 ? 1 : 2);
+    $('roomNo').textContent = NUM[r.i + 1]; $('roomName').textContent = r.name;
+    $('markNo').textContent = NUM[r.i + 1]; $('markNo').parentNode.classList.toggle('long', NUM[r.i + 1].length > 1); $('markName').textContent = r.name;
+    showSlip('第' + NUM[r.i + 1] + '景', r.name, r.line);
+    $('keys').classList.toggle('show', r.i === 0 && !touchUI);
+    const p = $('roomPill'); p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump');
+    setLanterns(); G.keyTip = null;
   });
   const WNAME = { clear: '晴', rain: '雨', snow: '雪', fog: '雾', wind: '风' };
   function setWeather() {
@@ -147,33 +131,27 @@
     $('weatherIcon').src = 'assets/ui/' + (w || 'clear') + '.png';
     A.setWeather(w);
   }
-  G.on('region', reg => { showChapter(reg); A.sfx('region'); setWeather(); });
+  G.on('region', reg => { A.sfx('region'); setWeather(); });
   G.on('hint', (t, d, tag) => {
-    showHint(t, d);
-    const key = tag === 'switch' || tag === 'switch2' || tag === 'hop' || tag === 'bridge' || tag === 'gate2' ? 'k_shift' : tag === 'jump' || tag === 'lotus' || tag === 'roll' ? 'k_space' : null;
-    G.keyTip = key && !touchUI ? { key, t: Math.min(d, 3.5) } : null;
+    // 只有第一关在河边立一块 Shift 键帽，其余的关让人自己琢磨
+    G.keyTip = tag === 'switch' && !touchUI ? { key: 'k_shift', tag, t: 30 } : null;
   });
-  G.on('switched', () => { if (G.keyTip && G.keyTip.key === 'k_shift') G.keyTip.t = 0; });
-  G.on('jump', () => { if (G.keyTip && G.keyTip.key === 'k_space') G.keyTip.t = 0; });
-  G.on('fail', () => { A.sfx('fail'); PT.shake = 3; setTimeout(() => setLayer(A.layer - 1), 350); hideHint(); $('chapterCard').classList.remove('show'); });
-  G.on('ready', (label, tip) => { showReason(label, tip); setLanterns(); setWeather(); });
-  G.on('readyEnd', () => hideReason());
+  G.on('switched', () => { if (G.keyTip) G.keyTip.t = 0; if (G.room === 0) setTimeout(() => $('keys').classList.remove('show'), 5000); });
+  // 掉进水里：溅一下水，回到这一关开头
+  G.on('fail', () => { A.sfx('splash'); const wy = RF.Scene.waterY(LV.regions[G.regionIndex].id, G.world) * C.PIX; PT.splash(G.px, wy, 'rgba(230,240,255,0.9)'); PT.splash(G.px + 8, wy, 'rgba(200,225,255,0.9)'); });
+  G.on('retry', () => { setLanterns(); });
+  // 木箱和踏石
+  G.on('csplash', c => { A.sfx('splash'); const wy = RF.Scene.waterY(LV.regions[G.regionIndex].id, G.world) * C.PIX; PT.splash((c.x0 + c.x1) / 2, wy, 'rgba(230,240,255,0.9)'); });
+  G.on('cland', c => { A.sfx('blocked'); PT.dust((c.x0 + c.x1) / 2, c.y1, 8, dustCols(), 0.8); });
+  G.on('plate', (p, down) => { A.sfx(down ? 'gate' : 'blocked'); if (down) PT.sparks(p.x, p.y - 6, '#9ff2c8', 10); });
   G.on('arrive', () => { A.sfx('arrive'); hideHint(); });
   G.on('ended', () => {
     $('hud').classList.add('hidden'); panelStack = []; $('chapterCard').classList.remove('show'); $('poemLine').classList.remove('show');
-    hideHint(); $('stamp').classList.remove('show'); G.keyTip = null;
+    hideHint(); G.keyTip = null;
     const s = G.stats, m = Math.floor(s.time / 60), sec = Math.round(s.time % 60);
     $('endLanterns').textContent = G.lanternCount() + ' / ' + LV.lanterns.length;
-    $('endFails').textContent = s.fails;
+    $('endSwitches').textContent = s.switches;
     $('endTime').textContent = m + ' 分 ' + String(sec).padStart(2, '0') + ' 秒';
-    $('endCombo').textContent = s.bestCombo || 0;
-    $('endCoins').textContent = G.coinCount() + ' / ' + LV.coins.length;
-    const rows = LV.regions.map((r, i) => {
-      const g = G.grade(i);
-      if (!g || !G.graded[i]) return `<li><span class="g-name">${r.name}</span><span class="g-sub">—</span><b class="g-mark off">·</b></li>`;
-      return `<li><span class="g-name">${r.name}</span><span class="g-sub">踩拍 ${Math.round(g.beat * 100)}% · 铜钱 ${g.coins}/${g.coinsTotal}</span><b class="g-mark">${g.mark}</b></li>`;
-    });
-    $('endGrades').innerHTML = rows.join('');
     showPanel('endScreen');
   });
   G.on('paused', () => { A.pause(); panelStack = []; showPanel('pauseScreen'); });
@@ -181,31 +159,28 @@
 
   // ---------------------------------------------------------------- 旅程进度条：六站
   const jr = $('journey');
-  jr.querySelector('.stops').innerHTML = LV.regions.map(r => `<i style="left:${(r.x0 / LV.totalX * 100).toFixed(2)}%" title="${r.name}"></i>`).join('') + '<i class="end" style="left:100%"></i>';
+  jr.querySelector('.stops').innerHTML = LV.rooms.map(r => `<i style="left:${(r.x0 / LV.totalX * 100).toFixed(2)}%" title="${r.name}"></i>`).join('') + '<i class="end" style="left:100%"></i>';
   let lastP = -1;
   function setJourney() {
     const p = Math.max(0, Math.min(1, G.px / LV.totalX));
     if (Math.abs(p - lastP) < 0.0008) return;
     lastP = p;
     jr.style.setProperty('--p', (p * 100).toFixed(2) + '%');
-    const ri = LV.regionAt(G.px);
-    jr.querySelectorAll('.stops i').forEach((el, i) => el.classList.toggle('done', i <= ri));
+    jr.querySelectorAll('.stops i').forEach((el, i) => el.classList.toggle('done', i <= G.room));
   }
 
   // ---------------------------------------------------------------- 流程
   function startJourney() {
     A.unlock(); A.sfx('ui');
     hidePanels(); panelStack = [];
-    hideReason(); hideHint();
+    hideHint();
     $('hud').classList.remove('hidden');
     focusGame();
     G.wipe = null;
     RF.Particles.clear();
-    $('comboNum').textContent = '';
-    G.applyDiff();
     G.start();
     poemUsed = {}; poemT = 9 + Math.random() * 8; $('poemLine').classList.remove('show');
-    setLayer(1, true); setCoins();
+    A.setLayer(1);
     setLanterns();
     if (startAt) { jumpTo(startAt); }
     setWeather();
@@ -214,8 +189,7 @@
     A.resume();
     G.state = 'title';
     G.reset();
-    hidePanels(); hideHint(); hideReason(); panelStack = []; $('poemLine').classList.remove('show');
-    $('stamp').classList.remove('show');
+    hidePanels(); hideHint(); panelStack = []; $('poemLine').classList.remove('show');
     $('introLine').classList.remove('show');
     $('chapterCard').classList.remove('show');
     $('hud').classList.add('hidden');
@@ -225,21 +199,21 @@
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     canvas.focus({ preventScroll: true });
   }
-  // 调试：?at=区域序号（1–6）直接从该区域开始
-  const atM = location.search.match(/[?&]at=(\d)/);
+  // 调试：?at=第几景，直接从那一关开始
+  const atM = location.search.match(/[?&]at=(\d+)/);
   const startAt = atM ? +atM[1] : 0;
-  function jumpTo(n) {
-    const i = LV.checkpoints.findIndex(c => c.region === n - 1);
-    if (i >= 0) { G.loadCheckpoint(i); G.shown['r' + (n - 1)] = 0; }
-  }
+  function jumpTo(n) { if (LV.rooms[n - 1]) { G.loadRoom(n - 1); G.shown['r' + LV.rooms[n - 1].region] = 0; } }
 
   // ---------------------------------------------------------------- 输入
   const inGame = () => !['title', 'paused', 'ended'].includes(G.state);
+  const LEFT = { ArrowLeft: 1, KeyA: 1 }, RIGHT = { ArrowRight: 1, KeyD: 1 }, JUMP = { Space: 1, ArrowUp: 1, KeyW: 1 };
   window.addEventListener('keydown', e => {
     const k = e.code;
     if (k === 'ShiftLeft' || k === 'ShiftRight' || e.key === 'Shift') {
       if (inGame()) { e.preventDefault(); if (!e.repeat) G.inputSwitch(); }
-    } else if (k === 'Space' || k === 'ArrowUp' || k === 'KeyW') {
+    } else if (LEFT[k] || RIGHT[k]) {
+      if (inGame()) { e.preventDefault(); if (!e.repeat) G.inputMove(LEFT[k] ? -1 : 1, true); }
+    } else if (JUMP[k]) {
       if (inGame()) { e.preventDefault(); if (!e.repeat) G.inputJump(); }
     } else if (k === 'KeyR') {
       if (inGame() && !e.repeat) G.inputRetry();
@@ -252,15 +226,36 @@
       startJourney();
     }
   });
-  // 触屏 / 鼠标：左半屏切换，右半屏跳
-  let touchUI = false;
-  canvas.addEventListener('pointerdown', e => {
-    if (!inGame()) return;
-    if (e.pointerType === 'touch') touchUI = true;
-    e.preventDefault();
-    const r = canvas.getBoundingClientRect();
-    if (e.clientX - r.left < r.width / 2) G.inputSwitch(); else G.inputJump();
+  window.addEventListener('keyup', e => {
+    const k = e.code;
+    if (LEFT[k] || RIGHT[k]) G.inputMove(LEFT[k] ? -1 : 1, false);
+    else if (JUMP[k] && inGame()) G.inputJumpRelease();
   });
+  // 触屏：左下角两个方向键，右下角“昼夜”和“跳”
+  let touchUI = false;
+  const pad = $('pad');
+  function useTouch() { if (!touchUI) { touchUI = true; stage.classList.add('touch'); G.keyTip = null; } }
+  if (window.matchMedia && matchMedia('(pointer: coarse)').matches) useTouch();
+  window.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') useTouch(); }, true);
+  pad.querySelectorAll('[data-pad]').forEach(b => {
+    const act = b.dataset.pad;
+    const down = e => {
+      e.preventDefault(); A.unlock(); b.classList.add('on');
+      if (!inGame()) return;
+      if (act === 'l') G.inputMove(-1, true); else if (act === 'r') G.inputMove(1, true);
+      else if (act === 's') G.inputSwitch(); else G.inputJump();
+    };
+    const up = e => {
+      e.preventDefault(); b.classList.remove('on');
+      if (act === 'l') G.inputMove(-1, false); else if (act === 'r') G.inputMove(1, false);
+      else if (act === 'j' && inGame()) G.inputJumpRelease();
+    };
+    b.addEventListener('pointerdown', down);
+    b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('pointerleave', up);
+    b.addEventListener('contextmenu', e => e.preventDefault());
+  });
+  // 开场那句话：点一下画面也能开始
+  canvas.addEventListener('pointerdown', e => { if (G.state === 'intro') { e.preventDefault(); G.inputJump(); } });
   window.addEventListener('blur', () => G.pause());
   document.addEventListener('visibilitychange', () => { if (document.hidden) G.pause(); });
 
@@ -288,10 +283,6 @@
         try { localStorage.setItem('between-reflections:reduce', G.reduceMotion ? 'on' : 'off'); } catch (err) { }
         refreshToggles(); A.sfx('ui'); break;
       case 'help': A.sfx('ui'); openSub('helpScreen'); break;
-      case 'diff': {
-        const ds = ['easy', 'normal', 'hard'];
-        G.diff = ds[(ds.indexOf(G.diff) + 1) % 3]; MT.setDiff(G.diff); refreshDiff(); A.sfx('ui'); break;
-      }
       case 'credits': A.sfx('ui'); openSub('creditsScreen'); break;
       case 'back': A.sfx('ui'); back(); break;
     }
@@ -313,6 +304,7 @@
   resize();
 
   // ---------------------------------------------------------------- 主循环（固定步长）
+  let stepN = 0;
   let last = performance.now(), acc = 0, frameAvg = 1 / 60, titleFlip = 0;
   const dbg = $('debug');
   function frame(now) {
@@ -323,13 +315,17 @@
     if (dt > 0.25) dt = 0.25;
     acc += dt;
     while (acc >= C.STEP) {
+      acc -= C.STEP;                        // 先记账：这一步就算后面的点缀出错，也不会让画面停住
       G.update(C.STEP);
+      try {
       if (G.state !== 'paused') {
         RF.Particles.update(C.STEP);
         tickPoem(C.STEP);
-        // 冰滑道：脚下扬起雪沫
-        if (G.state === 'running' && G.onGround && !G.riding && LV.paceAt(G.px) > 1.2 && (slideN = (slideN + 1) % 3) === 0)
-          PT.dust(G.px - 6, G.foot, 2, ['#ffffff', '#dfeefa', '#bcd6ec'], 1.6);
+        // 脚步：每走一小段落一次脚，带一点声音和尘土
+        if (G.state === 'running' && G.onGround && Math.abs(G.vx) > 60) {
+          const n = Math.floor(G.walkDist / 34);
+          if (n !== stepN) { stepN = n; A.sfx('step', n); if (!G.riding) PT.dust(G.px - G.face * 6, G.foot, 1, dustCols(), 0.3); }
+        }
         if (G.keyTip) G.keyTip.t -= G.state === 'running' ? C.STEP : 0;
       }
       if (hintT > 0 && G.state === 'running') { hintT -= C.STEP; if (hintT <= 0) hideHint(); }
@@ -338,20 +334,17 @@
         titleFlip += C.STEP;
         if (titleFlip > 5.5) { titleFlip = 0; const from = G.world; G.world = from === 'day' ? 'night' : 'day'; G.wipe = { from, t: 0 }; }
       }
-      acc -= C.STEP;
+      } catch (err) { if (!frame.warned) { frame.warned = true; console.error(err); } }
     }
     const rid = LV.regions[LV.regionAt(G.px)].id;
     A.tick(G.beat(), G.state === 'running', rid, LV.paceAt(G.px));
     const title = G.state === 'title';
-    const camPx = title ? 1400 + Math.sin(G.animT * 0.04) * 900 : G.px;
+    const camPx = title ? 1900 + Math.sin(G.animT * 0.04) * 900 : G.camX + C.PLAYER_SX;
     RF.Renderer.draw(G, { camPx, title, noGhost: title });
     if (!title) setJourney();
-    if (G.debug && dbg) dbg.textContent = `x ${Math.round(G.px)} · 拍 ${G.beat().toFixed(2)} · ${G.world} · 脚 ${Math.round(G.foot)} · 检查点 ${G.cpIndex} · ${G.state}`;
+    if (G.debug && dbg) dbg.textContent = `x ${Math.round(G.px)} · 拍 ${G.beat().toFixed(2)} · ${G.world} · 脚 ${Math.round(G.foot)} · 第 ${G.room + 1} 景 · 钟 ${G.dclock.toFixed(1)} · ${G.state}`;
   }
   if (G.debug && dbg) dbg.hidden = false;
-  const DNAME = { easy: '轻松', normal: '标准', hard: '困难' };
-  function refreshDiff() { $('btnDiff').textContent = '难度 ' + DNAME[G.diff]; }
-  refreshDiff();
   refreshToggles();
   G.rollWeather();
   // 先载入背景与像素素材，再开放“开始”

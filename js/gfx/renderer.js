@@ -10,14 +10,10 @@
     world: 'day', t: 0, camPix: 0, reduce: false, G: null, noGhost: false,
     camY: 0, camYpix: 0, dip: 0, lastT: null, pulse: 0,
     flash(k) { return e.G.flashes[k]; },
-    ghostA(x0, x1) {
+    ghostA(x0, x1) {            // 另一面的东西：本关里的都看得见
       if (e.noGhost) return 0;
-      const px = e.G.px, A = C.PREVIEW_AHEAD;
-      if (x1 < px - 140) return 0;
-      const d = x0 - px;
-      const far = d < A * 0.75 ? 1 : U.clamp(1 - (d - A * 0.75) / (A * 0.4), 0, 1);
-      const near = x1 < px ? U.clamp((x1 - (px - 140)) / 140, 0, 1) : 1;
-      return Math.min(1, 0.85 * far * near * (e.G.ghostMul || 1) * (px < (e.G.assistUntil || 0) ? 1.5 : 1));     // 难度：轻松看得更清楚，困难更淡
+      const r = LV.rooms[e.G.room];
+      return x1 < r.x0 || x0 > r.x1 ? 0 : 0.7;
     }
   };
 
@@ -48,12 +44,15 @@
     }
     for (const s of LV.solids) if (on(s, world) && s.x1 > x0 && s.x0 < x1) RF.Props.solid(s, e);
     RF.Props.decorations(e, x0, x1);
+    RF.Props.chimes(e, x0, x1);
+    RF.Props.movers(e, x0, x1);
     for (const mg of LV.moongates) if (mg.x > x0 && mg.x < x1) RF.Props.moongate(mg, e);
     for (const h of LV.hazards) if (on(h, world) && h.x1 > x0 && h.x0 < x1) RF.Props.hazard(h, e, G.gates, false);
+    RF.Scene.plates(e); RF.Scene.crates(e);
     for (const b of LV.bells) if (on(b, world) && b.x > x0 && b.x < x1) RF.Props.bell(b, e, G.gates, false);
     for (const h of LV.rollers) if (on(h, world)) RF.Props.roller(h, e, false);
     for (const l of LV.lanterns) if (on(l, world) && l.x > x0 && l.x < x1) RF.Props.lantern(l, e, G.got, false);
-    if (!e.noGhost) RF.Props.coins(e, x0, x1);
+    if (!e.noGhost) RF.Scene.clearFx(G, e);
     c.restore(); X.oy = 0;
     X.mute = false;
     return m;
@@ -65,12 +64,12 @@
     const wy = Math.round(wl[world] / P), fy = Math.round(G.foot / P);
     if (fy > wy + 1) return;
     const c = X.ctx, ri = LV.regionAt(G.px);
-    const st = G.state === 'running' ? (G.riding ? 'idle' : G.onGround ? 'run' : 'air') : 'idle';
+    const st = pose(G);
     c.save();
     c.beginPath(); c.rect(0, wy + 1, PW, PH + 16 - wy); c.clip();
     c.translate(0, wy * 2 + 1); c.scale(1, -1);
     RF.Traveler.draw(G.px - cam, G.foot, {
-      weather: G.weather[ri], region: ri, state: st, dist: G.px, night: world === 'night', vy: G.vy, landT: G.landT, t: e.t,
+      weather: G.weather[ri], region: ri, state: st, dist: G.walkDist, flip: G.face < 0, night: world === 'night', vy: G.vy, landT: G.landT, t: e.t,
       alpha: 0.32 * (G.playerAlpha === undefined ? 1 : G.playerAlpha), noGlow: true
     });
     c.restore();
@@ -80,29 +79,93 @@
     for (let k = 0; k < 3; k++) c.fillRect(px - 4 + ((Math.floor(e.t * 3) + k * 3) % 7) - 3, wy + 3 + d + k * 4, 4 + k, 1);
   }
 
+  const pose = G => (G.state === 'running' || G.state === 'failing') ? (!G.onGround ? 'air' : Math.abs(G.vx) > 20 ? 'run' : 'idle') : 'idle';
   function player(G, cam) {
     const ri = LV.regionAt(G.px);
-    const st = G.state === 'running' ? (G.riding ? 'idle' : G.onGround ? 'run' : 'air') : (G.state === 'failing' && !G.onGround ? 'air' : 'idle');
-    RF.Traveler.draw(G.px - cam, G.foot, {
-      weather: G.weather[ri], region: ri, state: st, dist: G.px, alpha: G.playerAlpha, night: G.world === 'night',
-      vy: G.vy, landT: G.landT, t: e.t, slide: G.state === 'running' && G.onGround && !G.riding && LV.paceAt(G.px) > 1.2
+    const bx = G.blockedT > 0 && !G.reduceMotion ? Math.round(Math.sin(G.blockedT * 60) * 3) : 0;     // 切不过去：人晃一下
+    RF.Traveler.draw(G.px - cam + bx, G.foot, {
+      weather: G.weather[ri], region: ri, state: pose(G), dist: G.walkDist, flip: G.face < 0, alpha: G.playerAlpha, night: G.world === 'night',
+      vy: G.vy, landT: G.landT, t: e.t, still: G.reduceMotion
     });
     // 脚下记号：另一面此刻能不能站
-    if ((G.state === 'running' || G.state === 'ready') && G.onGround) {
+    if (G.state === 'running') {
       const x = Math.round((G.px - cam) / P), y = Math.round(G.foot / P) + 3;
-      const col = G.world === 'day' ? '#2a4cc0' : '#ffd88a';
-      X.ctx.fillStyle = col;
-      if (G.otherSafe()) { X.ctx.fillRect(x - 1, y, 3, 1); X.ctx.fillRect(x - 2, y + 1, 1, 1); X.ctx.fillRect(x + 2, y + 1, 1, 1); X.ctx.fillRect(x - 1, y + 2, 3, 1); }
-      else { for (let k = -1; k <= 1; k++) { X.ctx.fillRect(x + k, y + 1 + k, 1, 1); X.ctx.fillRect(x - k, y + 1 + k, 1, 1); } }
+      const c = X.ctx, safe = G.otherSafe();
+      if (safe) {        // 另一面能站：脚下一道细细的倒影光，像水面上映出的另一块地
+        const col = G.world === 'day' ? [110, 140, 255] : [255, 216, 138];
+        c.fillStyle = `rgb(${col})`; c.fillRect(x - 2, y + 1, 5, 1);
+        c.fillStyle = `rgba(${col},0.45)`; c.fillRect(x - 4, y + 1, 2, 1); c.fillRect(x + 3, y + 1, 2, 1);
+        c.fillStyle = '#ffffff'; c.fillRect(x, y + 1, 1, 1);
+        X.glow(x, y + 1, 5, col, 0.35);
+      } else {           // 另一面是空的 / 有东西挡着：两截断开的暗线
+        c.fillStyle = 'rgba(200,70,70,0.75)'; c.fillRect(x - 3, y + 1, 2, 1); c.fillRect(x + 2, y + 1, 2, 1);
+      }
     }
   }
 
-  // 教学提示：人物头顶浮着一个按键
+  // 教学提示：不在头顶飘字，而是在“该按的地方”立一道光、地上一枚记号、上面一块按键牌。
+  // 人走近时按键牌跟着拍子按下去，过了这个点就收起来；找不到落点（看时机的机关）才退回人物头顶。
+  const AIM = { switch: 1 };
+  function findCue(G, k) {
+    if (!AIM[k.tag]) return null;
+    const cur = G.world, oth = cur === 'day' ? 'night' : 'day', Q = RF.Q, foot = G.foot;
+    for (let x = LV.rooms[G.room].x0 + 30; x < LV.rooms[G.room].x1; x += 6) {
+      const gc = Q.groundAt(cur, x), haz = Q.hazardHit(cur, x, foot, G.gates);
+      if (k.key === 'k_shift') {
+        const bad = gc === null;
+        const go = Q.groundAt(oth, x);
+        if (bad && go !== null && !Q.hazardHit(oth, x, go, G.gates)) return { x: x - 28, y: Q.groundAt(cur, x - 28) ?? go };
+      } else if (gc === null || gc < foot - C.STEP_UP || haz) {
+        const fx = x - 34; return { x: fx, y: Q.groundAt(cur, fx) ?? foot };
+      }
+    }
+    return null;
+  }
   function keyTip(G, cam) {
-    const k = G.keyTip; if (!k || k.t <= 0 || G.state !== 'running') return;
-    const x = Math.round((G.px - cam) / P) + 8, y = Math.round(G.foot / P) - 32 + (G.reduceMotion ? 0 : Math.round(Math.sin(e.t * 6)));
-    const press = Math.floor(e.t * 2.5) % 2;     // 一按一放
-    RF.Props.spr(k.key, x, y + press, false);
+    const k = G.keyTip; if (!k || k.t <= 0 || G.state !== 'running') { if (k) k.cue = null; return; }
+    if (k.cue === undefined) k.cue = findCue(G, k);
+    const c = X.ctx, bob = G.reduceMotion ? 0 : Math.round(Math.sin(e.t * 5) * 1);
+    const age = Math.min(1, (k.age = (k.age || 0) + 1 / 60) * 5);         // 出场：从下往上弹一下
+    const pop = Math.round((1 - age) * 6 - (age > 0.6 && age < 0.9 ? 1 : 0));
+    const col = [255, 214, 140];                                          // 一缕暖光，和朱印、灯色一个调子
+    const rgba = a => `rgba(${col[0]},${col[1]},${col[2]},${a.toFixed(3)})`;
+    if (k.cue) {
+      const x = Math.round((k.cue.x - cam) / P), gy = Math.round(k.cue.y / P);
+      const near = (k.cue.x - G.px) < C.BEAT_PX * 0.9, ph = (G.beat() % 1);
+      c.globalAlpha = Math.min(1, k.t * 2) * age;
+      for (let y = 0; y < 30; y++) {                                       // 光柱：底下实、往上散
+        const a = 0.5 * (1 - y / 30) * (0.75 + 0.25 * Math.sin(e.t * 3));
+        c.fillStyle = rgba(a); c.fillRect(x - 1, gy - y, 3, 1);
+        c.fillStyle = rgba(a * 0.45); c.fillRect(x - 3, gy - y, 1, 1); c.fillRect(x + 3, gy - y, 1, 1);
+      }
+      X.glow(x, gy - 2, 9, col, 0.5);
+      const rr = near ? 4 : 5 + Math.round((1 - ph) * 3);                  // 地上的记号：一圈跟着拍子收拢的光点
+      for (let a = 0; a < 12; a++) { const t = a / 12 * Math.PI * 2; c.fillStyle = rgba(0.85); c.fillRect(Math.round(x + Math.cos(t) * rr), Math.round(gy + 1 + Math.sin(t) * rr * 0.35), 1, 1); }
+      c.fillStyle = rgba(1); c.fillRect(x, gy - 1, 1, 3); c.fillRect(x - 1, gy, 3, 1);
+      const press = near && ph < 0.35 ? 2 : 0;
+      { const sy = gy - 32 + bob + pop + press; c.fillStyle = '#b83a28'; c.fillRect(x - 2, sy - 4, 5, 5); c.fillStyle = '#f6ead0'; c.fillRect(x - 1, sy - 3, 1, 1); c.fillRect(x + 1, sy - 1, 1, 1); }   // 光柱顶上一枚小朱印
+      c.globalAlpha = 1;
+      return;
+    }
+    const x = Math.round((G.px - cam) / P) + 2, y = Math.round(G.foot / P) - 40 + bob + pop;
+    const press = Math.floor(e.t * 2.5) % 2;
+    c.globalAlpha = age; sealTag(k.key === 'k_shift' ? 'SHIFT' : 'SPACE', x, y + press * 2); c.globalAlpha = 1;
+  }
+
+  // 朱文印：纸色印面、朱红印边（有几处磨损）、朱色 3×5 小字；底边中点对准 (x, y)，下面垂一截红穗
+  const GL = { S: '111100111001111', H: '101101111101101', I: '111010010010111', F: '111100110100100', T: '111010010010010', P: '111101111100100', A: '010101111101101', C: '111100100100111', E: '111100110100111' };
+  function sealTag(txt, x, y) {
+    const c = X.ctx, w = txt.length * 4 + 5, h = 11, x0 = Math.round(x - w / 2), y0 = y - h - 3;
+    const ZHU = '#b83a28', ZHU2 = '#d0644a', PAPER = '#f2e6cc';
+    c.fillStyle = 'rgba(23,19,28,0.55)'; c.fillRect(x0 + 1, y0 + 1, w, h);                  // 一点投影
+    c.fillStyle = ZHU; c.fillRect(x0 + 1, y0, w - 2, h); c.fillRect(x0, y0 + 1, w, h - 2);
+    c.fillStyle = PAPER; c.fillRect(x0 + 2, y0 + 2, w - 4, h - 4);
+    c.fillStyle = ZHU2; for (const [dx, dy] of [[3, 0], [w - 5, h - 1], [0, 5], [w - 1, 3]]) c.fillRect(x0 + dx, y0 + dy, 1, 1);   // 磨损
+    c.fillStyle = ZHU;
+    let cx = x0 + 3;
+    for (const ch of txt) { const g = GL[ch] || ''; for (let i = 0; i < 15; i++) if (g[i] === '1') c.fillRect(cx + (i % 3), y0 + 3 + ((i / 3) | 0), 1, 1); cx += 4; }
+    c.fillStyle = '#e8c070'; c.fillRect(x - 1, y0 + h, 2, 1);                                  // 穗
+    c.fillStyle = ZHU; c.fillRect(x - 1, y0 + h + 1, 2, 2); c.fillStyle = ZHU2; c.fillRect(x - 1, y0 + h + 3, 1, 1); c.fillRect(x, y0 + h + 3, 1, 1);
   }
 
   function ring(cx, cy, rr, col) {
@@ -123,7 +186,7 @@
     e.camPix = Math.round(cam / P);
     // 镜头上下平滑跟随：人物爬高时画面跟着往下送一点；落地时轻轻一沉
     const dt = e.lastT === null ? 0 : U.clamp(e.t - e.lastT, 0, 0.05); e.lastT = e.t;
-    const target = opt.title ? 0 : U.clamp((C.GROUND - G.foot) * 0.42, -20, 64);
+    const target = 0;          // 每关固定一屏，镜头不上下跟
     e.camY += (target - e.camY) * (1 - Math.exp(-dt * 3.2));
     e.dip *= Math.exp(-dt * 9);
     e.camYpix = Math.round(e.camY / P + (G.reduceMotion ? 0 : e.dip));
@@ -153,6 +216,14 @@
     if (G.onBeatFx > 0 && !opt.title) X.glow(cx, cy - e.camYpix, 18, [255, 240, 200], G.onBeatFx * 0.5);
     RF.Particles.draw(c, e.camPix);
     if (!opt.title) keyTip(G, cam);
+    if (!opt.title && G.judge && false) {        // 踩准拍子：脚下溅起一圈光点（不出字）
+      const k = G.judge.t / 0.7, jx = Math.round((G.px - cam) / P), jy = Math.round(G.foot / P) - 1;
+      const n = G.judge.k === 'miao' ? 14 : 8, rr = 3 + U.ease(Math.min(1, k * 1.6)) * (G.judge.k === 'miao' ? 13 : 9);
+      const col = G.world === 'night' ? [200, 220, 255] : [255, 226, 150], a = (1 - k) * (G.judge.k === 'miao' ? 1 : 0.7);
+      c.fillStyle = U.rgb(col, a);
+      for (let i = 0; i < n; i++) { const t = i / n * Math.PI * 2; c.fillRect(Math.round(jx + Math.cos(t) * rr), Math.round(jy + Math.sin(t) * rr * 0.35), 1, 1); }
+      if (k < 0.35) X.glow(jx, jy - 8, 14, col, (0.35 - k) * (G.judge.k === 'miao' ? 2 : 1.2));
+    }
     c.restore(); X.oy = 0;
     // 近处的天气（落在人物前面）与近景剪影
     RG.weatherFront(c, G.weather[LV.regionAt(cam + C.W / 2)], G.world, e.t, e.camPix, e.reduce);

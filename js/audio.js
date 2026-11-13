@@ -220,12 +220,23 @@
         case 'layerDown': tone(mtof(cur.chord), t, { to: mtof(cur.chord - 5), glide: 0.3, type: 'triangle', g: 0.04, d: 0.4 }); break;
         case 'land': noise(t, 0.06, 0.04, 500, sfxBus, 1); break;
         case 'board': tone(180, t, { to: 120, glide: 0.08, type: 'triangle', g: 0.06, d: 0.18 }); noise(t + 0.02, 0.3, 0.05, 900, sfxBus, 0.6); break;
+        case 'chime': {        // 编钟：五声音阶上的一个音，基音 + 不协和的泛音，衰减长
+          const PENT = [0, 2, 4, 7, 9], n = arg | 0, f = 392 * Math.pow(2, (PENT[n % 5] + 12 * Math.floor(n / 5)) / 12);
+          tone(f, t, { g: 0.09, d: 1.8 }); tone(f * 2.76, t, { g: 0.025, d: 0.5 }); tone(f * 5.4, t, { g: 0.012, d: 0.2 });
+          break;
+        }
         case 'bell': [988, 1319, 1976].forEach((f, k) => tone(f, t + k * 0.04, { g: 0.06, d: 1.6 })); break;
         case 'lantern': [1568, 2093].forEach((f, k) => tone(f, t + k * 0.07, { type: 'triangle', g: 0.05, d: 0.5 })); break;
         case 'fail': tone(330, t, { to: 196, glide: 0.4, type: 'triangle', g: 0.07, a: 0.02, d: 0.6 }); break;
         case 'checkpoint': tone(784, t, { g: 0.035, d: 0.5 }); break;
         case 'region': [523, 659, 784, 1046].forEach((f, k) => tone(f, t + k * 0.16, { type: 'triangle', g: 0.04, a: 0.04, d: 1.2 })); break;
         case 'arrive': [261.6, 329.6, 392, 523.3, 659.3, 784].forEach((f, k) => tone(f, t + k * 0.14, { type: k < 2 ? 'sine' : 'triangle', a: 0.4, g: 0.05, d: 4 })); break;
+        case 'step': noise(t, 0.035, 0.016 + 0.006 * (arg & 1), arg & 1 ? 1500 : 1100, sfxBus, 1.4); break;      // 脚步：左右脚音色略有不同
+        case 'blocked': tone(150, t, { to: 110, glide: 0.1, type: 'triangle', g: 0.07, d: 0.16 }); noise(t, 0.05, 0.03, 300, sfxBus, 1); break;
+        case 'splash': noise(t, 0.35, 0.07, 1400, sfxBus, 0.5); tone(220, t, { to: 90, glide: 0.2, type: 'sine', g: 0.06, d: 0.3 }); break;
+        case 'freeze': [2637, 3136].forEach((f, k) => tone(f, t + 0.05 + k * 0.06, { g: 0.022, d: 0.9 })); break;                 // 夜里万物停住：很轻的两声清响
+        case 'gate': tone(196, t, { to: 147, glide: 0.25, type: 'triangle', g: 0.07, d: 0.5 }); noise(t, 0.25, 0.035, 500, sfxBus, 0.8);
+          [784, 988, 1175, 1568].forEach((f, k) => tone(f, t + 0.12 + k * 0.07, { type: 'triangle', g: 0.04, d: 0.9 })); break;
         case 'ui': tone(880, t, { g: 0.03, d: 0.08 }); break;
       }
     }
