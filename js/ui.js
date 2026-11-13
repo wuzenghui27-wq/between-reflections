@@ -67,7 +67,7 @@
     poemT -= dt;
     if (poemT > 0) return;
     // 有提示、站名卡、印章正在显示时先等一等
-    if ($('hint').classList.contains('show') || $('chapterCard').classList.contains('show') || $('stamp').classList.contains('show')) { poemT = 2; return; }
+    if (['hint', 'chapterCard', 'stamp'].some(id => { const el = $(id); return el && el.classList.contains('show'); })) { poemT = 2; return; }
     showPoem(); poemT = nextPoemIn();
   }
   // 一排小灯：每景一盏，点亮的亮着，当前这一景的轻轻跳
@@ -315,7 +315,9 @@
     if (dt > 0.25) dt = 0.25;
     acc += dt;
     while (acc >= C.STEP) {
+      acc -= C.STEP;                        // 先记账：这一步就算后面的点缀出错，也不会让画面停住
       G.update(C.STEP);
+      try {
       if (G.state !== 'paused') {
         RF.Particles.update(C.STEP);
         tickPoem(C.STEP);
@@ -332,7 +334,7 @@
         titleFlip += C.STEP;
         if (titleFlip > 5.5) { titleFlip = 0; const from = G.world; G.world = from === 'day' ? 'night' : 'day'; G.wipe = { from, t: 0 }; }
       }
-      acc -= C.STEP;
+      } catch (err) { if (!frame.warned) { frame.warned = true; console.error(err); } }
     }
     const rid = LV.regions[LV.regionAt(G.px)].id;
     A.tick(G.beat(), G.state === 'running', rid, LV.paceAt(G.px));
