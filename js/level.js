@@ -6,7 +6,7 @@
 (function () {
   const C = RF.CFG, B = C.BEAT_PX, G0 = C.GROUND, RW = C.W;
 
-  const LISTS = ['solids', 'hazards', 'bells', 'lanterns', 'mirages', 'ferries', 'moongates', 'rollers', 'sinkers', 'eaves', 'calls', 'chimes', 'movers', 'zones', 'checkpoints', 'regions', 'texts', 'rooms', 'decos'];
+  const LISTS = ['solids', 'hazards', 'bells', 'lanterns', 'mirages', 'ferries', 'moongates', 'rollers', 'sinkers', 'eaves', 'calls', 'chimes', 'movers', 'zones', 'checkpoints', 'regions', 'texts', 'rooms', 'decos', 'plates', 'crates'];
   const L = { endX: 0, version: 0, mode: 'rooms', diff: 1 };
   LISTS.forEach(k => { L[k] = []; });
   let ox = 0, gateN = 0, room = null;
@@ -21,7 +21,7 @@
   }
   const HZ = {
     stall: [56, 100], door: [40, 132], gate: [36, 140], drum: [60, 92], beacon: [40, 112],
-    block: [32, 28], rock: [40, 32], shard: [40, 28], mani: [44, 36], yak: [70, 80]
+    pile: [20, 90], block: [32, 28], rock: [40, 32], shard: [40, 28], mani: [44, 36], yak: [70, 80]
   };
   // 挡路的东西（实心的：两边挡人，顶上能站）
   function box(x, w, kind, y) {
@@ -40,6 +40,17 @@
     L.bells.push({ id, x: ox + bx, y: by, w: bw, kind: kind || 'bell' });
     const g = box(gx, 'both', 'gate', gy); g.gate = id; g.style = kind || 'bell';
   }
+  // 木箱：白天能推、能浮、顺水漂；夜里推不动，潮落后搁在石板上
+  function crate(x, y, tx) {
+    const s = C.CRATE, by = y === undefined ? G0 : y;
+    L.crates.push({ crate: true, ix: ox + x, iy: by, w: s, h: s, x0: ox + x - s / 2, x1: ox + x + s / 2, y0: by - s, y1: by, vy: 0, room: L.rooms.length, wet: false, float: false, tx: tx === undefined ? null : ox + tx });
+  }
+  // 踏石 + 门：人或倒影压在踏石上，门才开着；一松就关
+  function plateGate(px, py, gx, gy) {
+    const id = 'p' + (++gateN);
+    L.plates.push({ id, x: ox + px, y: py === undefined ? G0 : py, hw: 30, down: false });
+    const g = box(gx, 'both', 'gate', gy); g.gate = id; g.style = 'plate';
+  }
   // 飞檐：白天升到 yd，夜里落到 yn，站在上面切换就被抬上去 / 放下来
   function eave(x0, x1, yd, yn) {
     const s = ground(x0, x1, yd, 'both', 'eave'); s.eave = true; s.yd = yd; s.yn = yn;
@@ -57,7 +68,7 @@
   // 一关：name 题名；world 进来时是白天还是夜里；fn 里摆东西。出口的院门自动加在右边。
   function R(name, world, fn, opt) {
     opt = opt || {};
-    room = { i: L.rooms.length, name, x0: ox, x1: ox + RW, world, lamps: [], region: L.regions.length - 1,
+    room = { i: L.rooms.length, name, line: opt.line || '', x0: ox, x1: ox + RW, world, lamps: [], region: L.regions.length - 1,
              sx: ox + (opt.sx || 70), sy: opt.sy || G0, exitY: opt.exitY || G0 };
     fn();
     const eg = box(1225, 'both', 'gate', room.exitY); eg.gate = 'exit' + room.i; eg.exit = true; eg.style = 'bell';
@@ -78,13 +89,13 @@
   const sprite = (name, x, y) => deco('spr', x, undefined, { name, y: y === undefined ? G0 : y });
 
   // ============================================================ 关卡
-  const TIDE = G0 + 10;      // 落潮才露出来的石板：白天刚好没在水面下
+  const TIDE = G0 + 50;      // 落潮才露出来的石板：白天沉在水下，夜里露出水面
   function build() {
-    // ------------------------------------------------------------ 第一站 江南烟雨：白天水涨，夜里落潮
+    // ------------------------------------------------------------ 第一站 江南烟雨：水涨船高
     region('jiangnan', '第一站', '江南烟雨', '白天水涨，夜里落潮', { rain: 5, fog: 3, clear: 2 });
 
     R('落潮', 'day', () => {
-      hint('← → 走，空格跳。河过不去？按 Shift 换到夜里看看。', 8, 'switch');
+      hint('', 8, 'switch');
       ground(0, 430);
       box(250, 'both', 'block');
       ground(430, 850, TIDE, 'night', 'steps');             // 落潮才露出来的石板桥
@@ -93,45 +104,50 @@
       deco('willow', 130); deco('rail', 300, 426); sprite('stonelamp', 60);
       deco('lotus', 520); deco('lotus', 705); sprite('reed', 880);
       deco('rail', 858, 960); deco('willow', 1150, undefined, { flip: true });
-    });
+    }, { line: '夜里水退，石板出水' });
 
-    R('龙舟', 'day', () => {
-      hint('龙舟白天来回划，夜里停在那一刻。夜里，画舫也泊回了岸边。', 8, 'drift');
-      ground(0, 300);
-      drift(545, G0 + 2, 185, 10, -Math.PI / 2, 58, 'boat');
-      ground(800, 926, G0 - 62, 'night', 'moored');        // 夜泊的画舫：舫顶可以站
-      ground(930, 1110, G0 - 150);                         // 高岸
-      ground(1110, 1280);
-      lamp(1010, G0 - 150);
-      deco('willow', 110); deco('rail', 190, 296); sprite('post', 286);
-      deco('lotus', 380); deco('lotus', 640);
-      deco('rail', 940, 1100, { y: G0 - 150 }); sprite('stonelamp', 1160);
-    });
+    R('浮箱', 'night', () => {
+      ground(0, 360);
+      crate(240, G0, 872);
+      ground(900, 1280, G0 - 100);                         // 高岸：涨潮时从箱子上才够得着
+      lamp(1040, G0 - 100);
+      deco('willow', 90); deco('rail', 20, 150); sprite('post', 346);
+      deco('lotus', 520); deco('lotus', 760);
+      deco('rail', 910, 1000, { y: G0 - 100 }); sprite('stonelamp', 1150, G0 - 100);
+    }, { line: '白天推得动，水涨箱也高', exitY: G0 - 100 });
 
     R('水车', 'day', () => {
-      hint('水车白天转，夜里停。石滩要等落潮才露出来。', 8, 'wheel');
       ground(0, 420);
       wheel(630, G0 - 40, 96, 4, 10, 26);
-      ground(830, 1100, TIDE, 'night', 'steps');
-      ground(1100, 1280);
-      lamp(980, TIDE);
+      ground(830, 1040, TIDE, 'night', 'steps');
+      ground(1040, 1280);
+      lamp(1130);
       deco('willow', 150); deco('rail', 250, 416); sprite('stonelamp', 40);
-      deco('lotus', 470); deco('lotus', 790); sprite('reed', 1120);
-      deco('willow', 1170, undefined, { flip: true });
-    });
+      deco('lotus', 470); deco('lotus', 790); sprite('reed', 1060);
+    }, { line: '白天它转，夜里它停' });
+
+    R('压石', 'day', () => {
+      ground(0, 300);
+      crate(190, G0, 600);
+      ground(300, 820, TIDE, 'night', 'steps');
+      ground(820, 1280);
+      plateGate(600, TIDE, 1010, G0);
+      lamp(1110);
+      deco('willow', 70); deco('rail', 20, 130); sprite('post', 288);
+      deco('lotus', 420); sprite('reed', 840); deco('rail', 850, 950); sprite('stonelamp', 1170);
+    }, { line: '水停的那一刻，箱子落在哪里' });
 
     R('夜铃', 'day', () => {
-      hint('铜铃只在夜里才有。敲响它，锁着的门才开。', 8, 'drift');
       ground(0, 300);
-      drift(520, G0 + 2, 160, 10, -Math.PI / 2, 56, 'boat');
-      ground(770, 850, TIDE, 'night', 'steps');
-      ground(890, 1280);
-      bellGate(500, G0 - 150, 'night', 990, G0);
-      lamp(1100);
-      deco('willow', 120); deco('rail', 180, 296); sprite('post', 284);
-      deco('lotus', 400); deco('lotus', 700); sprite('reed', 905);
-      deco('rail', 1030, 1070); sprite('stonelamp', 1160);
-    });
+      crate(190, G0, 677);
+      box(715, 'both', 'pile', G0 + 92);                    // 河心一根木桩，漂来的箱子会被它挡住
+      ground(300, 900, TIDE, 'night', 'steps');
+      ground(900, 1280);
+      bellGate(668, G0 - 180, 'night', 1010, G0);
+      lamp(1110);
+      deco('willow', 80); deco('rail', 20, 140); sprite('post', 288);
+      deco('lotus', 430); deco('lotus', 820); sprite('reed', 920); deco('rail', 1040, 1080); sprite('stonelamp', 1170);
+    }, { line: '铜铃只在夜里响' });
   }
 
   // ------------------------------------------------------------ 搭建

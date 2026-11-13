@@ -309,6 +309,7 @@
       if (!open) X.glow(cx, y0 + (y1 - y0) * 0.45, 6, [255, 200, 90], 0.5);
       return;
     }
+    if (h.kind === 'pile') { RF.Scene.pile(h, x0, x1, y0, e); return; }
     if (h.kind === 'beacon') {
       spr('beacon' + (Math.floor(e.t * 6) % 2), cx, y1, night);
       X.glow(cx, y0 + 3, 16, [255, 150, 60], 0.7);

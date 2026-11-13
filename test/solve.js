@@ -18,7 +18,7 @@ function solveRoom(i) {
   const r = LV.rooms[i];
   const per = Math.max(0, ...LV.movers.filter(m => m.cx >= r.x0 && m.cx < r.x1).map(m => m.period));
   const key = () => [Math.round((G.px - r.x0) / 8), Math.round(G.foot / 8), Math.round(G.vy / 120), Math.sign(G.vx), G.onGround ? 1 : 0, G.world[0],
-    per ? Math.round((G.dclock % per) * 4) : 0, Object.keys(G.gates).length, Object.keys(G.got).length, LV.eaves.map(e => Math.round(e.y / 8)).join(',')].join('|');
+    per ? Math.round((G.dclock % per) * 4) : 0, Object.keys(G.gates).length, Object.keys(G.got).length, LV.crates.filter(c => c.room === i).map(c => Math.round((c.x0 - r.x0) / 8) + ':' + Math.round(c.y1 / 8)).join(','), LV.eaves.map(e => Math.round(e.y / 8)).join(',')].join('|');
   // 最佳优先：先试“离目标近”的状态（灯亮没亮、铃响没响、离灯 / 出口多远），搜不到再慢慢铺开
   const lamp = LV.lanterns.find(l => l.room === i);
   const score = () => {
@@ -26,15 +26,22 @@ function solveRoom(i) {
     const bell = LV.bells.find(b => b.x >= r.x0 && b.x < r.x1 && !G.gates[b.id]);
     let tx = G.got[lamp.i] ? r.x1 + 40 : lamp.x, ty = G.got[lamp.i] ? G.foot : lamp.y + 34;
     if (bell) { tx = bell.x; ty = bell.y + 110; }
+    // 有木箱的关：先把箱子弄到该去的地方（推下水、跟着它漂），再去找灯
+    const cr = LV.crates.find(c => c.room === i && c.tx !== null);
+    if (cr && !G.got[lamp.i] && !(gates > gates0)) {
+      const cx = (cr.x0 + cr.x1) / 2, d = Math.abs(cx - cr.tx);
+      if (d > 34) return -(got * 4000 + gates * 2500) + 3000 + d * 3 + Math.abs(G.px - (cr.float ? cx : cr.x0 - 14)) + (cr.float ? Math.abs(G.foot - cr.y0) * 0.5 : 0) + (G.world === 'night' ? 150 : 0);
+    }
     return -(got * 4000 + gates * 2500) + Math.abs(tx - G.px) + Math.abs(ty - G.foot) * 0.6;
   };
+  const gates0 = Object.keys(G.gates).length;
   const seen = new Set([key()]);
   const heap = [];
   const push = n => { heap.push(n); let k = heap.length - 1; while (k > 0) { const p2 = (k - 1) >> 1; if (heap[p2].f <= heap[k].f) break; [heap[p2], heap[k]] = [heap[k], heap[p2]]; k = p2; } };
   const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let k = 0; for (;;) { let c = k * 2 + 1; if (c >= heap.length) break; if (c + 1 < heap.length && heap[c + 1].f < heap[c].f) c++; if (heap[k].f <= heap[c].f) break; [heap[k], heap[c]] = [heap[c], heap[k]]; k = c; } } return top; };
   push({ s: G.snapshot(), prev: null, act: null, d: 0, f: score() });
   let nodes = 0;
-  while (heap.length && nodes < 3000000) {
+  while (heap.length && nodes < 1200000) {
     const node = pop();
     for (const a of ACTS) {
       G.restore(node.s);
@@ -58,7 +65,9 @@ function solveRoom(i) {
 }
 
 let all = true; const out = [];
+const ri = process.argv.indexOf('--room'), onlyRoom = ri > 0 ? +process.argv[ri + 1] - 1 : -1;
 for (let i = 0; i < LV.rooms.length; i++) {
+  if (onlyRoom >= 0 && i !== onlyRoom) continue;
   const r = solveRoom(i), room = LV.rooms[i];
   const sw = r.plan.filter(p => p[2]).length, jp = r.plan.filter(p => p[1]).length;
   console.log(`关 ${i + 1} ${LV.regions[room.region].name}·${room.name} ${r.ok ? 'OK' : 'FAIL'}  最短 ${(r.plan.length * K * DT).toFixed(1)}s 切换 ${sw} 跳 ${jp} nodes ${r.nodes}`);

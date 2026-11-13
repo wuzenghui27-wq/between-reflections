@@ -69,7 +69,15 @@
     if ($('hint').classList.contains('show') || $('chapterCard').classList.contains('show') || $('stamp').classList.contains('show')) { poemT = 2; return; }
     showPoem(); poemT = nextPoemIn();
   }
-  function setLanterns() { $('lanternCount').textContent = G.lanternCount() + ' / ' + LV.lanterns.length; }
+  // 一排小灯：每景一盏，点亮的亮着，当前这一景的轻轻跳
+  function setLanterns() {
+    $('pips').innerHTML = LV.rooms.map(r => `<i class="${r.lamps.every(k => G.got[k]) ? 'lit' : ''}${r.i === G.room ? ' now' : ''}"></i>`).join('');
+  }
+  function showSlip(no, name, line) {
+    const h = $('hint');
+    h.innerHTML = `<i class="seal seal-look" aria-hidden="true"></i><span class="slip-no">${esc(no)}</span><span class="slip-name">${esc(name)}</span><span class="slip-line">${esc(line || '')}</span>`;
+    h.classList.remove('show'); void h.offsetWidth; h.classList.add('show'); hintT = 4.2;
+  }
 
   // ---------------------------------------------------------------- 事件 → 界面 / 声音
   G.on('world', w => {
@@ -107,10 +115,11 @@
   });
   G.on('room', r => {
     A.setLayer(G.room === 0 ? 1 : 2);
-    $('roomName').textContent = '第 ' + NUM[r.i + 1] + ' 景 · ' + r.name;
-    if (!$('chapterCard').classList.contains('show')) showCard('第' + NUM[r.i + 1] + '景', r.name, '', 2200);
+    $('roomNo').textContent = NUM[r.i + 1]; $('roomName').textContent = r.name;
+    showSlip('第' + NUM[r.i + 1] + '景', r.name, r.line);
+    $('keys').classList.toggle('show', r.i === 0 && !touchUI);
     const p = $('roomPill'); p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump');
-    setLanterns(); hideHint(); clearTimeout(hintTimer); G.keyTip = null;
+    setLanterns(); G.keyTip = null;
   });
   const WNAME = { clear: '晴', rain: '雨', snow: '雪', fog: '雾', wind: '风' };
   function setWeather() {
@@ -120,10 +129,8 @@
     $('weatherIcon').src = 'assets/ui/' + (w || 'clear') + '.png';
     A.setWeather(w);
   }
-  G.on('region', reg => { showCard(reg.no + ' · ' + reg.name, LV.rooms[G.room].name, reg.line, 3000); A.sfx('region'); setWeather(); });
+  G.on('region', reg => { A.sfx('region'); setWeather(); });
   G.on('hint', (t, d, tag) => {
-    clearTimeout(hintTimer);
-    hintTimer = setTimeout(() => { if (G.state === 'running' || G.state === 'paused') showHint(t, d, tag); }, $('chapterCard').classList.contains('show') ? 2600 : 300);
     // 只有第一关在河边立一块 Shift 键帽，其余的关让人自己琢磨
     G.keyTip = tag === 'switch' && !touchUI ? { key: 'k_shift', tag, t: 30 } : null;
   });
@@ -131,6 +138,10 @@
   // 掉进水里：溅一下水，回到这一关开头
   G.on('fail', () => { A.sfx('splash'); const wy = RF.Scene.waterY(LV.regions[G.regionIndex].id, G.world) * C.PIX; PT.splash(G.px, wy, 'rgba(230,240,255,0.9)'); PT.splash(G.px + 8, wy, 'rgba(200,225,255,0.9)'); });
   G.on('retry', () => { setLanterns(); });
+  // 木箱和踏石
+  G.on('csplash', c => { A.sfx('splash'); const wy = RF.Scene.waterY(LV.regions[G.regionIndex].id, G.world) * C.PIX; PT.splash((c.x0 + c.x1) / 2, wy, 'rgba(230,240,255,0.9)'); });
+  G.on('cland', c => { A.sfx('blocked'); PT.dust((c.x0 + c.x1) / 2, c.y1, 8, dustCols(), 0.8); });
+  G.on('plate', (p, down) => { A.sfx(down ? 'gate' : 'blocked'); if (down) PT.sparks(p.x, p.y - 6, '#9ff2c8', 10); });
   G.on('arrive', () => { A.sfx('arrive'); hideHint(); });
   G.on('ended', () => {
     $('hud').classList.add('hidden'); panelStack = []; $('chapterCard').classList.remove('show'); $('poemLine').classList.remove('show');

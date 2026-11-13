@@ -48,6 +48,7 @@
     RF.Props.movers(e, x0, x1);
     for (const mg of LV.moongates) if (mg.x > x0 && mg.x < x1) RF.Props.moongate(mg, e);
     for (const h of LV.hazards) if (on(h, world) && h.x1 > x0 && h.x0 < x1) RF.Props.hazard(h, e, G.gates, false);
+    RF.Scene.plates(e); RF.Scene.crates(e);
     for (const b of LV.bells) if (on(b, world) && b.x > x0 && b.x < x1) RF.Props.bell(b, e, G.gates, false);
     for (const h of LV.rollers) if (on(h, world)) RF.Props.roller(h, e, false);
     for (const l of LV.lanterns) if (on(l, world) && l.x > x0 && l.x < x1) RF.Props.lantern(l, e, G.got, false);

@@ -267,5 +267,74 @@
     }
   }
 
-  RF.Scene = { tideSteps, tideGhost, huafang, waterwheel, decos, clearFx, waterY };
+  // ------------------------------------------------------------ 木箱、踏石、木桩
+  function crates(e) {
+    const night = e.world === 'night', W = night ? WDN : WD, G = e.G;
+    for (const c of LV.crates) {
+      const x0 = Math.round(c.x0 / P) - e.camPix, x1 = Math.round(c.x1 / P) - e.camPix, y0 = Math.round(c.y0 / P), y1 = Math.round(c.y1 / P);
+      if (x1 < -4 || x0 > PW + 4) continue;
+      const w = x1 - x0, h = y1 - y0, rid = LV.regions[LV.regionAt(c.x0)].id, wy = waterY(rid, e.world);
+      r(x0 - 1, y0 - 1, w + 2, h + 2, INK);
+      r(x0, y0, w, h, W[1]);
+      for (let k = 1; k < h; k += 3) r(x0 + 1, y0 + k + 1, w - 2, 1, W[2]);                    // 木板缝
+      r(x0, y0, w, 1, W[0]); r(x0, y0, 1, h, W[0]); r(x1 - 1, y0, 1, h, W[2]); r(x0, y1 - 1, w, 1, W[3]);
+      line(x0 + 2, y0 + 2, x1 - 3, y1 - 3, W[3]); line(x1 - 3, y0 + 2, x0 + 2, y1 - 3, W[3]);   // 交叉的加固木条
+      line(x0 + 2, y0 + 1, x1 - 3, y1 - 4, W[0]); line(x1 - 3, y0 + 1, x0 + 2, y1 - 4, W[0]);
+      const iron = night ? '#59607c' : '#3c3a44';
+      for (const [ix, iy] of [[x0, y0], [x1 - 2, y0], [x0, y1 - 2], [x1 - 2, y1 - 2]]) r(ix, iy, 2, 2, iron);   // 四角包铁
+      const mx = (x0 + x1) >> 1, my = (y0 + y1) >> 1;                                         // 中间一方红纸
+      r(mx - 2, my - 2, 4, 4, night ? '#8a3a44' : '#c8402e'); r(mx - 1, my - 1, 2, 2, night ? '#c8a070' : '#f2c850');
+      if (y1 > wy) {                                                                           // 泡在水里：水线和水沫
+        const c2 = X.ctx; c2.globalAlpha = 0.45; r(x0 - 1, wy + 1, w + 2, y1 - wy, night ? '#1c2a4a' : '#3c6470'); c2.globalAlpha = 1;
+        const wc = night ? 'rgba(200,220,255,0.8)' : 'rgba(255,255,255,0.85)', f = e.reduce ? 0 : Math.floor(e.t * 3) % 3;
+        r(x0 - 2 - (f & 1), wy, 3, 1, wc); r(x1 - 1 + (f >> 1), wy, 3, 1, wc);
+        if (c.float && !night && !e.reduce) for (let k = 0; k < 3; k++) { const ph = (e.t * 0.9 + k * 0.33) % 1; r(x0 - 4 - Math.round(ph * 10), wy + 1 + (k & 1), 3 + Math.round(ph * 3), 1, 'rgba(255,255,255,0.6)'); }
+      }
+      if (night) {                                                                             // 夜里推不动：几粒静止的冷光
+        for (let k = x0 + 2; k < x1; k += 5) r(k, y0 - 1, 1, 1, 'rgba(210,230,255,0.85)');
+      } else if (G.pushT > 0 && !e.reduce && Math.abs(c.y1 - G.foot) < 14) {                   // 正被推着：箱脚蹭起一点灰
+        const side = G.px < c.x0 ? x1 : x0 - 2;
+        r(side, y1 - 1 - (Math.floor(e.t * 12) & 1), 2, 1, 'rgba(230,224,208,0.8)');
+      }
+    }
+  }
+  function plates(e) {
+    const night = e.world === 'night', c = X.ctx;
+    for (const p of LV.plates) {
+      const x = Math.round(p.x / P) - e.camPix, y = Math.round(p.y / P), hw = Math.round(p.hw / P);
+      if (x < -20 || x > PW + 20) continue;
+      const rid = LV.regions[LV.regionAt(p.x)].id, under = y >= waterY(rid, e.world);
+      const S = night ? STONE_N : STONE_D, jade = p.down ? '#9ff2c8' : (night ? '#4f9a84' : '#5aa88a');
+      const dy = p.down ? 1 : 0, wob = under && !e.reduce ? Math.round(Math.sin(e.t * 1.8) * 0.6) : 0;
+      if (under) c.globalAlpha = 0.6;
+      r(x - hw - 1 + wob, y - 2 + dy, hw * 2 + 2, 3 - dy, INK);
+      r(x - hw + wob, y - 2 + dy, hw * 2, 1, S[0]); if (!dy) r(x - hw + wob, y - 1, hw * 2, 1, S[2]);
+      r(x - 3 + wob, y - 2 + dy, 6, 1, jade); r(x - 1 + wob, y - 2 + dy, 2, 1, '#eafff4');      // 中间一枚玉纹，和它管的门上那枚一样
+      c.globalAlpha = 1;
+      X.glow(x, y - 2, p.down ? 12 : 6, [140, 240, 200], p.down ? 0.7 : (e.reduce ? 0.25 : 0.2 + 0.1 * Math.sin(e.t * 3)));
+      // 门楣上的玉纹：压住时亮
+      const gate = LV.hazards.find(h => h.gate === p.id);
+      if (gate) {
+        const gx = Math.round((gate.x0 + gate.x1) / 2 / P) - e.camPix, gy = Math.round(gate.y0 / P);
+        r(gx - 2, gy - 4, 5, 5, INK); r(gx - 1, gy - 3, 3, 3, jade); r(gx, gy - 2, 1, 1, '#eafff4');
+        X.glow(gx, gy - 2, p.down ? 10 : 5, [140, 240, 200], p.down ? 0.8 : 0.3);
+      }
+    }
+  }
+  function pile(h, x0, x1, y0, e) {
+    const night = e.world === 'night', W = night ? WDN : WD, cx = (x0 + x1) >> 1, rid = LV.regions[LV.regionAt(h.x0)].id, wy = waterY(rid, e.world);
+    r(x0 - 1, y0 - 1, x1 - x0 + 2, PH + 16 - y0, INK);
+    r(x0, y0, x1 - x0, PH + 16 - y0, W[2]); r(x0, y0, 1, PH + 16 - y0, W[1]); r(x0, y0, x1 - x0, 1, W[0]);
+    for (let yy = y0 + 4; yy < wy + 14; yy += 5) r(x0 + 1 + (yy & 1), yy, 2, 1, W[3]);
+    r(x0 - 1, y0 + 2, x1 - x0 + 2, 2, night ? '#8a8070' : '#d8c8a0');                           // 缠着的缆绳
+    if (wy > y0 + 5) r(x0, y0 + 5, x1 - x0, Math.min(wy - y0 - 5, 4), night ? '#2e4a48' : '#4e6a4a');   // 落潮露出的青苔
+    // 桩顶插一根竹篙，挑着一面小旗，好让人远远看见
+    for (let k = 1; k < 16; k++) r(cx, y0 - k, 1, 1, night ? '#7a8a6a' : '#b8c070');
+    const fw = e.reduce ? 0 : Math.round(Math.sin(e.t * 2.2) * 1);
+    r(cx + 1, y0 - 15, 5 + fw, 1, night ? '#9a4a52' : '#e04a34'); r(cx + 1, y0 - 14, 4 + fw, 1, night ? '#9a4a52' : '#e04a34'); r(cx + 1, y0 - 13, 2, 1, night ? '#6a2a38' : '#b02a24');
+    const wc = night ? 'rgba(200,220,255,0.7)' : 'rgba(255,255,255,0.8)', f = e.reduce ? 0 : Math.floor(e.t * 3) % 3;
+    r(x0 - 2 - (f & 1), wy, 2, 1, wc); r(x1 + (f >> 1), wy, 2, 1, wc);
+  }
+
+  RF.Scene = { crates, plates, pile, tideSteps, tideGhost, huafang, waterwheel, decos, clearFx, waterY };
 })();
