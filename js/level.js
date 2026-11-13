@@ -87,6 +87,8 @@
     L.decos.push(Object.assign({ kind, x: ox + x, x1: ox + (x1 === undefined ? x : x1), y: G0, w: 'both' }, o || {}));
   }
   const sprite = (name, x, y) => deco('spr', x, undefined, { name, y: y === undefined ? G0 : y });
+  const night = (x0, x1, y, kind) => ground(x0, x1, y, 'night', kind);      // 只在夜里有的落脚处
+  const day = (x0, x1, y, kind) => ground(x0, x1, y, 'day', kind);
 
   // ============================================================ 关卡
   const TIDE = G0 + 50;      // 落潮才露出来的石板：白天沉在水下，夜里露出水面
@@ -148,6 +150,213 @@
       deco('willow', 80); deco('rail', 20, 140); sprite('post', 288);
       deco('lotus', 430); deco('lotus', 820); sprite('reed', 920); deco('rail', 1040, 1080); sprite('stonelamp', 1170);
     }, { line: '铜铃只在夜里响' });
+
+    // ------------------------------------------------------------ 第二站 宫苑园林：白天檐起，夜里檐落
+    region('garden', '第二站', '宫苑园林', '白天檐起，夜里檐落', { clear: 5, rain: 3, snow: 2 });
+    const T2 = G0 - 150;
+
+    R('飞檐', 'day', () => {
+      ground(0, 400);
+      eave(400, 700, T2, G0);                           // 白天高、夜里落到地面
+      ground(700, 1280, T2);
+      lamp(1000, T2);
+      sprite('peony', 90); sprite('redpost', 360); sprite('stones', 250);
+      deco('rail', 720, 900, { y: T2 }); sprite('flowers', 1150, T2);
+    }, { line: '站在檐上换天，檐带你上下', exitY: T2 });
+
+    R('双檐', 'day', () => {
+      ground(0, 360);
+      eave(360, 580, G0 - 130, G0);
+      eave(620, 860, G0 - 130, G0 - 260);               // 这一片反过来：白天低、夜里高
+      ground(900, 1280, G0 - 260);
+      lamp(1050, G0 - 260);
+      sprite('redpost', 60); sprite('peony', 200); sprite('stones', 330);
+      deco('rail', 920, 1000, { y: G0 - 260 }); sprite('flowers', 1170, G0 - 260);
+    }, { line: '一片白天高，一片夜里高', exitY: G0 - 260 });
+
+    R('走马灯', 'night', () => {
+      ground(0, 520);
+      wheel(700, G0 - 60, 110, 4, 12, 26, 'lamp');
+      ground(850, 1280, G0 - 180);
+      lamp(1000, G0 - 180);
+      sprite('peony', 120); sprite('redpost', 300); sprite('stones', 470);
+      deco('rail', 870, 960, { y: G0 - 180 }); sprite('flowers', 1160, G0 - 180);
+    }, { line: '白天灯转，夜里马停', exitY: G0 - 180 });
+
+    R('铜锣', 'night', () => {
+      ground(0, 450);
+      eave(450, 650, G0, T2);                           // 白天低、夜里高
+      ground(650, 1280);
+      bellGate(560, G0 - 262, 'day', 900, G0, 'gong');
+      lamp(1080);
+      sprite('redpost', 80); sprite('peony', 240); sprite('stones', 400);
+      sprite('flowers', 760); deco('rail', 960, 1040); sprite('redpost', 1170);
+    }, { line: '锣只在白天挂着' });
+
+    // ------------------------------------------------------------ 第三站 秋山湖泊：白天风起纸鸢飞，夜里风停萤火亮
+    region('autumn', '第三站', '秋山湖泊', '白天风起，夜里萤火', { clear: 4, wind: 4, snow: 1 });
+
+    R('纸鸢', 'day', () => {
+      ground(0, 400);
+      drift(660, G0 - 80, 200, 10, -Math.PI / 2, 46, 'kite');
+      ground(940, 1280, G0 - 170);
+      lamp(1080, G0 - 170);
+      sprite('maple', 120); sprite('tuft', 300); deco('lotus', 560); deco('lotus', 800);
+      sprite('maple', 1180, G0 - 170);
+    }, { line: '风筝白天飞，夜里停在半空', exitY: G0 - 170 });
+
+    R('萤火', 'night', () => {
+      ground(0, 300);
+      night(330, 560, G0 - 60, 'firefly');
+      drift(800, G0 - 150, 150, 8, -Math.PI / 2, 44, 'kite');
+      ground(1000, 1280, G0 - 210);
+      lamp(1120, G0 - 210);
+      sprite('maple', 100); sprite('stones', 260); deco('lotus', 450); deco('lotus', 900);
+      sprite('tuft', 1220, G0 - 210);
+    }, { line: '萤火只在夜里连成路', exitY: G0 - 210 });
+
+    R('秋千', 'day', () => {
+      ground(0, 470);
+      swing(640, G0 - 330, 250, 0.85, 6, 0, 30);
+      night(820, 900, G0 - 40, 'firefly');
+      ground(960, 1280, G0 - 60);
+      lamp(1100, G0 - 60);
+      sprite('maple', 110); sprite('tuft', 400); deco('lotus', 520); deco('lotus', 760);
+      sprite('maple', 1200, G0 - 60);
+    }, { line: '荡到最高处，换到夜里', exitY: G0 - 60 });
+
+    R('湖心', 'day', () => {
+      ground(0, 320);
+      crate(220, G0, 700);
+      box(745, 'both', 'pile', G0 + 92);
+      night(790, 900, G0 - 60, 'firefly');
+      ground(940, 1280, G0 - 150);
+      lamp(1080, G0 - 150);
+      sprite('maple', 80); sprite('stones', 300); deco('lotus', 480);
+      sprite('maple', 1190, G0 - 150);
+    }, { line: '木箱漂到桩前，萤火夜里才亮', exitY: G0 - 150 });
+
+    // ------------------------------------------------------------ 第四站 长城：白天搬砖，夜里点烽火
+    region('wall', '第四站', '长城', '白天搬砖，夜里烽火', { clear: 5, wind: 4, snow: 2 });
+
+    R('烽火', 'day', () => {
+      ground(0, 1280);
+      box(380, 'night', 'beacon');
+      box(640, 'day', 'stall');
+      box(900, 'night', 'beacon');
+      lamp(1080);
+      sprite('banner', 160); sprite('stones', 520); sprite('banner', 780); sprite('tuft', 1180);
+    }, { line: '烽火夜里才点，货摊白天才摆' });
+
+    R('城砖', 'night', () => {
+      ground(0, 880);
+      ground(880, 1280, G0 - 150);                      // 城墙高处：只有踩着砖才上得去
+      box(560, 'night', 'beacon');                      // 夜里烽火台挡着，白天才过得去
+      crate(300, G0, 852);
+      lamp(1060, G0 - 150);
+      sprite('banner', 120); sprite('stones', 420); sprite('tuft', 720); sprite('banner', 1180, G0 - 150);
+    }, { line: '砖推到墙根，就是台阶', exitY: G0 - 150 });
+
+    R('蹴鞠', 'night', () => {
+      ground(0, 1280);
+      crate(260, G0, 600);
+      box(460, 'night', 'beacon');
+      bellGate(600, G0 - 190, 'day', 900, G0, 'cuju');
+      lamp(1080);
+      sprite('banner', 100); sprite('stones', 380); sprite('tuft', 760); sprite('banner', 1180);
+    }, { line: '球门白天才挂' });
+
+    R('城门', 'day', () => {
+      ground(0, 1280);
+      crate(260, G0, 640);
+      plateGate(640, G0, 1000, G0);                     // 砖压着机关，城门才开着
+      box(840, 'day', 'door');                          // 白天关着的朱门，夜里才能穿过
+      lamp(1120);
+      sprite('banner', 100); sprite('stones', 380); sprite('tuft', 740); sprite('banner', 1200);
+    }, { line: '砖压住机关，门才开着' });
+
+    // ------------------------------------------------------------ 第五站 雪山冰川：夜里长冰柱，白天冰床滑
+    region('glacier', '第五站', '雪山冰川', '夜里冰生，白天冰床', { clear: 4, fog: 3, snow: 3 });
+
+    R('冰柱', 'day', () => {
+      ground(0, 360);
+      night(420, 480, G0 - 30, 'pillar');
+      night(560, 620, G0 - 90, 'pillar');
+      night(700, 760, G0 - 30, 'pillar');
+      ground(820, 1280);
+      lamp(1040);
+      sprite('pine', 100); sprite('crystal', 280); sprite('pine', 900); sprite('crystal', 1180);
+    }, { line: '冰柱只在夜里长出来' });
+
+    R('冰床', 'day', () => {
+      ground(0, 300);
+      drift(540, G0, 190, 10, -Math.PI / 2, 44, 'sled');
+      night(780, 830, G0 - 50, 'pillar');
+      ground(900, 1280, G0 - 130);
+      lamp(1060, G0 - 130);
+      sprite('pine', 90); sprite('crystal', 250); sprite('pine', 1180, G0 - 130);
+    }, { line: '冰床白天滑，夜里停', exitY: G0 - 130 });
+
+    R('冰裂', 'night', () => {
+      ground(0, 470);
+      swing(640, G0 - 330, 250, 0.85, 6, Math.PI, 30);
+      night(840, 900, G0 - 20, 'pillar');
+      ground(960, 1280, G0 - 40);
+      lamp(1100, G0 - 40);
+      sprite('pine', 100); sprite('crystal', 320); sprite('pine', 1200, G0 - 40);
+    }, { line: '荡过去，夜里落脚', exitY: G0 - 40 });
+
+    R('雪桥', 'day', () => {
+      ground(0, 380);
+      drift(640, G0 - 40, 200, 8, Math.PI / 2, 44, 'sled');
+      night(910, 980, G0 - 120, 'pillar');              // 冰柱夜里才长，冰床夜里才停
+      ground(1040, 1280, G0 - 200);
+      lamp(1160, G0 - 200);
+      sprite('pine', 80); sprite('crystal', 280); sprite('pine', 1220, G0 - 200);
+    }, { line: '冰床滑到尽头，再让夜来', exitY: G0 - 200 });
+
+    // ------------------------------------------------------------ 第六站 雪域圣湖：夜里湖面结冰，木箱冻在冰里
+    region('tibet', '第六站', '雪域圣湖', '夜里湖面结冰', { clear: 6, snow: 4 });
+    const ICE = C.WATER.tibet.night;
+
+    R('结冰', 'day', () => {
+      ground(0, 380);
+      night(380, 900, ICE, 'ice');
+      ground(900, 1280);
+      box(1000, 'day', 'mani');
+      lamp(1120);
+      sprite('chorten', 120); sprite('flowers', 300); sprite('stones', 960); sprite('chorten', 1200);
+    }, { line: '夜里湖面结冰，能走' });
+
+    R('冻箱', 'day', () => {
+      ground(0, 300);
+      crate(200, G0, 960);
+      night(300, 1000, ICE, 'ice');
+      ground(1000, 1280, G0 - 110);
+      lamp(1120, G0 - 110);
+      sprite('chorten', 80); sprite('stones', 260); sprite('flowers', 1200, G0 - 110);
+    }, { line: '箱子漂到哪里，冰就把它冻在哪里', exitY: G0 - 110 });
+
+    R('河灯', 'night', () => {
+      ground(0, 300);
+      drift(600, ICE + 12, 220, 10, -Math.PI / 2, 44, 'hedeng');
+      night(300, 420, ICE, 'ice');
+      bellGate(760, G0 - 130, 'night', 1000, G0);
+      ground(900, 1280);
+      lamp(1120);
+      sprite('chorten', 100); sprite('flowers', 250); sprite('stones', 940); sprite('chorten', 1200);
+    }, { line: '河灯白天漂，夜里冻住' });
+
+    R('圣湖', 'day', () => {
+      ground(0, 260);
+      crate(180, G0, 640);
+      night(260, 520, ICE, 'ice');
+      plateGate(640, ICE, 1080, G0 - 60);
+      night(700, 860, ICE, 'ice');
+      ground(860, 1280, G0 - 60);
+      lamp(1180, G0 - 60);
+      sprite('chorten', 80); sprite('flowers', 920, G0 - 60);
+    }, { line: '最后一盏灯', exitY: G0 - 60 });
   }
 
   // ------------------------------------------------------------ 搭建

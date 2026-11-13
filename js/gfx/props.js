@@ -148,12 +148,18 @@
         }
         break;
       }
-      case 'firefly': {    // 萤火连成的路
+      case 'firefly': {    // 萤火连成的路：一条亮着的光带，上面一群萤火虫上下飞
+        r(x0, y, w, 1, 'rgba(200,255,140,0.28)'); r(x0 + 1, y + 1, w - 2, 1, 'rgba(170,240,120,0.14)');
         for (let fx = x0 + 1, k = 0; fx < x1; fx += 3, k++) {
           const on = e.reduce ? 1 : 0.55 + 0.45 * Math.sin(e.t * 3 + k * 1.7);
           const fy = y + (k % 2) - (on > 0.8 ? 1 : 0);
-          r(fx, fy, 1, 1, `rgba(220,255,150,${(0.5 + on * 0.5).toFixed(2)})`);
-          if (k % 2 === 0) X.glow(fx, fy, 5, [190, 255, 120], 0.45 * on);
+          r(fx, fy, 1, 1, `rgba(235,255,170,${(0.6 + on * 0.4).toFixed(2)})`);
+          if (k % 2 === 0) X.glow(fx, fy, 6, [190, 255, 120], 0.6 * on);
+          if (k % 3 === 1) {                                   // 飞在光带上方的萤火虫
+            const t = e.reduce ? 0 : e.t * (1.1 + (k % 5) * 0.17) + k;
+            const hx = Math.round(fx + Math.sin(t) * 2), hy = Math.round(y - 3 - (k * 7 % 9) - Math.sin(t * 1.3) * 2);
+            r(hx, hy, 1, 1, `rgba(240,255,180,${(0.45 + 0.55 * on).toFixed(2)})`); X.glow(hx, hy, 4, [200, 255, 130], 0.35 * on);
+          }
         }
         break;
       }

@@ -545,3 +545,5 @@ h2.big { -webkit-text-stroke: calc(2 * var(--u)) currentColor; }
 #keys kbd { --hp: calc(1.5 * var(--u)); font-size: var(--f1) !important; }
 #keys kbd { border: 0 !important; border-image: none !important; color: #ffc9a0 !important; padding: 0 !important; box-shadow: inset 0 calc(-1 * var(--u)) 0 rgba(255, 201, 160, 0.6) !important; }
 #keys span { gap: calc(4 * var(--u)) !important; }
+#mark .m-seal.long { width: auto; min-width: calc(11 * var(--px)); padding: 0 calc(2 * var(--px)); }
+#mark .m-seal b { white-space: nowrap; }

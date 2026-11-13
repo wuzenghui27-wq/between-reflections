@@ -38,7 +38,8 @@
   }
   function hideHint() { $('hint').classList.remove('show'); hintT = 0; }
   // 题名：进站时“第一站 · 江南烟雨 / 落潮”，之后每一景“第二景 / 龙舟”
-  const NUM = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十', '二十一', '二十二', '二十三', '二十四'];
+  const D = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  const NUM = new Proxy({}, { get: (_, k) => { const n = +k; if (!(n >= 0)) return ''; if (n < 10) return D[n]; const t = Math.floor(n / 10), o = n % 10; return (t > 1 ? D[t] : '') + '十' + (o ? D[o] : ''); } });
   let hintTimer = null;
   function showCard(no, name, line, ms) {
     const c = $('chapterCard');
@@ -116,7 +117,7 @@
   G.on('room', r => {
     A.setLayer(G.room === 0 ? 1 : 2);
     $('roomNo').textContent = NUM[r.i + 1]; $('roomName').textContent = r.name;
-    $('markNo').textContent = NUM[r.i + 1]; $('markName').textContent = r.name;
+    $('markNo').textContent = NUM[r.i + 1]; $('markNo').parentNode.classList.toggle('long', NUM[r.i + 1].length > 1); $('markName').textContent = r.name;
     showSlip('第' + NUM[r.i + 1] + '景', r.name, r.line);
     $('keys').classList.toggle('show', r.i === 0 && !touchUI);
     const p = $('roomPill'); p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump');

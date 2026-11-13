@@ -231,12 +231,14 @@
       // 4.5) 木箱：水涨船高。白天浮在涨潮的水面上顺水漂；夜里水停潮落，落到露出的石板上（或者沉到低水位）
       const wl = C.WATER[LV.regions[r.region].id];
       for (const c of LV.crates) {
-        if (c.room !== G.room) continue;
+        if (c.room !== G.room || c.y1 > C.FALL_LIMIT + 200) continue;      // 掉下深谷的就不管了
         const on = G.onGround && G.px >= c.x0 - HW && G.px <= c.x1 + HW && Math.abs(G.foot - c.y0) < 0.6;
         let sup = Infinity;
         for (const s of LV.solids) { if (!active(s, G.world) || Math.min(s.x1, c.x1) - Math.max(s.x0, c.x0) < 8) continue; if (s.y >= c.y1 - 2 && s.y < sup) sup = s.y; }
         for (const h of LV.hazards) { if (!Q.boxOn(h, G.world, G.gates) || Math.min(h.x1, c.x1) - Math.max(h.x0, c.x0) < 8) continue; if (h.y0 >= c.y1 - 2 && h.y0 < sup) sup = h.y0; }
         for (const q of LV.crates) { if (q === c || Math.min(q.x1, c.x1) - Math.max(q.x0, c.x0) < 8) continue; if (q.y0 >= c.y1 - 2 && q.y0 < sup) sup = q.y0; }
+        const frozen = wl && wl.frozen === G.world;
+        if (frozen && c.wet) { c.float = false; c.vy = 0; c.y1 = Math.max(wl[G.world], c.y1 - 220 * dt); c.y0 = c.y1 - c.h; if (on) G.foot = c.y0; continue; }   // 湖面结冰，把箱子整个顶出冰面，冻在那里哪儿也不去
         const fl = wl ? wl[G.world] + C.FLOAT : Infinity, tgt = Math.min(sup, fl);
         if (c.y1 < tgt - 0.01) {                                  // 往下落
           c.vy = Math.min(C.FALL_MAX, c.vy + C.GRAVITY * dt); c.y1 = Math.min(tgt, c.y1 + c.vy * dt);
@@ -245,7 +247,7 @@
         else { c.y1 = tgt; if (c.vy > 200) G.emit('cland', c); c.vy = 0; }
         c.y0 = c.y1 - c.h;
         c.float = tgt === fl && Math.abs(c.y1 - fl) < 1;
-        if (!c.float && c.y1 === sup) c.wet = false;
+        if (!c.float && c.y1 === sup && !(wl && c.y1 > wl.day)) c.wet = false;
         let dx = 0;
         if (c.float && G.world === 'day') {                       // 顺水漂，碰到岸或石头就停
           dx = C.DRIFT * dt;

@@ -9,15 +9,15 @@
     jiangnan: { bg: { rain: ['8536', '8537'], fog: ['8538', '8539'], clear: ['8539', '8535', '8538'] },
       water: RF.CFG.WATER.jiangnan, waterCol: ['#5d7f88', '#1f2d4a'], tile: 'stone', glow: 0.7 },
     garden: { bg: { clear: ['8532', '8531', '8535'], snow: ['8534', '8533'], rain: ['8531', '8532'] },
-      water: { day: 600, night: 600 }, waterCol: ['#5a8aa8', '#1a2848'], tile: 'marble', glow: 0.7 },
+      water: RF.CFG.WATER.garden, waterCol: ['#5a8aa8', '#1a2848'], tile: 'marble', glow: 0.7 },
     autumn: { bg: { clear: ['8522', '8519', '8521'], wind: ['8520', '8522', '8521'], snow: ['8518', '8519'] },
-      water: { day: 600, night: 600 }, waterCol: ['#2f7a72', '#10283a'], tile: 'earth', glow: 0.8 },
+      water: RF.CFG.WATER.autumn, waterCol: ['#2f7a72', '#10283a'], tile: 'earth', glow: 0.8 },
     wall: { bg: { clear: ['8530'], wind: ['8530'], snow: ['8528'] },
       abyss: ['#3a3040', '#0c0a18'], tile: 'brick', glow: 0.8 },
     glacier: { bg: { clear: ['8524', '8525', '8526'], fog: ['8527', '8526'], snow: ['8527', '8524'] },
       abyss: ['#3a4658', '#0a1020'], tile: 'ice', glow: 0.8 },
     tibet: { bg: { clear: ['8523'], snow: ['8518', '8523'] },
-      water: { day: 586, night: 568, frozen: 'night' }, waterCol: ['#3a78a8', '#0c1a3e'], tile: 'snowrock', glow: 0.8 }
+      water: RF.CFG.WATER.tibet, waterCol: ['#3a78a8', '#0c1a3e'], tile: 'snowrock', glow: 0.8 }
   };
   // 夜景：作者提供的夜景像素画（新背景像素/夜间真实N → assets/bg/night/nN.png），按画面内容分到各站；没载入时退回把白天的图压暗
   const NIGHT_BG = {
@@ -272,14 +272,23 @@
       let top0 = lo ? U.mix(lo, U.hex(cfg.abyss[0]), 0.4) : U.hex(cfg.abyss[0]);
       if (world === 'night') top0 = U.mix(top0, U.hex(cfg.abyss[1]), 0.6);
       const c0 = '#' + top0.map(v => Math.round(v).toString(16).padStart(2, '0')).join(''), c1 = cfg.abyss[1];
-      const top = 150;
-      for (let y = top; y < PH + 16; y += 2) {
-        ctx.fillStyle = U.rgb(U.mix(U.hex(c0), U.hex(c1), (y - top) / (PH - top)), world === 'day' ? 1 : 1);
-        ctx.fillRect(0, y, PW, 2);
+      // 背景一路透下来，越往下越深，像谷里升起的雾；不再是一块平的深色板
+      const top = 146;
+      for (let y = top; y < PH + 16; y += 1) {
+        const k = Math.min(1, (y - top) / (PH - top));
+        ctx.fillStyle = U.rgb(U.mix(U.hex(c0), U.hex(c1), k), Math.min(1, 0.15 + k * k * 1.1));
+        ctx.fillRect(0, y, PW, 1);
       }
-      // 抖动的边：像素风的雾气
-      ctx.fillStyle = 'rgba(200,210,230,0.18)';
-      for (let x = 0; x < PW; x += 2) if (U.hash(Math.floor(x + camPix * 0.5), 3) > 0.5) ctx.fillRect(x, top - 1, 2, 1);
+      // 谷口的雾：几道慢慢飘的淡带
+      for (let b = 0; b < 3; b++) {
+        const yy = top + 4 + b * 7;
+        for (let x = -6; x < PW + 6; x += 3) {
+          const n = U.noise((x + camPix * (0.4 + b * 0.15) + t * (3 + b)) / 36, b + 11);
+          if (n < 0.45) continue;
+          ctx.fillStyle = `rgba(214,224,240,${((n - 0.45) * (world === 'night' ? 0.3 : 0.5)).toFixed(3)})`;
+          ctx.fillRect(x, yy, 3, 2);
+        }
+      }
     }
     ctx.globalAlpha = 1;
   }

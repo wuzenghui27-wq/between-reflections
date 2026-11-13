@@ -23,7 +23,10 @@ RF.CFG = {
   DRIFT: 64,            // 木箱在白天的河里顺水漂的速度
   CRATE: 56,            // 木箱边长
   FLOAT: 38,            // 木箱浮着时没在水下的深度
-  WATER: { jiangnan: { day: 566, night: 626 } },   // 各站水位：白天涨潮、夜里落潮
+  WATER: {                                         // 各站水位（脚底 y）。江南白天涨潮、夜里落潮；圣湖夜里结冰
+    jiangnan: { day: 566, night: 626 }, garden: { day: 600, night: 600 }, autumn: { day: 600, night: 600 },
+    tibet: { day: 586, night: 568, frozen: 'night' }
+  },
   WALK: 190,            // 走路速度（像素/秒）
   WALK_ACC: 2600,       // 地面上起步 / 刹住的加速度
   AIR_ACC: 1500,        // 空中左右调整的加速度
