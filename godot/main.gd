@@ -30,6 +30,12 @@ var autoplay := false     # --autoplay：按 shared/data/solve_plan.json 的走�
 var plan: Dictionary = {}
 var plan_step := 0
 var plan_room := -1
+# 声音：每站白天、夜里各一段同长的循环，两条同时放，换天时只换音量（节拍不断）
+var music := {}           # "day"/"night" → AudioStreamPlayer
+var music_rid := ""
+var sfx_pool: Array[AudioStreamPlayer] = []
+var sfx_i := 0
+var step_n := 0
 
 func _ready() -> void:
 	LV = LevelT.new()
@@ -60,6 +66,15 @@ func _ready() -> void:
 	top_node = Node2D.new()
 	add_child(top_node)
 	top_node.draw.connect(_draw_top)
+	for w in ["day", "night"]:
+		var mp := AudioStreamPlayer.new()
+		mp.volume_db = -80.0
+		add_child(mp)
+		music[w] = mp
+	for k in 8:
+		var sp := AudioStreamPlayer.new()
+		add_child(sp)
+		sfx_pool.append(sp)
 	vignette["day"] = _make_vignette(Color8(30, 20, 10), 0.2)
 	vignette["night"] = _make_vignette(Color8(4, 6, 24), 0.5)
 
@@ -112,11 +127,62 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					G.pause()
 
+func sfx(name: String) -> void:
+	var sp := sfx_pool[sfx_i]
+	sfx_i = (sfx_i + 1) % sfx_pool.size()
+	sp.stream = load("res://shared/audio/sfx_%s.ogg" % name)
+	sp.play()
+
+func _music_update() -> void:
+	if G.state == "title":
+		return
+	var rid: String = LV.regions[LV.rooms[G.room].region]["id"]
+	if rid != music_rid:
+		music_rid = rid
+		for w in ["day", "night"]:
+			var st: AudioStreamOggVorbis = load("res://shared/audio/music_%s_%s.ogg" % [rid, w])
+			st.loop = true
+			music[w].stream = st
+			music[w].play()
+	# 换天：目标音量一下子换过去，留 0.15 秒的过渡，不断拍
+	for w in ["day", "night"]:
+		var target := 0.0 if w == G.world else -80.0
+		var mp: AudioStreamPlayer = music[w]
+		mp.volume_db = lerpf(mp.volume_db, target, 0.25) if absf(mp.volume_db - target) > 0.5 else target
+	if G.state == "paused":
+		for w in ["day", "night"]:
+			music[w].stream_paused = true
+	else:
+		for w in ["day", "night"]:
+			music[w].stream_paused = false
+
 func _on_ev(name: String, arg: Variant) -> void:
 	match name:
 		"room":
 			card_t = 0.0
 			card_room = int(arg)
+		"switched":
+			sfx("switch_night" if G.world == "night" else "switch_day")
+		"jump":
+			sfx("jump")
+		"land":
+			sfx("land")
+		"bell":
+			sfx("bell")
+		"lantern":
+			sfx("lantern")
+		"roomClear":
+			sfx("gate")
+		"blocked":
+			sfx("blocked")
+		"fail", "csplash":
+			sfx("splash")
+		"region":
+			sfx("region")
+		"arrive":
+			sfx("arrive")
+		"plate":
+			sfx("gate" if arg.down else "blocked")
 
 # ------------------------------------------------------------ 固定步长
 func _physics_process(delta: float) -> void:
@@ -124,6 +190,12 @@ func _physics_process(delta: float) -> void:
 		_autoplay_feed()
 	G.update(1.0 / 60.0)
 	card_t += 1.0 / 60.0
+	_music_update()
+	if G.state == "running" and G.on_ground and absf(G.vx) > 20.0:
+		var n := int(G.walk_dist / 34.0)
+		if n != step_n:
+			step_n = n
+			sfx("step%d" % (n & 1))
 	base_node.queue_redraw()
 	top_node.queue_redraw()
 
