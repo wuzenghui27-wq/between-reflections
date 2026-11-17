@@ -415,7 +415,7 @@ func physics(dt: float) -> void:
 				continue
 			if q.y0 >= c.y1 - 2.0 and q.y0 < sup:
 				sup = q.y0
-		var frozen := not wl.is_empty() and wl.get("frozen", "") == world
+		var frozen: bool = not wl.is_empty() and wl.get("frozen", "") == world
 		if frozen and c.wet:
 			c.floating = false
 			c.vy = 0.0

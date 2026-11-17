@@ -34,7 +34,7 @@ func _init() -> void:
 			if done:
 				break
 		var ex: Dictionary = rp["expect"]
-		var same := steps == int(ex["steps"]) and G.room == int(ex["room"]) and G.state == ex["state"] and absf(G.px - float(ex["px"])) < 0.01 and absf(G.foot - float(ex["foot"])) < 0.01
+		var same: bool = steps == int(ex["steps"]) and G.room == int(ex["room"]) and G.state == ex["state"] and absf(G.px - float(ex["px"])) < 0.01 and absf(G.foot - float(ex["foot"])) < 0.01
 		print("景 %d %s  steps %d/%d  px %.4f/%.4f  foot %.4f/%.4f  %s" % [i + 1, LV.rooms[i].name, steps, int(ex["steps"]), G.px, float(ex["px"]), G.foot, float(ex["foot"]), "OK" if same else "DIFF"])
 		if not same:
 			ok = false

@@ -242,5 +242,8 @@
       }
     }
   };
+  A._step = step;                          // 给 tools/bake_audio.js 离线录音用
+  A._ctx = () => ctx;
+  A.__forceInit = () => { ctx = null; init(); };
   RF.Audio = A;
 })();
