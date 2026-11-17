@@ -1,0 +1,13 @@
+# Unity 自动生成的目录不进仓库
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+*.csproj
+*.sln
+# 共用数据由编辑器从 ../shared 同步过来（BR/Editor/SharedSync.cs），不重复提交
+/Assets/Resources/Shared/
+/Assets/Resources/Shared.meta
