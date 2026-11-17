@@ -1,129 +1,36 @@
-# 借景 · 美术烘焙：全部用代码一个像素一个像素画出来，只用 12 色调色板（索引色 PNG，0 号是透明）。
-# 用法：python3 jiejing/tools/art.py        输出到 jiejing/art/
+# 借景 · 关卡美术烘焙：把五张图集里的部件（tools/atlas.py）按关卡数据拼成每一景的背景和远/中/近三层。
+# 用法：python3 jiejing/tools/art.py        输出到 jiejing/art/，部件坐标写进 data/atlas.json，层图偏移写进 data/art.json
 #
-# 分层笔法（GDD“美术”一节）：
-#   远层：只用 1 像素线，不抖色，墨色淡（淡墨/浅墨）。
-#   中层：平涂 + 1 像素亮边或暗边，墨色中等。
-#   近层：2 像素轮廓 + 4×4 抖色，墨色最浓。
-#   能走的墨线：1 像素纸白的顶 + 2 像素墨，两端圆头。远层的线也一样粗（玩法要看得清），只是墨淡。
-# 每屏至少一半是空白的纸。
-import json, math, os
-from PIL import Image
-
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
-OUT = os.path.join(ROOT, 'art')
-
-PAL = [
-    ('paper', 0xEFE8D8), ('paper2', 0xE2D9C6),
-    ('ink1', 0xB4AFA2), ('ink2', 0x82827F), ('ink3', 0x55555C), ('ink4', 0x34333A), ('ink5', 0x1B1A1F),
-    ('night1', 0x2E3A4A), ('night2', 0x4A5A6E),
-    ('red', 0xB8352A), ('gold', 0xE0A64A), ('jade', 0x6E8C8A),
-]
-IDX = {n: i + 1 for i, (n, _) in enumerate(PAL)}   # 0 = 透明
-BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
-
-
-class Cv:
-    def __init__(self, w, h):
-        self.w, self.h = w, h
-        self.px = bytearray(w * h)
-
-    def put(self, x, y, c):
-        x, y = int(x), int(y)
-        if 0 <= x < self.w and 0 <= y < self.h:
-            self.px[y * self.w + x] = 0 if c is None else IDX[c]
-
-    def get(self, x, y):
-        if 0 <= x < self.w and 0 <= y < self.h:
-            return self.px[y * self.w + x]
-        return 0
-
-    def rect(self, x, y, w, h, c):
-        for j in range(int(y), int(y + h)):
-            for i in range(int(x), int(x + w)):
-                self.put(i, j, c)
-
-    def dither(self, x, y, c, level):      # level 0..16：4×4 抖色
-        if BAYER[int(y) % 4][int(x) % 4] < level:
-            self.put(x, y, c)
-
-    def line(self, x0, y0, x1, y1, c):
-        x0, y0, x1, y1 = int(round(x0)), int(round(y0)), int(round(x1)), int(round(y1))
-        dx, dy = abs(x1 - x0), -abs(y1 - y0)
-        sx, sy = (1 if x0 < x1 else -1), (1 if y0 < y1 else -1)
-        err = dx + dy
-        while True:
-            self.put(x0, y0, c)
-            if x0 == x1 and y0 == y1:
-                break
-            e2 = 2 * err
-            if e2 >= dy:
-                err += dy; x0 += sx
-            if e2 <= dx:
-                err += dx; y0 += sy
-
-    def blit(self, o, ox, oy, flip=False):
-        for y in range(o.h):
-            for x in range(o.w):
-                v = o.px[y * o.w + (o.w - 1 - x if flip else x)]
-                if v:
-                    xx, yy = ox + x, oy + y
-                    if 0 <= xx < self.w and 0 <= yy < self.h:
-                        self.px[yy * self.w + xx] = v
-
-    def save(self, path):
-        im = Image.new('P', (self.w, self.h))
-        pal = [0, 0, 0]
-        for _, v in PAL:
-            pal += [(v >> 16) & 255, (v >> 8) & 255, v & 255]
-        pal += [0, 0, 0] * (256 - len(PAL) - 1)
-        im.putpalette(pal)
-        im.putdata(list(self.px))
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        im.save(path, transparency=0, optimize=False)
-
-
-def y_at(pts, x):
-    if x <= pts[0][0]:
-        return pts[0][1]
-    for i in range(1, len(pts)):
-        if x <= pts[i][0]:
-            a, b = pts[i - 1], pts[i]
-            return a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])
-    return pts[-1][1]
-
-
-def rnd(v):
-    return math.floor(v + 0.5)
-
-
-def hash01(*a):          # 确定的伪随机（不用 random，保证每次烘焙一样）
-    h = 2166136261
-    for v in a:
-        h ^= (int(v) * 2654435761) & 0xffffffff
-        h = (h * 16777619) & 0xffffffff
-    return (h & 0xffff) / 65536.0
-
+# 分层笔法（GDD“美术”一节，严格区分，防止叠层时线条打架）：
+#   远层：#B4AFA2 / #82827F，只用 1 像素细线或淡墨剪影，不抖色。
+#   中层：#55555C 平涂 + 少量 1 像素亮/暗边。
+#   近层：#34333A / #1B1A1F，2 像素粗描边 + 4×4 抖色（枯笔焦墨）。
+#   可走墨线：顶上 1 像素宣纸白 + 2 像素深墨，两端圆润收笔墨点。
+# 计白当黑：每屏至少一半是 #EFE8D8 留白（烘焙完会检查并打印每景留白比例）。
+import json, math, os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pix import Cv, y_at, rnd, hash01, IDX, OUT, ROOT
+import atlas
 
 # ------------------------------------------------------------ 能走的墨线
-INK_OF = {0: 'ink2', 1: 'ink4', 2: 'ink5'}
+STROKE = {0: ('ink2', 'ink1'), 1: ('ink3', 'ink3'), 2: ('ink5', 'ink5')}
 
 
 def walk_stroke(cv, pts, ox, layer):
-    ink = INK_OF[layer]
+    i1, i2 = STROKE[layer]
     x1, x2 = pts[0][0], pts[-1][0]
     for x in range(x1, x2 + 1):
         y = rnd(y_at(pts, x))
         cv.put(x + ox, y, 'paper')
-        cv.put(x + ox, y + 1, ink)
-        cv.put(x + ox, y + 2, ink)
-    # 两端圆头：多出一点墨，削掉外角
+        cv.put(x + ox, y + 1, i1)
+        cv.put(x + ox, y + 2, i2)
+    # 两端圆头收笔：外侧多一点墨，削去外角
     for x, sgn in ((x1, -1), (x2, 1)):
         y = rnd(y_at(pts, x))
-        cv.put(x + ox + sgn, y + 1, ink)
-        cv.put(x + ox + sgn, y + 2, ink)
+        cv.put(x + ox + sgn, y + 1, i1)
+        cv.put(x + ox + sgn, y + 2, i2)
+        cv.put(x + ox + sgn * 2, y + 2, i2 if layer else None)
         cv.put(x + ox + sgn, y, None)
-        cv.put(x + ox, y, ink if layer == 2 else 'paper')
 
 
 # ------------------------------------------------------------ 各种线下面的东西
@@ -198,9 +105,8 @@ def draw_plank(cv, pts, ox, water):
         x = x1 + 3 + (x2 - x1 - 6) * i // (n - 1)
         y = rnd(y_at(pts, x))
         for yy in range(y + 3, water + 1):
-            cv.put(x + ox, yy, 'ink4')
-            cv.put(x + ox + 1, yy, 'ink3')
-            cv.put(x + ox - 1, yy, 'ink2' if yy % 3 == 0 else None)
+            cv.put(x + ox, yy, 'ink3')
+            cv.put(x + ox + 1, yy, 'ink2')
         # 桩入水的一圈小波
         cv.put(x + ox - 2, water + 1, 'ink2'); cv.put(x + ox + 3, water + 1, 'ink2')
     # 斜撑
@@ -408,248 +314,257 @@ def deco_pagoda(cv, x, y):
     cv.line(x - 2, y - 6, x + 2, y - 6, 'ink1')
 
 
-def hills(cv, seed, water):
-    """背景远山：几座山峰前后叠着，山脊 1 像素淡墨，阴面几笔皴，山脚化进雾里（不收底线）；水面几道横波。"""
-    peaks = []
-    n = 4 + seed % 3
-    for i in range(n):
-        cx = 30 + (i * 290 // max(1, n - 1)) + rnd((hash01(seed, i, 1) - 0.5) * 50)
-        h = 34 + rnd(hash01(seed, i, 2) * 36)
-        w = 46 + rnd(hash01(seed, i, 3) * 40)
-        peaks.append((cx, h, w, i))
-    base = water - 22
-    # 远的（矮的）先画，近的后画并用纸色盖住后面
-    for band, (cx, h, w, i) in enumerate(sorted(peaks, key=lambda p: p[1])):
-        ridge = {}
-        for x in range(cx - w, cx + w + 1):
-            t = abs(x - cx) / w
-            wob = math.sin(x * 0.31 + seed + i) * 1.6 + math.sin(x * 0.13 + i * 2) * 2.5
-            y = rnd(base - h * (1 - t) ** 1.5 + wob * (1 - t))
-            ridge[x] = y
-        for x, y in ridge.items():
-            fog = base + 6
-            for yy in range(y + 1, fog):
-                if yy > base - 4 and hash01(x, yy, i) < (yy - base + 4) / 10:
-                    continue
-                cv.put(x, yy, 'paper')
-        prev = None
-        for x in range(cx - w, cx + w + 1):
-            y = ridge[x]
-            t = abs(x - cx) / w
-            if t > 0.92 and hash01(x, i, 4) < 0.6:
-                prev = None
-                continue
-            if prev is not None:
-                cv.line(x - 1, prev, x, y, 'ink1')
-            prev = y
-            # 山顶一点青绿（矿物色），稀疏抖色
-            if t < 0.25:
-                for k in range(1, 5):
-                    cv.dither(x, y + k, 'jade', 3 - k // 2)
-            # 阴面（右坡）皴笔：短斜线，越往下越稀
-            if x > cx and hash01(x, i, seed) < 0.16 * (1 - t):
-                L = 2 + rnd(hash01(x, i) * 4)
-                cv.line(x, y + 2, x - L // 2, y + 2 + L, 'ink1')
-        # 主峰上方一点：远树（几个 1 像素点）
-        for k in range(3):
-            tx = cx - 6 + k * 5
-            if tx in ridge:
-                cv.put(tx, ridge[tx] - 1, 'ink2')
-    # 水面：横波，越近越密
+
+def draw_floor(cv, pts, ox, water):
+    """近层园林地面（回廊、甬路）：近层石板图块铺出来，2 像素描边，底下抖色化开。"""
+    tile = PROPS_T['near_slab']
+    x1, x2 = pts[0][0], pts[-1][0]
+    for x in range(x1, x2 + 1):
+        top = rnd(y_at(pts, x))
+        for k in range(3, 16):
+            v = tile.get((x - x1) % 16, k)
+            if v:
+                cv.px[(top + k) * cv.w + x + ox] = v if 0 <= top + k < cv.h and 0 <= x + ox < cv.w else 0
+        for y in range(top + 16, water + 2):
+            cv.put(x + ox, y, 'paper2'); cv.dither(x + ox, y, 'ink1', max(0, 6 - (y - top - 16)))
+    for x, sgn in ((x1, 1), (x2, -1)):
+        top = rnd(y_at(pts, x))
+        for y in range(top + 1, min(water, top + 18)):
+            cv.put(x + ox, y, 'ink5'); cv.put(x + ox + sgn, y, 'ink4')
+
+
+def draw_mid_floor(cv, pts, ox, water):
+    """中层地面/平台：回廊地砖图块（#55555C 平涂 + 1 像素亮边），下面一段平涂台基。"""
+    tile = PROPS_T['mid_corridor']
+    x1, x2 = pts[0][0], pts[-1][0]
+    for x in range(x1, x2 + 1):
+        top = rnd(y_at(pts, x))
+        for k in range(3, 16):
+            v = tile.get((x - x1) % 16, k)
+            if v:
+                cv.px[(top + k) * cv.w + x + ox] = v
+        for y in range(top + 16, water + 1):
+            cv.put(x + ox, y, 'ink3' if (x - x1) % 16 in (3, 11) else None)
+    for x in (x1, x2):
+        for y in range(rnd(y_at(pts, x)) + 3, water + 1):
+            cv.put(x + ox, y, 'ink3')
+
+
+def draw_path_far(cv, pts, ox, water):
+    """远层园林小径：栈道式，只用淡墨 1 像素线（柱、斜撑）。"""
+    for x in range(pts[0][0], pts[-1][0] + 1):
+        y = rnd(y_at(pts, x))
+        if x % 2 == 0:
+            cv.put(x + ox, y + 5, 'ink1')
+        if x % 14 == 3:
+            cv.line(x + ox, y + 3, x + ox, min(water, y + 26), 'ink1')
+
+
+def draw_path_mid(cv, pts, ox, water):
+    """中层园林小径：#55555C 平涂的石阶路基 + 1 像素亮边。"""
+    for x in range(pts[0][0], pts[-1][0] + 1):
+        y = rnd(y_at(pts, x))
+        for yy in range(y + 3, y + 9):
+            cv.put(x + ox, yy, 'ink3')
+        cv.put(x + ox, y + 3, 'ink2')
+        if x % 6 == 0:
+            cv.put(x + ox, y + 6, 'ink2')
+        cv.put(x + ox, y + 9, 'ink2' if x % 3 else None)
+
+
+def deco_prop(name, flip=False):
+    def f(cv, x, y, *a):
+        p = PROPS[name]
+        cv.blit(p, x - p.w // 2, y - p.h, flip)
+    return f
+
+
+def deco_wall(cv, d, ox):
+    """近层粉墙：白墙 + 黑瓦压顶，2 像素焦墨描边，墙脚抖色；墙上开月洞门 / 漏窗（纯透明镂空）。"""
+    x1, x2, y1, y2 = d['x1'] + ox, d['x2'] + ox, d['y1'], d['y2']
+    for x in range(x1, x2 + 1):
+        for y in range(y1, y2 + 1):
+            cv.put(x, y, 'paper')
+            if y > y2 - 6:
+                cv.dither(x, y, 'ink1', (y - (y2 - 6)) * 2)
+            elif hash01(x // 5, y // 7, 3) < 0.04:
+                cv.dither(x, y, 'paper2', 8)          # 墙面旧水渍
+        # 瓦顶
+        cv.put(x, y1 - 1, 'ink5'); cv.put(x, y1 - 2, 'ink5'); cv.put(x, y1 - 3, 'ink4')
+        if x % 3 == 0:
+            cv.put(x, y1 - 4, 'ink4')
+        cv.dither(x, y1, 'ink3', 6)
+    for y in range(y1 - 3, y2 + 1):
+        cv.put(x1, y, 'ink5'); cv.put(x1 + 1, y, 'ink4'); cv.put(x2, y, 'ink5'); cv.put(x2 - 1, y, 'ink4')
+    cv.put(x1 - 1, y1 - 3, 'ink5'); cv.put(x2 + 1, y1 - 3, 'ink5')
+    for h in d.get('holes', []):
+        hx1, hx2, hy1, hy2 = h['x1'] + ox, h['x2'] + ox, h['y1'], h['y2']
+        if h['kind'] == 'gate':
+            p = PROPS['moon_gate']                       # 48×64，圈心在 (23.5, 27.5)，门槛在 58
+            px, py = hx1, hy2 - 58
+        else:
+            p = PROPS['lattice_window']                  # 32×32
+            px, py = hx1, hy1
+        inside = atlas.flood_inside(p, p.w // 2, p.h // 2)
+        if h['kind'] == 'gate':                          # 门洞一直开到门槛以下（人要走进去）
+            inside |= {(x, y) for x in range(4, 44) for y in range(40, 58) if not p.get(x, y)}
+        for (x, y) in inside:
+            cv.put(px + x, py + y, None)
+        if h['kind'] == 'window':                        # 漏窗下沿到地面也开通（窗做成落地的“景窗”）
+            for x in range(hx1 + 2, hx2 - 1):
+                for y in range(py + 30, hy2 + 1):
+                    cv.put(x, y, None)
+        cv.blit(p, px, py)
+        if h['kind'] == 'window':
+            for y in range(py + 30, hy2 + 1):
+                for x in (hx1, hx1 + 1, hx2 - 1, hx2):
+                    cv.put(x, y, 'ink5')
+
+
+def bg_scene(L):
+    water = L.get('water', 150)
+    region = L.get('region', 'jiangnan')
+    bg = Cv(320, 180)
+    bg.rect(0, 0, 320, 180, 'paper')
+    env = ENV
+    shift = (L.get('bg', {}).get('hills', 3) * 37) % 320
+    m = ATL['env_landscape']['mountains']
+    top = water - 62 if region == 'jiangnan' else water - 70
+    for x in range(320):
+        sx = (x + shift) % 320
+        for y in range(m['h']):
+            v = env.get(sx, y)
+            if v and (region == 'jiangnan' or v == IDX['ink1']):
+                bg.px[(top + y) * 320 + x] = v
+    if region == 'garden':
+        # 园林：墙外远处的屋脊和塔尖（淡墨 1 像素）
+        for k in range(4):
+            cx = 40 + k * 80 + rnd(hash01(k, 9) * 30)
+            yy = top + 40 - rnd(hash01(k, 4) * 10)
+            bg.line(cx - 14, yy, cx + 14, yy, 'ink1')
+            bg.line(cx - 16, yy + 1, cx - 14, yy, 'ink1'); bg.line(cx + 14, yy, cx + 16, yy + 1, 'ink1')
     for k, yy in enumerate(range(water + 3, 180, 4)):
         for x in range(0, 320):
-            n = hash01(x // 7, yy, seed)
+            n = hash01(x // 7, yy, shift)
             if n < 0.14 + k * 0.05:
-                cv.put(x, yy, 'ink1')
+                bg.put(x, yy, 'ink1')
+    return bg
 
 
-# ------------------------------------------------------------ 人物：16×16，朝右
-BODY = [
-    "................",
-    "................",
-    "................",
-    ".......55.......",
-    ".....455554.....",
-    "...4555555554...",
-    "......5wp.......",
-    "......44w.......",
-    ".....3445.......",
-    ".....34455......",
-    ".....3445w......",
-    ".....34445......",
-    ".....334445.....",
-    "....3334445.....",
-]
-CH = {'.': None, 'w': 'paper', 'p': 'paper2', '1': 'ink1', '2': 'ink2', '3': 'ink3', '4': 'ink4', '5': 'ink5', 'r': 'red', 'g': 'gold'}
+DRAW = {'bank': draw_bank, 'terrace': draw_terrace, 'plank': draw_plank, 'stair': draw_stair,
+        'floor': draw_floor}
+DECO = {'reeds': deco_reeds, 'pagoda': deco_pagoda, 'hall': deco_hall}
 
 
-def sprite_frame(body_dy=0, feet=((5, '4'), (9, '5')), hem=None, ribbon=0, arm=None, hop=False):
-    cv = Cv(16, 16)
-    rows = list(BODY)
-    if hem:
-        rows[12], rows[13] = hem
-    for y, row in enumerate(rows):
-        for x, ch in enumerate(row):
-            if CH[ch]:
-                cv.put(x, y + body_dy, CH[ch])
-    # 斗笠后飘的红绳
-    rib = [[(4, 7), (3, 8)], [(4, 7), (3, 7), (2, 8)], [(4, 7), (3, 8), (2, 8)]][ribbon]
-    for (x, y) in rib:
-        cv.put(x, y + body_dy, 'red')
-    if arm:     # 推的手：伸出去
-        for (x, y) in arm:
-            cv.put(x, y + body_dy, 'ink4')
-        cv.put(arm[-1][0] + 1, arm[-1][1] + body_dy, 'paper')
-    for (fx, c) in feet:
-        cv.put(fx, 14 + body_dy if not hop else 13 + body_dy, CH[c])
-        cv.put(fx + 1, 14 + body_dy if not hop else 13 + body_dy, CH[c])
-    return cv
+def bake_level(L, meta, report):
+    water = L.get('water', 150)
+    bg = bg_scene(L)
+    bg.save(os.path.join(OUT, 'levels', L['id'] + '_bg.png'))
+    info = {'layers': []}
+    comp = Cv(320, 180)
+    comp.px[:] = bg.px
+    for k in range(3):
+        d = L['layers'][k]
+        o0 = d.get('o', 0)
+        mn, mx = d.get('min', o0), d.get('max', o0)
+        w = 320 + mx - mn
+        ox = mx
+        cv = Cv(w, 180)
+        for dd in d.get('deco', []):
+            if dd['k'] == 'wall':
+                continue
+            if dd['k'] in ('willow', 'house', 'pavilion'):
+                name = {'willow': 'willow', 'house': 'horse_wall', 'pavilion': 'pavilion'}[dd['k']]
+                deco_prop(name)(cv, dd['x'] + ox, dd['y'])
+                continue
+            fn = DECO[dd['k']]
+            args = [cv, dd['x'] + ox, dd['y']]
+            if 'w' in dd:
+                args.append(dd['w'])
+            fn(*args)
+        if k == 0:
+            for i, r in enumerate(d.get('rocks', [])):
+                rk = ROCKS[r['n']]
+                cv.blit(rk, r['x'] + ox - rk.w // 2, r['y'] - rk.h)
+        lines = d.get('lines', [])
+        arches = [l['pts'] for l in lines if l.get('kind') == 'arch']
+        if arches:
+            draw_arch(cv, arches, ox, water)
+        for l in lines:
+            kind = l.get('kind')
+            if kind == 'path':
+                (draw_path_far if k == 0 else draw_path_mid)(cv, l['pts'], ox, water)
+            elif kind == 'boat':
+                p = PROPS['boat']
+                x1, x2 = l['pts'][0][0], l['pts'][-1][0]
+                cv.blit(p, (x1 + x2) // 2 - 16 + ox, rnd(l['pts'][0][1]) - 8)
+            elif k == 1 and kind in ('floor', 'terrace'):
+                draw_mid_floor(cv, l['pts'], ox, water)      # 中层的地面用中层笔法
+            else:
+                f = DRAW.get(kind)
+                if f:
+                    f(cv, l['pts'], ox, water)
+        for dd in d.get('deco', []):
+            if dd['k'] == 'wall':
+                deco_wall(cv, dd, ox)
+        for l in lines:
+            walk_stroke(cv, l['pts'], ox, k)
+        name = '%s_L%d.png' % (L['id'], k)
+        cv.save(os.path.join(OUT, 'levels', name))
+        info['layers'].append({'img': 'levels/' + name, 'dx': -mx})
+        # 留白统计：按初始偏移叠起来
+        for y in range(180):
+            for x in range(320):
+                v = cv.px[y * w + x + ox - o0] if 0 <= x + ox - o0 < w else 0
+                if v and not (L.get('frames') and any(f['target'] == k for f in L['frames'])):
+                    comp.px[y * 320 + x] = v
+    blank = sum(1 for v in comp.px if v == IDX['paper']) / (320 * 180)
+    report.append('%s %s 留白 %d%%' % (L['id'], L['name'], rnd(blank * 100)))
+    meta[L['id']] = info
 
 
-def traveler_atlas():
-    frames = []
-    # 0-1 站立（红绳轻摆）
-    frames.append(sprite_frame(1, ribbon=0, feet=((6, '4'), (8, '5'))))
-    frames.append(sprite_frame(1, ribbon=1, feet=((6, '4'), (8, '5'))))
-    # 2-7 走（六帧：迈开、交错、并步，前后脚换色）
-    steps = [((4, '4'), (10, '5')), ((5, '4'), (9, '5')), ((7, '5'), (7, '4')),
-             ((4, '5'), (10, '4')), ((5, '5'), (9, '4')), ((7, '4'), (7, '5'))]
-    hems = [("....33344455....", "...333.44.455..."), ("....3334445.....", "....333.4445...."), (".....334445.....", ".....3344445...."),
-            ("....33344455....", "...334.43.445..."), ("....3334445.....", "....334.3445...."), (".....334445.....", ".....3344445....")]
-    for i in range(6):
-        bob = 0 if i in (2, 5) else 1
-        frames.append(sprite_frame(bob, feet=steps[i], hem=hems[i], ribbon=1 + (i % 2)))
-    # 8-9 跳（起、落）
-    frames.append(sprite_frame(0, feet=((5, '4'), (9, '5')), hem=("....3334445.....", "...333..4445...."), ribbon=2, hop=True))
-    frames.append(sprite_frame(0, feet=((4, '4'), (10, '5')), hem=("....33344455....", "...33....4455..."), ribbon=1, hop=True))
-    # 10-11 推（手伸向前，身子前倾一点）
-    for i in range(2):
-        frames.append(sprite_frame(1, feet=((4, '4'), (9, '5')), hem=("....3334445.....", "...333.4445....."),
-                                   ribbon=1 + i, arm=[(8, 9), (9, 9), (10, 9 - i)]))
-    atlas = Cv(128, 64)
-    for i, f in enumerate(frames):
-        atlas.blit(f, (i % 8) * 16, (i // 8) * 16)
-    atlas.save(os.path.join(OUT, 'char_traveler.png'))
-    return len(frames)
-
-
-# ------------------------------------------------------------ 道具：宫灯（8×20），三帧：未亮、亮 a、亮 b
-def lamp_atlas():
-    """宫灯：浓墨灯杆、横挑，挂一盏六角宫灯（10×10）。未亮：纸色灯身、墨框、朱砂顶底；亮：朱砂灯身、金色灯芯，下垂金穗。"""
-    atlas = Cv(64, 32)
-    for f in range(3):
-        cv = Cv(12, 28)
-        for y in range(3, 28):
-            cv.put(3, y, 'ink5'); cv.put(4, y, 'ink4')
-        for x in (1, 2, 5, 6):
-            cv.put(x, 27, 'ink5')
-        cv.put(2, 26, 'ink4'); cv.put(5, 26, 'ink4')
-        for x in range(2, 11):
-            cv.put(x, 3, 'ink5')
-        cv.put(10, 4, 'ink5')
-        lit = f > 0
-        # 灯身 x 6..11? 宽 7（6..12 超出），用 5..11
-        top, bot = 6, 15
-        for y in range(top, bot + 1):
-            for x in range(6, 12):
-                if (y in (top, bot)) and x in (6, 11):
-                    continue
-                edge = x in (6, 11) or y in (top, bot)
-                if lit:
-                    cv.put(x, y, 'ink5' if edge and y in (top, bot) else 'red')
-                else:
-                    cv.put(x, y, 'ink4' if edge else 'paper2')
-        for x in range(7, 11):
-            cv.put(x, top - 1, 'red' if not lit else 'ink5')
-            cv.put(x, bot + 1, 'red' if not lit else 'ink5')
-        cv.put(10, 5, 'ink5')
-        if lit:
-            cv.put(8, 9, 'gold'); cv.put(9, 9, 'gold'); cv.put(8, 10, 'gold'); cv.put(9, 11, 'gold' if f == 1 else 'red')
-            cv.put(8, 12, 'gold' if f == 2 else 'red')
-            for y in range(bot + 2, bot + 5):
-                cv.put(8 + (f == 2 and y == bot + 4), y, 'gold'); cv.put(9, y, 'gold' if y < bot + 4 else None)
-        else:
-            for y in range(top + 2, bot - 1, 2):
-                cv.put(8, y, 'ink1'); cv.put(9, y + 1, 'ink1')
-            for y in range(bot + 2, bot + 4):
-                cv.put(8, y, 'red'); cv.put(9, y, 'red')
-        atlas.blit(cv, f * 12, 0)
-    halo = Cv(24, 24)
-    for y in range(24):
-        for x in range(24):
-            d = math.hypot(x - 11.5, y - 11.5)
-            if d < 11.5:
-                halo.dither(x, y, 'gold', int(max(0, 10 - d) * 1.0))
-    atlas.blit(halo, 36, 0)
-    atlas.save(os.path.join(OUT, 'props_lamp.png'))
-
-
-# ------------------------------------------------------------ 纸纹（乘到整幅画面上）
 def paper_noise():
+    """纸纹：灰度图，乘到整幅画面上（5–8% 左右）。"""
+    from PIL import Image
     im = Image.new('L', (320, 180))
     px = []
     for y in range(180):
         for x in range(320):
             n = hash01(x, y, 5)
             fiber = hash01(x // 9, y // 2, 11) < 0.06
-            v = 255 - int(n * 14) - (8 if fiber else 0)       # 5–8% 左右的乘法纸纹
-            px.append(max(0, min(255, v)))
+            px.append(max(0, min(255, 255 - int(n * 14) - (8 if fiber else 0))))
     im.putdata(px)
     im.save(os.path.join(OUT, 'paper_noise.png'))
 
 
-# ------------------------------------------------------------ 每一景：背景 + 三层
-DRAW = {'bank': draw_bank, 'terrace': draw_terrace, 'plank': draw_plank, 'boat': draw_boat, 'stair': draw_stair}
-DECO = {'willow': deco_willow, 'reeds': deco_reeds, 'house': deco_house, 'hall': deco_hall, 'pagoda': deco_pagoda}
-
-
-def bake_level(L, meta):
-    water = L.get('water', 150)
-    bg = Cv(320, 180)
-    bg.rect(0, 0, 320, 180, 'paper')
-    hills(bg, L.get('bg', {}).get('hills', 3), water)
-    bg.save(os.path.join(OUT, 'levels', L['id'] + '_bg.png'))
-    info = {'layers': []}
-    for k in range(3):
-        d = L['layers'][k]
-        o0 = d.get('o', 0)
-        mn, mx = d.get('min', o0), d.get('max', o0)
-        # 层图覆盖层内 x ∈ [-max, 320 - min]，画在屏幕 x = o - max
-        w = 320 + mx - mn
-        ox = mx
-        cv = Cv(w, 180)
-        for dd in d.get('deco', []):
-            fn = DECO[dd['k']]
-            args = [cv, dd['x'] + ox, dd['y']]
-            if 'w' in dd:
-                args.append(dd['w'])
-            fn(*args)
-        lines = d.get('lines', [])
-        arches = [l['pts'] for l in lines if l.get('kind') == 'arch']
-        if arches:
-            draw_arch(cv, arches, ox, water)
-        for l in lines:
-            f = DRAW.get(l.get('kind'))
-            if f:
-                f(cv, l['pts'], ox, water)
-        for l in lines:
-            walk_stroke(cv, l['pts'], ox, k)
-        name = '%s_L%d.png' % (L['id'], k)
-        cv.save(os.path.join(OUT, 'levels', name))
-        info['layers'].append({'img': 'levels/' + name, 'dx': -mx})
-    meta[L['id']] = info
-
-
 def main():
+    global PROPS, PROPS_T, ENV, ROCKS, ATL
     lv = json.load(open(os.path.join(ROOT, 'data/levels.json'), encoding='utf8'))['levels']
-    meta = {}
-    n = traveler_atlas()
-    lamp_atlas()
+    PROPS = atlas.build_all(lv)
+    ATL = atlas.ATLAS
+    # 读回烘焙好的图集，按名字切出部件给关卡拼
+    from PIL import Image
+    def load(name):
+        im = Image.open(os.path.join(OUT, name + '.png'))
+        c = Cv(im.width, im.height); c.px[:] = bytes(im.get_flattened_data() if hasattr(im, 'get_flattened_data') else im.getdata()); return c
+    def cut(sheet, src, n):
+        r = ATL[sheet][n]; c = Cv(r['w'], r['h'])
+        for y in range(r['h']):
+            for x in range(r['w']):
+                c.px[y * r['w'] + x] = src.get(r['x'] + x, r['y'] + y)
+        return c
+    T = load('tiles_walkable'); ENV = load('env_landscape')
+    PROPS_T = {n: cut('tiles_walkable', T, n) for n in ATL['tiles_walkable']}
+    ROCKS = [cut('env_landscape', ENV, 'rock%d' % i) for i in range(3)]
     paper_noise()
+    meta, report = {}, []
     for L in lv:
-        bake_level(L, meta)
-    json.dump({'traveler_frames': n, 'levels': meta}, open(os.path.join(ROOT, 'data/art.json'), 'w'), ensure_ascii=False, indent=1)
-    print('烘焙完成：', n, '帧人物，', len(lv), '景')
+        bake_level(L, meta, report)
+    json.dump(ATL, open(os.path.join(ROOT, 'data/atlas.json'), 'w'), ensure_ascii=False, indent=1)
+    json.dump({'levels': meta}, open(os.path.join(ROOT, 'data/art.json'), 'w'), ensure_ascii=False, indent=1)
+    for r in report:
+        print(r)
+    print('烘焙完成：五张图集 +', len(lv), '景')
 
 
 if __name__ == '__main__':

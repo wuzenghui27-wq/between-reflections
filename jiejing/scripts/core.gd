@@ -18,6 +18,9 @@ const FALL_MAX := 4.0
 const FALL_Y := 200.0
 const BLOOM := 36
 const LAMP := 4.0
+const PAR := [0.4, 0.7, 1.0]
+const DRAG_SLOW := 0.5
+const COYOTE := 6
 var HOP := sqrt(2.0 * 0.25 * 10.0)
 
 static func rnd(v: float) -> float:
@@ -39,6 +42,9 @@ var id := ""
 var layers: Array = []      # [{o0, min, max, lines: [{pts, x1, x2, boat}]}]
 var start: Dictionary
 var lamp: Dictionary
+var frames: Array = []          # [{layer, x1, x2, y1, y2, target}]
+var is_target := [false, false, false]
+var has_frames := [false, false, false]
 
 # ------------------------------------------------------------ 状态
 var o: Array = [0.0, 0.0, 0.0]
@@ -54,6 +60,7 @@ var pushing := false
 var push_dir := 0
 var undo: Array = []
 var events: Array = []
+var snap_cache := {}
 
 func _init(L: Dictionary) -> void:
 	id = str(L.id)
@@ -71,6 +78,11 @@ func _init(L: Dictionary) -> void:
 		layers.append({"o0": o0, "min": float(d.get("min", o0)), "max": float(d.get("max", o0)), "lines": lines})
 	start = {"layer": int(L.start.layer), "line": int(L.start.line), "x": float(L.start.x)}
 	lamp = {"layer": int(L.lamp.layer), "line": int(L.lamp.line), "x": float(L.lamp.x)}
+	for f in L.get("frames", []):
+		var fr := {"layer": int(f.layer), "x1": float(f.x1), "x2": float(f.x2), "y1": float(f.y1), "y2": float(f.y2), "target": int(f.target)}
+		frames.append(fr)
+		is_target[fr.target] = true
+		has_frames[fr.layer] = true
 	reset()
 
 func reset() -> void:
@@ -81,12 +93,13 @@ func reset() -> void:
 			pushable.append(i)
 	sel = pushable[0] if pushable.size() > 0 else -1
 	var st := start
-	p = {"L": st.layer, "line": st.line, "x": st.x, "y": y_at(layers[st.layer].lines[st.line], st.x), "vx": 0.0, "vy": 0.0, "ground": true, "face": 1}
+	p = {"L": st.layer, "line": st.line, "x": st.x, "y": y_at(layers[st.layer].lines[st.line], st.x), "vx": 0.0, "vy": 0.0, "ground": true, "face": 1, "coyote": 0}
 	foot = {"L": st.layer, "line": st.line, "x": st.x}
 	bloom = 0; won = false; won_t = 0; frame = 0
 	pushing = false; push_dir = 0
 	undo = []
 	events = []
+	snap_cache = {}
 
 func emit(n: String, a = null) -> void:
 	events.append([n, a])
@@ -107,32 +120,111 @@ func restore(s: Dictionary) -> void:
 	o = s.o.duplicate(); p = s.p.duplicate(); foot = s.foot.duplicate(); sel = s.sel
 	bloom = 0; pushing = false; push_dir = 0
 
-func can_push(k: int) -> bool:
-	return not (p.ground and k == p.L and not line().boat)
-
-func snap_points(k: int) -> Array:
+# 框景：第 j 层第 bi 条线现在露出来的几段（层内 x 区间）
+func pieces(j: int, bi: int) -> Array:
+	var b: Dictionary = layers[j].lines[bi]
+	if not is_target[j]:
+		return [[b.x1, b.x2]]
 	var out := []
-	var A: Dictionary = layers[k]
-	for j in 3:
-		if j == k:
+	var oj := oi(j)
+	for f in frames:
+		if f.target != j:
 			continue
-		var B: Dictionary = layers[j]
-		var oj := oi(j)
-		for a in A.lines:
-			for b in B.lines:
-				var ar: Array = a.pts[a.pts.size() - 1]
-				var al: Array = a.pts[0]
-				var bl: Array = b.pts[0]
-				var br: Array = b.pts[b.pts.size() - 1]
-				if absf(ar[1] - bl[1]) <= DY:
-					out.append(bl[0] + oj - ar[0])
-				if absf(al[1] - br[1]) <= DY:
-					out.append(br[0] + oj - al[0])
-	var res := []
-	for s in out:
-		if s >= A.min and s <= A.max:
-			res.append(s)
-	return res
+		var of_ := oi(f.layer)
+		var a1: float = maxf(b.x1, f.x1 + of_ - oj)
+		var a2: float = minf(b.x2, f.x2 + of_ - oj)
+		if a2 - a1 >= 1:
+			out.append([a1, a2])
+	out.sort_custom(func(u, v): return u[0] < v[0])
+	return out
+
+# 她脚下这一段的左右端（层内 x）
+func span() -> Array:
+	var ps := pieces(p.L, p.line)
+	var x: float = p.x
+	for q in ps:
+		if x >= q[0] - 1e-6 and x <= q[1] + 1e-6:
+			return q
+	return ps[0] if ps.size() > 0 else [x, x]
+
+func can_push(k: int) -> bool:
+	if not p.ground:
+		return true
+	if k == p.L and not line().boat:
+		return false
+	if is_target[p.L]:
+		for f in frames:
+			if f.target == p.L and f.layer == k:
+				return false
+	return true
+
+# 接缝点（与 core.js 同一算法，按其他层偏移缓存）
+func snap_points(k: int) -> Array:
+	var A: Dictionary = layers[k]
+	var key := str(k) + ":"
+	for j in 3:
+		key += ("*" if j == k else str(oi(j))) + ","
+	if snap_cache.has(key):
+		return snap_cache[key]
+	var save: float = o[k]
+	var out := []
+	var v: float = A.min
+	while v <= A.max:
+		o[k] = v
+		var ends := []
+		for j in 3:
+			var oj := oi(j)
+			for bi in layers[j].lines.size():
+				var b: Dictionary = layers[j].lines[bi]
+				for q in pieces(j, bi):
+					var m1: bool = (j == k) if q[0] == b.x1 else (has_frames[k] and is_target[j])
+					var m2: bool = (j == k) if q[1] == b.x2 else (has_frames[k] and is_target[j])
+					ends.append([q[0] + oj, y_at(b, q[0]), j, -1, m1])
+					ends.append([q[1] + oj, y_at(b, q[1]), j, 1, m2])
+		var lefts := {}
+		for f in ends:
+			if f[3] == -1:
+				if lefts.has(f[0]):
+					lefts[f[0]].append(f)
+				else:
+					lefts[f[0]] = [f]
+		var hit := false
+		for e in ends:
+			if e[3] != 1 or not lefts.has(e[0]):
+				continue
+			for f in lefts[e[0]]:
+				if f[2] == e[2]:
+					continue
+				if not e[4] and not f[4]:
+					continue
+				if absf(e[1] - f[1]) <= DY:
+					hit = true
+					break
+			if hit:
+				break
+		if not hit:
+			for f in frames:
+				if f.target != k and f.layer != k:
+					continue
+				var t: int = f.target
+				var ot := oi(t)
+				var of_ := oi(f.layer)
+				for b in layers[t].lines:
+					for i in range(1, b.pts.size() - 1):
+						var vx: float = b.pts[i][0] + ot
+						if vx == f.x1 + of_ or vx == f.x2 + of_:
+							hit = true
+							break
+					if hit:
+						break
+				if hit:
+					break
+		if hit:
+			out.append(v)
+		v += 1.0
+	o[k] = save
+	snap_cache[key] = out
+	return out
 
 # 返回 [s, d]；没有接缝点时 s = null
 func nearest_snap(k: int, v: float) -> Array:
@@ -153,8 +245,10 @@ func settle(k: int, v: float) -> float:
 func find_transfer(dir: int):
 	var L: int = p.L
 	var a := line()
-	var ex: float = (a.x2 if dir > 0 else a.x1) + oi(L)
-	var ey := y_at(a, a.x2 if dir > 0 else a.x1)
+	var sp := span()
+	var end_: float = sp[1] if dir > 0 else sp[0]
+	var ex: float = end_ + oi(L)
+	var ey := y_at(a, end_)
 	var best = null
 	for j in [2, 1, 0]:
 		if j == L:
@@ -163,22 +257,23 @@ func find_transfer(dir: int):
 		var oj := oi(j)
 		for bi in B.lines.size():
 			var b: Dictionary = B.lines[bi]
-			var bx1: float = b.x1 + oj
-			var bx2: float = b.x2 + oj
-			var s_x: float
-			if dir > 0:
-				if not (bx1 <= ex + GAP and bx2 >= ex + GAP):
+			for q in pieces(j, bi):
+				var bx1: float = q[0] + oj
+				var bx2: float = q[1] + oj
+				var s_x: float
+				if dir > 0:
+					if not (bx1 <= ex + GAP and bx2 >= ex + GAP):
+						continue
+					s_x = maxf(ex, bx1)
+				else:
+					if not (bx2 >= ex - GAP and bx1 <= ex - GAP):
+						continue
+					s_x = minf(ex, bx2)
+				var dy := absf(y_at(b, s_x - oj) - ey)
+				if dy > DY:
 					continue
-				s_x = maxf(ex, bx1)
-			else:
-				if not (bx2 >= ex - GAP and bx1 <= ex - GAP):
-					continue
-				s_x = minf(ex, bx2)
-			var dy := absf(y_at(b, s_x - oj) - ey)
-			if dy > DY:
-				continue
-			if best == null or dy < best.dy:
-				best = {"L": j, "line": bi, "x": s_x - oj, "dy": dy}
+				if best == null or dy < best.dy:
+					best = {"L": j, "line": bi, "x": s_x - oj, "dy": dy, "lo": q[0], "hi": q[1]}
 	return best
 
 # ------------------------------------------------------------ 每帧
@@ -205,22 +300,27 @@ func step(inp: Dictionary) -> void:
 		return
 
 	var want_push: bool = inp.push and p.ground and sel >= 0
-	if want_push and inp.dir != 0:
+	var drag = inp.get("drag", null)
+	var dragging: bool = drag != null
+	if want_push and (inp.dir != 0 or dragging):
 		var k := sel
 		var A: Dictionary = layers[k]
+		var d: int = int(signf(drag)) if dragging else int(inp.dir)
 		if not can_push(k):
-			if not pushing:
+			if not pushing and d != 0:
 				emit("locked", k)
 			p.vx = 0.0
 			return
-		if not pushing or push_dir != inp.dir:
+		if not pushing or (d != 0 and push_dir != d):
 			if not pushing:
 				undo.append(snapshot())
-			pushing = true; push_dir = inp.dir; emit("push", k)
-		var v: float = PUSH[k] * inp.dir
+			pushing = true
+			if d != 0:
+				push_dir = d; emit("push", k)
+		var v: float = (drag * PAR[k]) if dragging else (PUSH[k] * inp.dir)
 		var n := nearest_snap(k, o[k])
 		if n[0] != null and n[1] <= SNAP:
-			v *= SNAP_SLOW
+			v *= DRAG_SLOW if dragging else SNAP_SLOW
 		o[k] = minf(A.max, maxf(A.min, o[k] + v))
 		p.vx = 0.0
 		return
@@ -241,27 +341,32 @@ func step(inp: Dictionary) -> void:
 		p.face = inp.dir
 	if p.ground:
 		if inp.jump:
-			p.ground = false; p.vy = -HOP; p.vx = inp.dir * WALK; emit("hop")
+			p.ground = false; p.vy = -HOP; p.vx = inp.dir * WALK; p.coyote = 0; emit("hop")
 		else:
 			p.vx = inp.dir * WALK
 			var nx: float = p.x + p.vx
 			var a := line()
-			if nx > a.x2 or nx < a.x1:
-				var dir := 1 if nx > a.x2 else -1
+			var sp := span()
+			if nx > sp[1] or nx < sp[0]:
+				var dir := 1 if nx > sp[1] else -1
 				var t = find_transfer(dir)
 				if t != null:
 					undo.append(snapshot())
-					var over: float = (nx - a.x2) if dir > 0 else (nx - a.x1)
+					var over: float = (nx - sp[1]) if dir > 0 else (nx - sp[0])
 					p.L = t.L; p.line = t.line; p.x = t.x + over
 					var b := line()
-					p.x = minf(b.x2, maxf(b.x1, p.x))
+					p.x = minf(t.hi, maxf(t.lo, p.x))
 					p.y = y_at(b, p.x)
 					emit("borrow", t.L)
 				else:
-					p.x = nx; p.ground = false; p.vy = 0.0; emit("edge")
+					p.x = nx; p.ground = false; p.vy = 0.0; p.coyote = COYOTE; emit("edge")
 			else:
 				p.x = nx; p.y = y_at(a, nx)
 	if not p.ground:
+		if inp.jump and p.coyote > 0 and p.vy >= 0:
+			p.vy = -HOP; p.coyote = 0; emit("hop")
+		if p.coyote > 0:
+			p.coyote -= 1
 		p.vx = inp.dir * WALK
 		var py: float = p.y
 		p.vy = minf(FALL_MAX, p.vy + GRAV)
@@ -271,6 +376,13 @@ func step(inp: Dictionary) -> void:
 				var l: Dictionary = lay.lines[i]
 				if p.x < l.x1 or p.x > l.x2:
 					continue
+				if is_target[p.L]:
+					var inside := false
+					for q in pieces(p.L, i):
+						if p.x >= q[0] and p.x <= q[1]:
+							inside = true
+					if not inside:
+						continue
 				var ly := y_at(l, p.x)
 				if py <= ly + 0.001 and p.y >= ly:
 					p.y = ly; p.ground = true; p.vy = 0.0; p.line = i; emit("land")
@@ -279,8 +391,8 @@ func step(inp: Dictionary) -> void:
 			bloom = BLOOM; emit("fall")
 
 	if p.ground:
-		var a := line()
-		if p.x >= a.x1 + 3 and p.x <= a.x2 - 3:
+		var sp2 := span()
+		if p.x >= sp2[0] + 3 and p.x <= sp2[1] - 3:
 			foot.L = p.L; foot.line = p.line; foot.x = p.x
 		if p.L == lamp.layer and p.line == lamp.line and absf(p.x - lamp.x) <= LAMP:
 			won = true; emit("win")

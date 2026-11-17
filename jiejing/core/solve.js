@@ -16,6 +16,7 @@ const LV = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/levels.json'), 'utf8
 const args = process.argv.slice(2);
 const flag = f => args.includes(f);
 const pick = args.filter(a => !a.startsWith('--'));
+const NOFRAME = flag('--noframe');   // 被框住的层一律不许踏上去（应当无解）
 const NOPUSH = flag('--nopush'), NOCARRY = flag('--nocarry'), NOHOP = flag('--nohop');
 const LOCK = (args.find(a => a.startsWith('--lock=')) || '--lock=-1').slice(7) | 0;   // --lock=k：第 k 层不许推
 
@@ -33,7 +34,7 @@ function runMacro(G, m) {
   const p = G.p;
   if (m.t === 'walk') {
     // 一直走，直到再走一步就会越过线端（停在端点前不到 1 像素）；经过宫灯就赢
-    const a = G.line(), lim = m.dir > 0 ? a.x2 - 0.05 : a.x1 + 0.05;
+    const a = G.span(), lim = m.dir > 0 ? a[1] - 0.05 : a[0] + 0.05;
     const ok = () => (m.dir > 0 ? p.x + JJ.C.WALK <= lim : p.x - JJ.C.WALK >= lim);
     if (!ok()) return null;
     for (let n = 0; n < 1200 && ok(); n++) { go(I(m.dir)); if (G.won) return ins; }
@@ -41,7 +42,7 @@ function runMacro(G, m) {
     return ins;
   }
   if (m.t === 'off' || m.t === 'hop') {
-    const a = G.line(), end = m.dir > 0 ? a.x2 : a.x1;
+    const a = G.span(), end = m.dir > 0 ? a[1] : a[0];
     if (Math.abs(p.x - end) > 1.5) return null;
     const L0 = p.L, line0 = p.line;
     if (m.t === 'hop') go(I(m.dir, { jump: true }));
@@ -51,7 +52,7 @@ function runMacro(G, m) {
       if (G.bloom > 0) { while (G.bloom > 0) go(I(0)); go(I(0)); return ins; }
       if (p.ground && (air || p.L !== L0 || p.line !== line0)) {
         // 落稳或借过去了：再往前走几帧离开端点，停下
-        for (let k = 0; k < 6 && !G.won; k++) { const b = G.line(); if ((m.dir > 0 && p.x >= b.x2 - 1) || (m.dir < 0 && p.x <= b.x1 + 1)) break; go(I(m.dir)); }
+        for (let k = 0; k < 6 && !G.won; k++) { const b = G.span(); if ((m.dir > 0 && p.x >= b[1] - 1) || (m.dir < 0 && p.x <= b[0] + 1)) break; go(I(m.dir)); }
         go(I(0));
         return ins;
       }
@@ -86,10 +87,10 @@ function interesting(G, k) {
   let prev = null, runStart = A.min;
   const sig = () => {
     let s = '';
-    for (let j = 0; j < 3; j++) for (let li = 0; li < G.S.layers[j].lines.length; li++) for (const dir of [-1, 1]) {
-      const p0 = G.p; G.p = { L: j, line: li, x: 0, y: 0, ground: true };
+    for (let j = 0; j < 3; j++) for (let li = 0; li < G.S.layers[j].lines.length; li++) for (const q of G.pieces(j, li)) for (const dir of [-1, 1]) {
+      const p0 = G.p; G.p = { L: j, line: li, x: (q[0] + q[1]) / 2, y: 0, ground: true };
       const t = G.findTransfer(dir); G.p = p0;
-      s += t ? t.L + '.' + t.line + ';' : '-;';
+      s += t ? t.L + '.' + t.line + '.' + t.lo + ';' : '-;';
     }
     return s;
   };
@@ -108,7 +109,7 @@ function interesting(G, k) {
 }
 // 搜索时走路不逐帧算：直接走到端点（经过宫灯就算赢）
 function fastWalk(G, m) {
-  const p = G.p, a = G.line(), lim = m.dir > 0 ? a.x2 - 0.05 : a.x1 + 0.05, W = JJ.C.WALK, lm = G.S.lamp;
+  const p = G.p, a = G.line(), sp = G.span(), lim = m.dir > 0 ? sp[1] - 0.05 : sp[0] + 0.05, W = JJ.C.WALK, lm = G.S.lamp;
   const ok = () => (m.dir > 0 ? p.x + W <= lim : p.x - W >= lim);
   if (!ok()) return null;
   const onLamp = p.L === lm.layer && p.line === lm.line;
@@ -146,6 +147,7 @@ function solve(L) {
       if (!ins) continue;
       if (G.won) { found = node.path.concat([m]); break; }
       if (G.bloom > 0 || !G.p.ground) continue;
+      if (NOFRAME && G.S.isTarget[G.p.L]) continue;
       const k = keyOf(G);
       if (seen.has(k)) continue;
       seen.set(k, true);
@@ -199,7 +201,7 @@ for (const L of LV) {
   if (!e || !e.won) { bad++; continue; }
   plans[L.id] = { runs: rle(e.ins), final: e.final };
 }
-if (flag('--write') && !NOPUSH && !NOCARRY && !NOHOP && LOCK < 0) {
+if (flag('--write') && !NOPUSH && !NOCARRY && !NOHOP && !NOFRAME && LOCK < 0) {
   const f = path.join(ROOT, 'data/plans.json');
   const old = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
   Object.assign(old, plans);

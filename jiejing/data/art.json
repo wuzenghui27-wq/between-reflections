@@ -1,5 +1,4 @@
 {
- "traveler_frames": 12,
  "levels": {
   "1-1": {
    "layers": [
@@ -62,6 +61,70 @@
     {
      "img": "levels/1-4_L2.png",
      "dx": 0
+    }
+   ]
+  },
+  "2-1": {
+   "layers": [
+    {
+     "img": "levels/2-1_L0.png",
+     "dx": -200
+    },
+    {
+     "img": "levels/2-1_L1.png",
+     "dx": 0
+    },
+    {
+     "img": "levels/2-1_L2.png",
+     "dx": 0
+    }
+   ]
+  },
+  "2-2": {
+   "layers": [
+    {
+     "img": "levels/2-2_L0.png",
+     "dx": 0
+    },
+    {
+     "img": "levels/2-2_L1.png",
+     "dx": -240
+    },
+    {
+     "img": "levels/2-2_L2.png",
+     "dx": 0
+    }
+   ]
+  },
+  "2-3": {
+   "layers": [
+    {
+     "img": "levels/2-3_L0.png",
+     "dx": -120
+    },
+    {
+     "img": "levels/2-3_L1.png",
+     "dx": 0
+    },
+    {
+     "img": "levels/2-3_L2.png",
+     "dx": 0
+    }
+   ]
+  },
+  "2-4": {
+   "layers": [
+    {
+     "img": "levels/2-4_L0.png",
+     "dx": 0
+    },
+    {
+     "img": "levels/2-4_L1.png",
+     "dx": 0
+    },
+    {
+     "img": "levels/2-4_L2.png",
+     "dx": -120
     }
    ]
   }

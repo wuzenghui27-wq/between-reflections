@@ -8,6 +8,10 @@
 // 推层时离“接缝点”±3 像素会被吸住（变慢），松手就吸上去；不在吸附范围内则落到最近的整数像素。
 // 走到同层、同一条线上宫灯 ±4 像素内并站稳，灯亮，过关。掉出画面：墨晕一下，回到最近的落脚点（不死）。
 // 每次开始推层、每次借过去之前存一步，Z 退回。
+// 鼠标拖层：层直接跟着鼠标走（远 0.4、中 0.7、近 1.0 倍），接缝点 ±3 像素内阻尼减半，松手吸准。
+// 走出线端后 6 帧内还能起跳（不至于反应不及走空）。
+// 框景（第二卷）：近层上的月洞门、漏窗是“框”。被框住的目标层只在框里存在：框外看不见、也走不上去；
+//   目标层的线被框的左右边裁成几段，段的两端就是框边，走到框边就要借到别层去。站在框里时，带框的层推不动。
 //
 // 约定：所有坐标是 320×180 画面里的像素，y 向下增大。时间按固定 60 帧一秒走，没有随机数。
 // 取整一律用 rnd(v) = floor(v + 0.5)（GDScript 的 round 对 -0.5 的处理与 JS 不同，所以不用内置 round）。
@@ -23,16 +27,22 @@
     GRAV: 0.25, HOP: Math.sqrt(2 * 0.25 * 10),   // 跳 10 像素高
     FALL_MAX: 4, FALL_Y: 200, BLOOM: 36,          // 掉出画面后墨晕 0.6 秒
     LAMP: 4, HALF: 2,
+    PAR: [0.4, 0.7, 1.0], DRAG_SLOW: 0.5,         // 鼠标拖层的跟手倍数、接缝处阻尼
+    COYOTE: 6,                                    // 走出线端后还能起跳的帧数
   };
   const rnd = v => Math.floor(v + 0.5);
 
   // ------------------------------------------------------------ 关卡数据 → 运行时
   // 关卡（data/levels.json）：
   // { id, name, en, layers: [ { o, min, max, lines: [ { pts: [[x,y],...] } ] } x3 ],
-  //   start: { layer, line, x }, lamp: { layer, line, x } }
+  //   start: { layer, line, x }, lamp: { layer, line, x },
+  //   frames: [ { layer, x1, x2, y1, y2, target, kind } ] }   框：长在 layer 层上（层内坐标），框里只露出 target 层
   // 线的点坐标是层内坐标；屏幕 x = 层内 x + 该层偏移 o。y 不随推动变。
   function build(L) {
-    const S = { id: L.id, layers: [], start: L.start, lamp: L.lamp };
+    const S = { id: L.id, layers: [], start: L.start, lamp: L.lamp, frames: (L.frames || []).map(f => ({ layer: f.layer, x1: f.x1, x2: f.x2, y1: f.y1, y2: f.y2, target: f.target })) };
+    S.isTarget = [false, false, false];
+    S.hasFrames = [false, false, false];
+    for (const f of S.frames) { S.isTarget[f.target] = true; S.hasFrames[f.layer] = true; }
     for (let i = 0; i < 3; i++) {
       const d = (L.layers && L.layers[i]) || { o: 0, min: 0, max: 0, lines: [] };
       S.layers.push({
@@ -64,12 +74,13 @@
       for (let i = 0; i < 3; i++) if (S.layers[i].max > S.layers[i].min) G.pushable.push(i);
       G.sel = G.pushable.length ? G.pushable[0] : -1;
       const st = S.start;
-      G.p = { L: st.layer, line: st.line, x: st.x, y: yAt(S.layers[st.layer].lines[st.line], st.x), vx: 0, vy: 0, ground: true, face: 1 };
+      G.p = { L: st.layer, line: st.line, x: st.x, y: yAt(S.layers[st.layer].lines[st.line], st.x), vx: 0, vy: 0, ground: true, face: 1, coyote: 0 };
       G.foot = { L: st.layer, line: st.line, x: st.x };
       G.bloom = 0; G.won = false; G.wonT = 0; G.frame = 0;
       G.pushing = false; G.pushDir = 0;
       G.undo = [];
       G.events = [];
+      G.snapCache = {};
     };
     G.reset();
     const emit = (n, a) => G.events.push([n, a]);
@@ -88,23 +99,87 @@
     }
     G.snapshot = snapshot; G.restore = restore;
 
-    // 现在能不能推第 k 层：站在这一层的普通线上就推不动
-    G.canPush = k => !(G.p.ground && k === G.p.L && !G.line().boat);
-
-    // ---- 接缝点：把第 k 层推到哪些偏移时，它的某条线的一端正好与别层某条线的一端对上（同高，缝为 0）
-    G.snapPoints = function (k) {
-      const out = [];
-      const A = S.layers[k];
-      for (let j = 0; j < 3; j++) {
-        if (j === k) continue;
-        const B = S.layers[j], oj = oi(j);
-        for (const a of A.lines) for (const b of B.lines) {
-          const ar = a.pts[a.pts.length - 1], al = a.pts[0], bl = b.pts[0], br = b.pts[b.pts.length - 1];
-          if (Math.abs(ar[1] - bl[1]) <= C.DY) out.push(bl[0] + oj - ar[0]);   // a 的右端接 b 的左端
-          if (Math.abs(al[1] - br[1]) <= C.DY) out.push(br[0] + oj - al[0]);   // a 的左端接 b 的右端
-        }
+    // ---- 框景：第 j 层第 bi 条线现在露出来的几段（层内 x 区间）。不是被框的层就是整条线。
+    G.pieces = function (j, bi) {
+      const b = S.layers[j].lines[bi];
+      if (!S.isTarget[j]) return [[b.x1, b.x2]];
+      const out = [], oj = oi(j);
+      for (const f of S.frames) {
+        if (f.target !== j) continue;
+        const of = oi(f.layer);
+        const a1 = Math.max(b.x1, f.x1 + of - oj), a2 = Math.min(b.x2, f.x2 + of - oj);
+        if (a2 - a1 >= 1) out.push([a1, a2]);
       }
-      return out.filter(s => s >= A.min && s <= A.max);
+      out.sort((u, v) => u[0] - v[0]);
+      return out;
+    };
+    // 她脚下这一段的左右端（层内 x）
+    G.span = function () {
+      const ps = G.pieces(G.p.L, G.p.line), x = G.p.x;
+      for (const q of ps) if (x >= q[0] - 1e-6 && x <= q[1] + 1e-6) return q;
+      return ps.length ? ps[0] : [x, x];
+    };
+
+    // 现在能不能推第 k 层：站在这一层的普通线上推不动；站在框里时，带框的层也推不动
+    G.canPush = function (k) {
+      const p = G.p;
+      if (!p.ground) return true;
+      if (k === p.L && !G.line().boat) return false;
+      if (S.isTarget[p.L]) for (const f of S.frames) if (f.target === p.L && f.layer === k) return false;
+      return true;
+    };
+
+    // ---- 接缝点：第 k 层推到哪些（整数）偏移时，某两段线的端点在屏幕上正好对上（同高，缝为 0），且这对端点会随第 k 层移动。
+    // 其他层的偏移不变时结果不变，所以按其他层的偏移缓存。
+    G.snapPoints = function (k) {
+      const A = S.layers[k];
+      const key = k + ':' + G.o.map((v, j) => j === k ? '*' : oi(j)).join(',');
+      if (G.snapCache[key]) return G.snapCache[key];
+      const save = G.o[k], out = [];
+      for (let v = A.min; v <= A.max; v++) {
+        G.o[k] = v;
+        const ends = [];       // [屏幕 x, y, 层, 左端=-1/右端=1, 会不会随第 k 层动]
+        for (let j = 0; j < 3; j++) {
+          const oj = oi(j);
+          S.layers[j].lines.forEach((b, bi) => {
+            for (const q of G.pieces(j, bi)) {
+              // 端点是线本来的端点：随本层动；是被框边裁出来的：随带框的层动
+              const m1 = q[0] === b.x1 ? j === k : S.hasFrames[k] && S.isTarget[j];
+              const m2 = q[1] === b.x2 ? j === k : S.hasFrames[k] && S.isTarget[j];
+              ends.push([q[0] + oj, yAt(b, q[0]), j, -1, m1]);
+              ends.push([q[1] + oj, yAt(b, q[1]), j, 1, m2]);
+            }
+          });
+        }
+        const lefts = new Map();
+        for (const f of ends) if (f[3] === -1) { const l = lefts.get(f[0]); if (l) l.push(f); else lefts.set(f[0], [f]); }
+        let hit = false;
+        for (const e of ends) {
+          if (e[3] !== 1) continue;
+          const l = lefts.get(e[0]);
+          if (!l) continue;
+          for (const f of l) {
+            if (f[2] === e[2]) continue;
+            if (!e[4] && !f[4]) continue;
+            if (Math.abs(e[1] - f[1]) <= C.DY) { hit = true; break; }
+          }
+          if (hit) break;
+        }
+        // 被框的线的折点正好落在框边上（框里露出的一段坡正好从框边起坡）也算接缝
+        if (!hit) for (const f of S.frames) {
+          if (f.target !== k && f.layer !== k) continue;
+          const t = f.target, ot = oi(t), of = oi(f.layer);
+          for (const b of S.layers[t].lines) for (let i = 1; i < b.pts.length - 1; i++) {
+            const vx = b.pts[i][0] + ot;
+            if (vx === f.x1 + of || vx === f.x2 + of) { hit = true; break; }
+          }
+          if (hit) break;
+        }
+        if (hit) out.push(v);
+      }
+      G.o[k] = save;
+      G.snapCache[key] = out;
+      return out;
     };
     function nearestSnap(k, v) {
       let best = null, bd = 1e9;
@@ -123,21 +198,25 @@
 
     // ---- 借过去：她在第 L 层第 a 条线的 dir 端（dir=1 右端），找别层能接上的线
     G.findTransfer = function (dir) {
-      const L = G.p.L, a = G.line();
-      const ex = (dir > 0 ? a.x2 : a.x1) + oi(L);
-      const ey = yAt(a, dir > 0 ? a.x2 : a.x1);
+      const L = G.p.L, a = G.line(), sp = G.span();
+      const end = dir > 0 ? sp[1] : sp[0];
+      const ex = end + oi(L);
+      const ey = yAt(a, end);
       let best = null;
       for (let j = 2; j >= 0; j--) {            // 近层优先
         if (j === L) continue;
         const B = S.layers[j], oj = oi(j);
         for (let bi = 0; bi < B.lines.length; bi++) {
-          const b = B.lines[bi], bx1 = b.x1 + oj, bx2 = b.x2 + oj;
-          let sx;
-          if (dir > 0) { if (!(bx1 <= ex + C.GAP && bx2 >= ex + C.GAP)) continue; sx = Math.max(ex, bx1); }
-          else { if (!(bx2 >= ex - C.GAP && bx1 <= ex - C.GAP)) continue; sx = Math.min(ex, bx2); }
-          const dy = Math.abs(yAt(b, sx - oj) - ey);
-          if (dy > C.DY) continue;
-          if (!best || dy < best.dy) best = { L: j, line: bi, x: sx - oj, dy };
+          const b = B.lines[bi];
+          for (const q of G.pieces(j, bi)) {
+            const bx1 = q[0] + oj, bx2 = q[1] + oj;
+            let sx;
+            if (dir > 0) { if (!(bx1 <= ex + C.GAP && bx2 >= ex + C.GAP)) continue; sx = Math.max(ex, bx1); }
+            else { if (!(bx2 >= ex - C.GAP && bx1 <= ex - C.GAP)) continue; sx = Math.min(ex, bx2); }
+            const dy = Math.abs(yAt(b, sx - oj) - ey);
+            if (dy > C.DY) continue;
+            if (!best || dy < best.dy) best = { L: j, line: bi, x: sx - oj, dy, lo: q[0], hi: q[1] };
+          }
         }
       }
       return best;
@@ -166,16 +245,19 @@
       // ---- 推层（只在站稳时）
       const p = G.p;
       const wantPush = inp.push && p.ground && G.sel >= 0;
-      if (wantPush && inp.dir !== 0) {
+      const dragging = inp.drag !== undefined && inp.drag !== null;
+      if (wantPush && (inp.dir !== 0 || dragging)) {
         const k = G.sel, A = S.layers[k];
-        if (!G.canPush(k)) { if (!G.pushing) emit('locked', k); p.vx = 0; return; }
-        if (!G.pushing || G.pushDir !== inp.dir) {
+        const d = dragging ? Math.sign(inp.drag) : inp.dir;
+        if (!G.canPush(k)) { if (!G.pushing && d !== 0) emit('locked', k); p.vx = 0; return; }
+        if (!G.pushing || (d !== 0 && G.pushDir !== d)) {
           if (!G.pushing) G.undo.push(snapshot());
-          G.pushing = true; G.pushDir = inp.dir; emit('push', k);
+          G.pushing = true;
+          if (d !== 0) { G.pushDir = d; emit('push', k); }
         }
-        let v = C.PUSH[k] * inp.dir;
+        let v = dragging ? inp.drag * C.PAR[k] : C.PUSH[k] * inp.dir;
         const n = nearestSnap(k, G.o[k]);
-        if (n.s !== null && n.d <= C.SNAP) v *= C.SNAP_SLOW;
+        if (n.s !== null && n.d <= C.SNAP) v *= dragging ? C.DRAG_SLOW : C.SNAP_SLOW;
         G.o[k] = Math.min(A.max, Math.max(A.min, G.o[k] + v));
         p.vx = 0;
         return;
@@ -196,24 +278,24 @@
       if (inp.dir) p.face = inp.dir;
       if (p.ground) {
         if (inp.jump) {
-          p.ground = false; p.vy = -C.HOP; p.vx = inp.dir * C.WALK; emit('hop');
+          p.ground = false; p.vy = -C.HOP; p.vx = inp.dir * C.WALK; p.coyote = 0; emit('hop');
         } else {
           p.vx = inp.dir * C.WALK;
           let nx = p.x + p.vx;
-          const a = G.line();
-          if (nx > a.x2 || nx < a.x1) {
-            const dir = nx > a.x2 ? 1 : -1;
+          const a = G.line(), sp = G.span();
+          if (nx > sp[1] || nx < sp[0]) {
+            const dir = nx > sp[1] ? 1 : -1;
             const t = G.findTransfer(dir);
             if (t) {
               G.undo.push(snapshot());
-              const over = dir > 0 ? nx - a.x2 : nx - a.x1;
+              const over = dir > 0 ? nx - sp[1] : nx - sp[0];
               p.L = t.L; p.line = t.line; p.x = t.x + over;
               const b = G.line();
-              p.x = Math.min(b.x2, Math.max(b.x1, p.x));
+              p.x = Math.min(t.hi, Math.max(t.lo, p.x));
               p.y = yAt(b, p.x);
               emit('borrow', t.L);
             } else {
-              p.x = nx; p.ground = false; p.vy = 0; emit('edge');
+              p.x = nx; p.ground = false; p.vy = 0; p.coyote = C.COYOTE; emit('edge');
             }
           } else {
             p.x = nx; p.y = yAt(a, nx);
@@ -221,6 +303,8 @@
         }
       }
       if (!p.ground) {
+        if (inp.jump && p.coyote > 0 && p.vy >= 0) { p.vy = -C.HOP; p.coyote = 0; emit('hop'); }
+        if (p.coyote > 0) p.coyote--;
         p.vx = inp.dir * C.WALK;
         const py = p.y;
         p.vy = Math.min(C.FALL_MAX, p.vy + C.GRAV);
@@ -229,6 +313,7 @@
           for (let i = 0; i < lay.lines.length; i++) {
             const l = lay.lines[i];
             if (p.x < l.x1 || p.x > l.x2) continue;
+            if (S.isTarget[p.L] && !G.pieces(p.L, i).some(q => p.x >= q[0] && p.x <= q[1])) continue;
             const ly = yAt(l, p.x);
             if (py <= ly + 0.001 && p.y >= ly) {
               p.y = ly; p.ground = true; p.vy = 0; p.line = i; emit('land');
@@ -241,8 +326,8 @@
 
       // ---- 落脚点、灯
       if (p.ground) {
-        const a = G.line();
-        if (p.x >= a.x1 + 3 && p.x <= a.x2 - 3) { G.foot.L = p.L; G.foot.line = p.line; G.foot.x = p.x; }
+        const sp = G.span();
+        if (p.x >= sp[0] + 3 && p.x <= sp[1] - 3) { G.foot.L = p.L; G.foot.line = p.line; G.foot.x = p.x; }
         const lm = S.lamp;
         if (p.L === lm.layer && p.line === lm.line && Math.abs(p.x - lm.x) <= C.LAMP) { G.won = true; emit('win'); }
       }

@@ -4,7 +4,7 @@ const fs = require('fs'), path = require('path');
 const R = path.join(__dirname, '..'), out = process.argv[2] || path.join(R, 'build/jiejing.html');
 const files = {};
 const add = (rel) => { files['./' + rel] = rel.endsWith('.json') ? JSON.parse(fs.readFileSync(path.join(R, rel), 'utf8')) : 'data:image/png;base64,' + fs.readFileSync(path.join(R, rel)).toString('base64'); };
-add('data/levels.json'); add('data/art.json');
+add('data/levels.json'); add('data/art.json'); add('data/atlas.json');
 for (const f of fs.readdirSync(path.join(R, 'art'))) if (f.endsWith('.png')) add('art/' + f);
 for (const f of fs.readdirSync(path.join(R, 'art/levels'))) if (f.endsWith('.png')) add('art/levels/' + f);
 let play = fs.readFileSync(path.join(R, 'web/play.js'), 'utf8');
