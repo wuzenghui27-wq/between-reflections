@@ -65,12 +65,13 @@
   let idx = 0, G = null, L = null, phase = 'title', phaseT = 0, card = 0, t = 0;
   const q = new URLSearchParams(location.search);
   if (q.has('at')) idx = Math.max(0, Math.min(LEVELS.length - 1, +q.get('at')));
-  let prevFrame = null, shiftFx = -1, blink = 0;
+  let prevFrame = null, shiftFx = -1, blink = 0, stillT = 0;
+  const undo = [];                                       // 每次换面前存一份，Z 退回上一次换面之前
   const back = document.createElement('canvas'); back.width = PW; back.height = PH;
   const bctx = back.getContext('2d'); bctx.imageSmoothingEnabled = false;
 
   function startLevel(i) {
-    idx = i; L = LEVELS[i]; G = TW.Game(L); phase = 'play'; phaseT = 0; card = 0;
+    idx = i; L = LEVELS[i]; G = TW.Game(L); undo.length = 0; FX.length = 0; phase = 'play'; phaseT = 0; card = 0;
     for (const w of ['day', 'night']) img(REG[L.region][w]);
     music(L.region, G.top);
   }
@@ -99,95 +100,182 @@
     }
   }
 
-  // ------------------------------------------------------------ 组件（明代江南：粉墙黛瓦、马头墙、漏窗、青石驳岸、乌篷船、货摊、宫灯）
-  // 一律用“这一面的坐标”画，mirror 时整块上下翻到水下：世界里 [y, y+h) 落到屏幕 [PH-y-h, PH-y)
+  // ------------------------------------------------------------ 组件
+  // 颜色全部取自这一站背景图本身（白天雨中江南偏青灰，夜里灯火偏暖橙、水偏青），组件和背景是同一套色。
+  // 每样东西都有一圈深色描边、三到五档明暗，按“这一面的坐标”画；mirror 时上下翻到水下：世界里 [y, y+h) 落到屏幕 [PH-y-h, PH-y)
   const PAL = {
-    day: { wall: '#ece6d8', shade: '#d2c9b6', stain: '#c2baa8', plinth: '#8c8e88', tile: '#363a46', tileHi: '#5a606e',
-      top: '#9ea09a', topHi: '#c8cac2', face: '#73776f', faceDk: '#5b5f59', joint: '#474a46', moss: '#5f7c48',
-      water: '#3a5f6c', waterHi: '#9cc0c2', wood: '#8a5a32', woodHi: '#b67c48', woodDk: '#5a3820', awn: '#b8402a', cloth: '#e8dcc0', canopy: '#26282e', win: '#463c34' },
-    night: { wall: '#646a88', shade: '#50556f', stain: '#575c78', plinth: '#3a3f52', tile: '#171a26', tileHi: '#2c3044',
-      top: '#4c536c', topHi: '#717a9a', face: '#30364a', faceDk: '#262b3c', joint: '#1c202e', moss: '#2d3c3c',
-      water: '#132038', waterHi: '#41587e', wood: '#4c3630', woodHi: '#6c4c40', woodDk: '#2c1e1c', awn: '#6c2c2a', cloth: '#8a8496', canopy: '#0e1016', win: '#f4c45c' }
+    day: {
+      ol: '#162529', stone: ['#1a2328', '#2e3a40', '#46565e', '#5e737c', '#7890a0', '#a0b6c0'], moss: ['#384a49', '#44575a', '#4f6a44'],
+      wall: ['#768e9b', '#8199a9', '#a3adb1', '#b3c8d6'], grime: '#5a717b',
+      roof: ['#151f2b', '#233243', '#2f4354', '#384d61', '#435a71'],
+      wood: ['#21252d', '#373032', '#614637', '#8d6843', '#ae8e67'], pane: ['#614637', '#8d6843', '#ae8e67'],
+      water: ['rgba(25,61,66,0.7)', 'rgba(55,98,110,0.55)', '#487280', '#8fb0b8'], cloth: ['#7a2e2a', '#a8452f', '#d8cdb4'], canopy: ['#151f2b', '#233243', '#2f4354']
+    },
+    night: {
+      ol: '#1c1416', stone: ['#1c1416', '#3a2c2a', '#5a4a43', '#7a5a46', '#9a6e50', '#c08a5c'], moss: ['#1f3a33', '#2c4a3a', '#3d5a3a'],
+      wall: ['#8c6159', '#a06f54', '#d7a376', '#f8b16b'], grime: '#a06f54',
+      roof: ['#011c22', '#012a32', '#014359', '#014d63', '#23373f'],
+      wood: ['#3f211c', '#50281e', '#80371c', '#a2471d', '#e3731f'], pane: ['#e3731f', '#f69226', '#fbc76b'],
+      water: ['rgba(4,59,71,0.7)', 'rgba(8,66,78,0.55)', '#0c4651', '#3a7884'], cloth: ['#5f2b1d', '#a2471d', '#d7a376'], canopy: ['#011c22', '#012a32', '#014359']
+    }
   };
   function painter(c, mirror) {
     return (x, y, w, h, col) => { if (w <= 0 || h <= 0) return; c.fillStyle = col; c.fillRect(Math.round(x), mirror ? PH - Math.round(y) - h : Math.round(y), w, h); };
   }
   const isGround = s => s.y1 >= 90 && s.y1 - s.y0 <= 20 && !s.kind;
   function hashi(a, b) { return hash(a * 0.37 + 11, b * 0.73 + 5); }
+  const dith = (x, y, k) => k >= 1 || (k > 0 && B4[((y & 3) << 2) | (x & 3)] < k);       // 4×4 抖动：k 是这一格取前景色的比例
 
-  function solids(c, lay, w, mirror) {
-    const p = painter(c, mirror), K = PAL[w], night = w === 'night';
-    // 河：没有地面的地方露出水，6 行水面
-    for (let x = 0; x < PW; x++) {
-      if (groundAt(lay, x + 0.5) < 90) continue;
-      p(x, 84, 1, 6, K.water);
-      const k = Math.sin(x * 0.31 + t * 2.2) + Math.sin(x * 0.09 - t * 1.3);
-      if (k > 0.9) p(x, 84, 1, 1, K.waterHi);
-      if (k < -1.4) p(x, 86 + ((x >> 2) & 1), 1, 1, K.waterHi);
+  // 青石驳岸：压顶条石（亮面、正面、阴影）、下面错缝条石、苔、贴水的湿痕
+  function drawGround(p, s, K, w) {
+    const x0 = Math.round(s.x0), x1 = Math.round(s.x1), y0 = Math.round(s.y0), y1 = 90, wd = x1 - x0, S = K.stone;
+    p(x0, y0, wd, y1 - y0, S[1]);
+    // 压顶条石，一块 10～17 宽
+    let x = x0, n = 0;
+    while (x < x1) {
+      const len = Math.min(x1 - x, 10 + Math.floor(hashi(x0 + n * 7, y0) * 8));
+      p(x, y0, len, 1, S[5]); p(x, y0 + 1, len, 1, S[4]); p(x, y0 + 2, len, 1, S[3]);
+      for (let k = 1; k < len - 1; k++) if (hashi(x + k, y0 + 1) > 0.86) p(x + k, y0, 1, 1, S[4]);       // 石面上的斑
+      if (w === 'day') for (let k = 1; k < len - 1; k++) if (hashi(x + k, 77) > 0.9) p(x + k, y0 + 1, 1, 1, S[5]);   // 雨里的反光
+      p(x + len - 1, y0, 1, 3, S[2]);
+      x += len; n++;
     }
-    for (const s of lay.solids) {
-      const x0 = Math.round(s.x0), x1 = Math.round(s.x1), y0 = Math.round(s.y0), y1 = Math.round(s.y1), wd = x1 - x0, h = y1 - y0;
-      if (isGround(s)) {
-        // 青石驳岸：顶上一层石板（两行），下面错缝条石，岸边有苔
-        p(x0, y0, wd, h, K.face);
-        p(x0, y0, wd, 1, K.topHi); p(x0, y0 + 1, wd, 1, K.top);
-        for (let x = x0 + 3 + Math.floor(hashi(x0, y0) * 9); x < x1 - 1; x += 13 + Math.floor(hashi(x, 1) * 6)) p(x, y0 + 1, 1, 1, K.joint);
-        p(x0, y0 + 2, wd, 1, K.joint);
-        for (let r = 0, yy = y0 + 3; yy < y1; r++, yy += 4) {
-          p(x0, yy + 3, wd, 1, K.joint);
-          for (let x = x0 + (r & 1) * 5; x < x1; x += 10) { p(x, yy, 1, Math.min(3, y1 - yy), K.joint); p(x + 1, yy, 3, 1, K.faceDk); }
-        }
-        for (let x = x0; x < x1; x++) if (hashi(x, y0 + 3) > 0.72) p(x, y0 + 3, 1, hashi(x, 9) > 0.6 ? 2 : 1, K.moss);
-        if (x0 > 0) { p(x0, y0, 1, h, K.faceDk); p(x0, y0, 1, 1, K.top); }
-        if (x1 < PW) p(x1 - 1, y0, 1, h, K.joint);
-      } else if (s.kind === 'stall') {
-        // 货摊：两根木柱、一块台面、上头条纹布篷，台上摆着东西
-        const cy = y0 + Math.round(h * 0.55);
-        p(x0, y0 + 4, 2, h - 4, K.woodDk); p(x1 - 2, y0 + 4, 2, h - 4, K.woodDk);
-        p(x0 + 2, y0 + 6, wd - 4, cy - y0 - 6, night ? '#2a2430' : '#e2d4b8');
-        p(x0 - 1, cy, wd + 2, 2, K.woodHi); p(x0, cy + 2, wd, h - (cy - y0) - 2, K.wood);
-        for (let y = cy + 4; y < y1 - 1; y += 4) p(x0 + 1, y, wd - 2, 1, K.woodDk);
-        const goods = night ? ['#6a3a30', '#5c5a34', '#3c4c34'] : ['#c84a30', '#e0b040', '#5a8a40'];
-        for (let i = 0, x = x0 + 1; x < x1 - 2; i++, x += 3) p(x, cy - 2, 2, 2, goods[i % 3]);
-        for (let x = x0 - 3; x < x1 + 3; x++) {
-          const stripe = Math.floor((x - x0 + 30) / 3) & 1;
-          p(x, y0, 1, 4, stripe ? K.awn : K.cloth);
-          if (((x - x0) & 3) !== 0) p(x, y0 + 4, 1, 1, stripe ? K.awn : K.cloth);
-        }
-        p(x0 - 3, y0, wd + 6, 1, K.woodDk);
-      } else {
-        // 粉墙黛瓦：石脚、白墙身、雨水渍、漏窗、马头墙顶
-        p(x0, y0, wd, h, K.wall);
-        p(x1 - 2, y0, 2, h, K.shade);
-        for (let x = x0 + 1; x < x1 - 2; x++) {
-          const n = hashi(x, y0 + 7);
-          if (n > 0.55) { const len = 4 + Math.floor(hashi(x, 3) * (h * 0.5)); for (let y = y0 + 4; y < y0 + 4 + len; y += 1 + (y & 1)) p(x, y, 1, 1, K.stain); }
-        }
-        p(x0, y1 - 3, wd, 3, K.plinth); p(x0, y1 - 3, wd, 1, K.joint);
-        if (h >= 28 && wd >= 8) {
-          const wx = x0 + (wd >> 1) - 3, wy = y0 + 10;
-          p(wx, wy, 7, 7, K.tile);
-          for (let yy = 1; yy < 6; yy++) for (let xx = 1; xx < 6; xx++) p(wx + xx, wy + yy, 1, 1, ((xx + yy) & 1) ? K.win : K.tile);
-        }
-        // 马头墙：瓦顶挑出两格，当中拱起一级，两头翘角
-        p(x0 - 2, y0, wd + 4, 3, K.tile);
-        for (let x = x0 - 2; x < x1 + 2; x += 2) p(x, y0 + 1, 1, 1, K.tileHi);
-        p(x0 - 2, y0 + 3, wd + 4, 1, K.joint);
-        p(x0 + 1, y0 - 2, wd - 2, 2, K.tile); p(x0 + 1, y0 - 2, wd - 2, 1, K.tileHi);
-        p(x0 - 3, y0 - 1, 1, 1, K.tile); p(x1 + 2, y0 - 1, 1, 1, K.tile);
+    p(x0, y0 + 3, wd, 1, K.ol);
+    // 条石：每层 3 行 + 1 行灰缝，错缝
+    for (let r = 0, yy = y0 + 4; yy < y1; r++, yy += 4) {
+      const h = Math.min(3, y1 - yy);
+      let bx = x0 - (r & 1 ? 5 : 0), m = 0;
+      while (bx < x1) {
+        const bw = 7 + Math.floor(hashi(bx + 3, yy + m) * 6), tone = hashi(bx, yy) > 0.6 ? 3 : hashi(bx, yy) > 0.25 ? 2 : 1;
+        const a = Math.max(bx, x0), b = Math.min(bx + bw - 1, x1);
+        if (b > a) { p(a, yy, b - a, h, S[tone]); p(a, yy, b - a, 1, S[Math.min(5, tone + 1)]); }
+        if (bx + bw - 1 >= x0 && bx + bw - 1 < x1) p(bx + bw - 1, yy, 1, h, S[0]);
+        bx += bw; m++;
+      }
+      if (yy + 3 < y1) p(x0, yy + 3, wd, 1, S[0]);
+    }
+    // 苔：从压顶下面垂下来
+    for (let k = x0; k < x1; k++) {
+      const v = hashi(k, y0 + 5);
+      if (v > 0.8) { const L = 1 + Math.floor(hashi(k, 3) * 4); p(k, y0 + 3, 1, L, K.moss[v > 0.93 ? 2 : 1]); if (L > 2) p(k, y0 + 3, 1, 1, K.moss[2]); }
+    }
+    // 贴水两行：湿、暗，一行亮的水痕
+    for (let k = x0; k < x1; k++) { if (dith(k, 87, 0.5)) p(k, 87, 1, 1, S[0]); p(k, 88, 1, 2, S[0]); }
+    p(x0, 86, wd, 1, K.water[1]);
+    // 两头收边：描边、压顶探出一格
+    if (x0 > 0) { p(x0, y0 + 3, 1, y1 - y0 - 3, K.ol); p(x0 - 1, y0, 1, 3, K.ol); p(x0, y0, 1, 1, S[5]); }
+    if (x1 < PW) { p(x1 - 1, y0 + 3, 1, y1 - y0 - 3, K.ol); p(x1, y0, 1, 3, K.ol); }
+  }
+
+  // 粉墙黛瓦·马头墙：石脚、白墙（下半截发灰发霉）、漏窗、檐下阴影、两级瓦顶、翘角
+  function drawWall(p, s, K, w) {
+    const x0 = Math.round(s.x0), x1 = Math.round(s.x1), y0 = Math.round(s.y0), y1 = Math.round(s.y1), wd = x1 - x0, h = y1 - y0, W = K.wall, R = K.roof;
+    for (let y = y0; y < y1; y++) {
+      const k = (y - y0) / h;
+      for (let x = x0; x < x1; x++) {
+        let col = W[2];
+        if (x === x0 + 1 && w === 'day') col = W[3];
+        if (x >= x1 - 2) col = W[1];
+        if (k > 0.55 && dith(x, y, (k - 0.55) / 0.45 * 0.8)) col = x >= x1 - 2 ? W[0] : K.grime;     // 墙根返潮发灰
+        p(x, y, 1, 1, col);
       }
     }
-    // 乌篷船：船身两头收窄，后半截一个黑篷，船尾一根篙
-    for (const m of lay.movers) {
-      const x0 = Math.round(m.x0), wd = Math.round(m.x1 - m.x0), y = Math.round(m.top);
-      p(x0, y, wd, 1, K.woodHi);
-      p(x0, y + 1, wd, 1, K.wood);
-      for (let r = 0; r < 4; r++) p(x0 + 1 + r, y + 2 + r, wd - 2 - 2 * r, 1, r === 3 ? K.joint : K.woodDk);
-      const cx = x0 + wd - 12;
-      for (let r = 0; r < 6; r++) { const inset = r === 5 ? 2 : r === 4 ? 1 : 0; p(cx + inset, y - 1 - r, 9 - 2 * inset, 1, K.canopy); }
-      for (let r = 1; r < 5; r += 2) p(cx + 1, y - 1 - r, 7, 1, night ? '#202430' : '#3c3e48');
-      p(x0 + 2, y - 12, 1, 12, K.woodDk);
+    // 檐下水渍
+    for (let x = x0 + 1; x < x1 - 2; x++) {
+      if (hashi(x, y0 + 7) < 0.55) continue;
+      const L = 3 + Math.floor(hashi(x, 3) * h * 0.35);
+      for (let y = y0 + 4; y < y0 + 4 + L; y++) if (dith(x, y, 0.6 - (y - y0 - 4) / L * 0.5)) p(x, y, 1, 1, W[1]);
     }
+    p(x0, y0 + 3, wd, 1, W[0]);                                  // 檐下阴影
+    // 石脚
+    p(x0, y1 - 4, wd, 4, K.stone[2]); p(x0, y1 - 4, wd, 1, K.stone[4]); p(x0, y1 - 1, wd, 1, K.stone[1]);
+    for (let x = x0 + 3; x < x1 - 1; x += 5) p(x, y1 - 3, 1, 2, K.stone[1]);
+    // 描边
+    p(x0, y0, 1, h, K.ol); p(x1 - 1, y0, 1, h, K.ol);
+    // 漏窗：方格里套一个“卍”字纹的意思，用 7×7 画
+    if (h >= 26 && wd >= 8) {
+      const wx = x0 + Math.floor(wd / 2) - 3, wy = y0 + 9, P = K.pane;
+      p(wx - 1, wy - 1, 9, 9, W[0]); p(wx, wy, 7, 7, R[0]);
+      const pat = ['1111111', '1000001', '1011101', '1010101', '1011101', '1000001', '1111111'];
+      for (let yy = 0; yy < 7; yy++) for (let xx = 0; xx < 7; xx++) {
+        if (pat[yy][xx] === '1') p(wx + xx, wy + yy, 1, 1, R[2]);
+        else p(wx + xx, wy + yy, 1, 1, w === 'night' ? P[(xx + yy) & 1 ? 1 : 2] : R[0]);
+      }
+    }
+    // 瓦顶：檐口一层探出两格，中间升起一级脊，两头翘角
+    p(x0 - 2, y0, wd + 4, 3, R[1]);
+    for (let x = x0 - 2; x < x1 + 2; x++) { p(x, y0, 1, 1, (x & 1) ? R[3] : R[2]); if ((x & 1) === 0) p(x, y0 + 2, 1, 1, R[4]); }   // 瓦垄、瓦当
+    p(x0 - 2, y0 + 3, wd + 4, 1, K.ol);
+    p(x0, y0 - 3, wd, 3, R[1]); p(x0, y0 - 3, wd, 1, R[4]); p(x0 + 1, y0 - 2, wd - 2, 1, R[2]);
+    p(x0 - 1, y0 - 4, 2, 1, R[0]); p(x1 - 1, y0 - 4, 2, 1, R[0]);                                    // 脊头翘起
+    p(x0 - 3, y0 - 1, 1, 1, R[0]); p(x1 + 2, y0 - 1, 1, 1, R[0]); p(x0 - 2, y0 - 1, 2, 1, R[1]); p(x1, y0 - 1, 2, 1, R[1]);
+  }
+
+  // 货摊：竹竿、条纹布篷（下沿一排垂角）、台面、台上的货
+  function drawStall(p, s, K, w) {
+    const x0 = Math.round(s.x0), x1 = Math.round(s.x1), y0 = Math.round(s.y0), y1 = Math.round(s.y1), wd = x1 - x0, h = y1 - y0, Wd = K.wood, Cl = K.cloth;
+    const cy = y0 + Math.round(h * 0.55);
+    p(x0 - 2, y0 + 3, 1, h - 3, Wd[0]); p(x1 + 1, y0 + 3, 1, h - 3, Wd[0]);                            // 竹竿
+    p(x0, y0 + 5, wd, cy - y0 - 5, w === 'night' ? Wd[1] : K.stone[1]);                              // 摊后头的暗处
+    if (w === 'night') for (let x = x0 + 1; x < x1 - 1; x += 3) p(x, y0 + 7, 2, 3, K.pane[2]);       // 夜里摊后挂一串小灯
+    // 台面与台身
+    p(x0 - 1, cy, wd + 2, 1, Wd[4]); p(x0 - 1, cy + 1, wd + 2, 1, Wd[3]); p(x0 - 1, cy + 2, wd + 2, 1, K.ol);
+    p(x0, cy + 3, wd, y1 - cy - 3, Wd[2]);
+    for (let x = x0 + 2; x < x1 - 1; x += 4) p(x, cy + 3, 1, y1 - cy - 3, Wd[1]);
+    p(x0, y1 - 1, wd, 1, Wd[0]); p(x0 - 1, cy, 1, y1 - cy, K.ol); p(x1, cy, 1, y1 - cy, K.ol);
+    // 货：瓷碗、布匹、果子
+    const G = w === 'night' ? ['#d7a376', '#a2471d', '#f69226'] : ['#b3c8d6', '#a8452f', '#8d6843'];
+    for (let i = 0, x = x0; x < x1 - 1; i++, x += 3) { p(x, cy - 2, 2, 2, G[i % 3]); p(x, cy - 2, 1, 1, i % 3 === 0 ? '#e8e4da' : G[(i + 1) % 3]); }
+    // 布篷：条纹 + 垂角 + 上沿描边
+    for (let x = x0 - 3; x < x1 + 3; x++) {
+      const st = (Math.floor((x - x0 + 30) / 3) & 1) ? Cl[1] : Cl[2];
+      p(x, y0, 1, 4, st); p(x, y0 + 3, 1, 1, (Math.floor((x - x0 + 30) / 3) & 1) ? Cl[0] : Cl[1]);
+      if (((x - x0 + 30) % 3) === 1) p(x, y0 + 4, 1, 1, st);
+    }
+    p(x0 - 3, y0 - 1, wd + 6, 1, K.ol); p(x0 - 4, y0, 1, 4, K.ol); p(x1 + 3, y0, 1, 4, K.ol);
+  }
+
+  // 船：白天乌篷船（黑篷），夜里画舫（亮着窗的小舱）。船身两头翘，描边
+  function drawBoat(p, m, K, w) {
+    const x0 = Math.round(m.x0), wd = Math.round(m.x1 - m.x0), y = Math.round(m.top), x1 = x0 + wd, Wd = K.wood, Cn = K.canopy;
+    // 船身
+    p(x0 - 2, y - 1, 2, 1, K.ol); p(x1, y - 1, 2, 1, K.ol);                                           // 两头翘
+    p(x0 - 1, y, wd + 2, 1, Wd[4]); p(x0, y + 1, wd, 1, Wd[3]);
+    for (let r = 0; r < 3; r++) p(x0 + r, y + 2 + r, wd - 2 * r, 1, Wd[2 - (r === 2 ? 1 : 0)]);
+    p(x0 + 3, y + 5, wd - 6, 1, K.ol);
+    p(x0 - 1, y + 1, 1, 1, K.ol); p(x1, y + 1, 1, 1, K.ol);
+    for (let r = 0; r < 3; r++) { p(x0 + r - 1, y + 2 + r, 1, 1, K.ol); p(x1 - r, y + 2 + r, 1, 1, K.ol); }
+    // 舱 / 篷（在船后半截，人站在前半截）
+    const cx = x1 - 13, cw = 11;
+    if (w === 'night') {
+      p(cx, y - 7, cw, 7, Wd[1]);
+      for (let k = 0; k < 3; k++) { p(cx + 1 + k * 3, y - 5, 2, 3, K.pane[2]); p(cx + 1 + k * 3, y - 3, 2, 1, K.pane[0]); }
+      p(cx - 1, y - 8, cw + 2, 1, Cn[2]); p(cx - 2, y - 9, cw + 4, 1, K.ol); p(cx - 1, y - 7, 1, 7, K.ol); p(cx + cw, y - 7, 1, 7, K.ol);
+    } else {
+      const rows = [cw - 4, cw - 2, cw, cw, cw, cw];
+      rows.forEach((rw, r) => { const xx = cx + (cw - rw) / 2; p(xx, y - 6 + r, rw, 1, r === 1 ? Cn[2] : Cn[1]); p(xx - 1, y - 6 + r, 1, 1, K.ol); p(xx + rw, y - 6 + r, 1, 1, K.ol); });
+      p(cx + 2, y - 7, cw - 4, 1, K.ol);
+      for (let k = 1; k < cw; k += 3) p(cx + k, y - 4, 1, 4, Cn[0]);                                   // 篷上的竹篾
+    }
+    p(x0 + 2, y - 14, 1, 14, Wd[1]); p(x0 + 2, y - 15, 1, 1, K.ol);                                      // 篙
+  }
+
+  function solids(c, lay, w, mirror) {
+    const p = painter(c, mirror), K = PAL[w];
+    // 河：没有地面的地方露出水
+    for (let x = 0; x < PW; x++) {
+      if (groundAt(lay, x + 0.5) < 90) continue;
+      p(x, 83, 1, 7, K.water[1]); p(x, 86, 1, 4, K.water[0]);
+      const k = Math.sin(x * 0.31 + t * 2.2) + Math.sin(x * 0.09 - t * 1.3);
+      if (k > 0.9) p(x, 83, 1, 1, K.water[3]); else if (k > 0) p(x, 83, 1, 1, K.water[2]);
+      if (k < -1.3) p(x, 85 + ((x >> 2) & 1), 1, 1, K.water[2]);
+    }
+    for (const s of lay.solids) {
+      if (isGround(s)) drawGround(p, s, K, w);
+      else if (s.kind === 'stall') drawStall(p, s, K, w);
+      else drawWall(p, s, K, w);
+    }
+    for (const m of lay.movers) drawBoat(p, m, K, w);
   }
 
   function groundAt(lay, x) {
@@ -195,16 +283,22 @@
     for (const s of lay.solids) if (x >= s.x0 && x < s.x1 && s.y0 < best && s.y1 >= 90) best = s.y0;
     return best;
   }
-  // 灯：石座、木杆、挑臂，下挂宫灯。返回宫灯中心（这一面的坐标）
-  function lampPos(lay) { const gy = groundAt(lay, lay.lamp); return { x: Math.round(lay.lamp), y: gy - 20, gy }; }
-  function lamp(c, lay, w, mirror, lit, glowA) {
+  // 灯：照背景里那种江南街灯——石座、木杆、挑出的铁钩，下挂一只方灯。返回灯心（这一面的坐标）
+  function lampPos(lay) { const gy = groundAt(lay, lay.lamp); return { x: Math.round(lay.lamp), y: gy - 25, gy }; }
+  function lamp(c, lay, w, mirror, lit) {
     if (lay.lamp === undefined) return;
-    const p = painter(c, mirror), K = PAL[w], L0 = lampPos(lay), x = L0.x, gy = L0.gy, top = gy - 30;
-    p(x + 3, gy - 3, 6, 3, K.plinth); p(x + 3, gy - 3, 6, 1, K.topHi);
-    p(x + 5, top, 2, gy - 3 - top, K.woodDk); p(x + 6, top, 1, gy - 3 - top, K.wood);
-    p(x - 1, top, 8, 1, K.woodDk); p(x - 2, top - 1, 1, 1, K.woodDk);
-    p(x, top + 1, 1, 1, K.woodDk);
-    sprite(c, 'lantern', x, mirror ? PH - (top + 18) : top + 18, false, mirror);
+    const p = painter(c, mirror), K = PAL[w], q = lampPos(lay), x = q.x, gy = q.gy, top = gy - 33, Wd = K.wood;
+    const on = w === 'night' || lit;
+    p(x + 3, gy - 3, 7, 3, K.stone[3]); p(x + 3, gy - 3, 7, 1, K.stone[5]); p(x + 2, gy - 3, 1, 3, K.ol); p(x + 10, gy - 3, 1, 3, K.ol);
+    p(x + 5, top, 3, gy - 3 - top, Wd[2]); p(x + 5, top, 1, gy - 3 - top, Wd[3]); p(x + 4, top, 1, gy - 3 - top, K.ol); p(x + 8, top, 1, gy - 3 - top, K.ol);
+    p(x - 1, top, 9, 1, K.ol); p(x - 1, top + 1, 1, 2, K.ol);                                            // 挑臂、吊钩
+    // 方灯：顶帽、灯身三格、底座
+    const ly = top + 3;
+    p(x - 3, ly, 5, 1, K.ol); p(x - 4, ly + 1, 7, 1, K.roof[1]); p(x - 4, ly + 1, 1, 1, K.ol); p(x + 2, ly + 1, 1, 1, K.ol);
+    p(x - 3, ly + 2, 5, 6, K.ol);
+    const P = on ? ['#e3731f', '#f69226', '#fbc76b'] : K.pane;
+    p(x - 2, ly + 3, 3, 4, P[1]); p(x - 1, ly + 3, 1, 4, P[2]); p(x - 2, ly + 6, 3, 1, P[0]);
+    p(x - 3, ly + 8, 5, 1, K.roof[1]); p(x - 1, ly + 9, 1, 1, K.ol);
   }
 
   // 像素光：亮度分档，2×2 抖动
@@ -225,28 +319,27 @@
   }
 
   // ------------------------------------------------------------ 光影
-  // 每一面一张暖光图：夜里宫灯、漏窗、货摊的灯照亮四周，光线被墙挡住就留下一道影子。
-  // 墙和货摊挡光（地面不挡：灯本来就在地面以上）。图按（布局、亮没亮）缓存，每帧只做闪烁、分档和抖动。
+  // 背景图本身已经画好了光，所以光照只压在前景（墙、驳岸、船、灯、人）上，背景只在灯旁添一点暖。
+  // 每一面一张暖光图：灯、漏窗、货摊的小灯照亮四周，光线被墙挡住就留下一道影子。按（布局、亮没亮）缓存。
   const B4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => (v + 0.5) / 16);
-  const AMB = { day: [1, 1, 1], night: [0.48, 0.54, 0.78] };
-  const WARM = [1.0, 0.7, 0.4];
+  const AMB = { day: [0.97, 0.98, 1.0], night: [0.74, 0.72, 0.8] };
+  const WARM = [1.0, 0.68, 0.36];
   const lightCache = {};
   function lightsOf(lay, w, lit) {
     const out = [];
     if (lay.lamp !== undefined) {
       const q = lampPos(lay);
-      if (w === 'night') out.push({ x: q.x + 0.5, y: q.y, r: lit ? 96 : 76, i: lit ? 1.0 : 0.72 });
+      if (w === 'night') out.push({ x: q.x + 0.5, y: q.y, r: lit ? 96 : 72, i: lit ? 0.95 : 0.7 });
       else if (lit) out.push({ x: q.x + 0.5, y: q.y, r: 40, i: 0.35 });
     }
     if (w === 'night') for (const s of lay.solids) {
       if (isGround(s)) continue;
-      if (s.kind === 'stall') out.push({ x: (s.x0 + s.x1) / 2, y: s.y0 + 6, r: 26, i: 0.32, own: s });
-      else if (s.y1 - s.y0 >= 28 && s.x1 - s.x0 >= 8) out.push({ x: (s.x0 + s.x1) / 2, y: s.y0 + 13, r: 18, i: 0.3, own: s });
+      if (s.kind === 'stall') out.push({ x: (s.x0 + s.x1) / 2, y: s.y0 + 8, r: 26, i: 0.3, own: s });
+      else if (s.y1 - s.y0 >= 26 && s.x1 - s.x0 >= 8) out.push({ x: (s.x0 + s.x1) / 2, y: s.y0 + 12, r: 18, i: 0.28, own: s });
     }
     return out;
   }
   function blocked(lx, ly, px, py, s) {
-    // 线段 (lx,ly)→(px,py) 穿不穿过矩形 s（板块法）
     let t0 = 0, t1 = 1;
     const dx = px - lx, dy = py - ly;
     for (const [d, p0, lo, hi] of [[dx, lx, s.x0, s.x1], [dy, ly, s.y0 - 3, s.y1]]) {
@@ -268,69 +361,122 @@
         let f = l.i * Math.pow(1 - d, 1.6);
         for (const s of occ) {
           if (s === l.own) continue;
-          const inside = x + 0.5 >= s.x0 && x + 0.5 < s.x1 && y + 0.5 >= s.y0 - 3 && y + 0.5 < s.y1;
-          if (inside) continue;                        // 墙面自己朝着看的人，照得到
-          if (blocked(l.x, l.y, x + 0.5, y + 0.5, s)) { f *= 0.18; break; }
+          const inside = x + 0.5 >= s.x0 - 3 && x + 0.5 < s.x1 + 3 && y + 0.5 >= s.y0 - 5 && y + 0.5 < s.y1;
+          if (inside) continue;
+          if (blocked(l.x, l.y, x + 0.5, y + 0.5, s)) { f *= 0.15; break; }
         }
         m[y * PW + x] += f;
       }
     }
     return (lightCache[key] = m);
   }
-  function lightPass(c) {
-    const top = G.top, bot = TW.other(top), S = G.S;
-    const lit = G.state === 'won';
+  // fg=true：前景层，按环境光压暗再加暖光；fg=false：背景层，只在灯旁添暖（背景原有的光不动）
+  function lightPass(c, fg) {
+    const top = G.top, bot = TW.other(top), S = G.S, lit = G.state === 'won';
     const mT = warmMap(S.lay[top], top, lit, idx + top + lit), mB = warmMap(S.lay[bot], bot, lit, idx + bot + lit);
     const im = c.getImageData(0, 0, PW, PH), d = im.data;
-    const fl = 1 + 0.05 * Math.sin(t * 7.3) + 0.03 * Math.sin(t * 17.1);       // 烛火轻轻晃
+    const fl = 1 + 0.05 * Math.sin(t * 7.3) + 0.03 * Math.sin(t * 17.1);
+    const gain = fg ? 1.9 : 0.7;
     for (let y = 0; y < PH; y++) {
-      const half = y < WY ? 0 : 1, w = half ? bot : top, wy = half ? PH - 1 - y : y, m = half ? mB : mT, A = AMB[w];
-      const under = half ? 0.92 : 1;                                            // 水下那一面再暗一点
+      const half = y < WY ? 0 : 1, w = half ? bot : top, wy = half ? PH - 1 - y : y, m = half ? mB : mT;
+      const A = fg ? AMB[w] : [1, 1, 1];
       for (let x = 0; x < PW; x++) {
-        let v = m[wy * PW + x] * fl;
-        if (v > 0) v = Math.floor(v * 8 + B4[((y & 3) << 2) | (x & 3)]) / 8;     // 八档，4×4 抖动
         const i = (y * PW + x) * 4;
-        d[i] = Math.min(255, d[i] * (A[0] + v * WARM[0] * 2.0) * under);
-        d[i + 1] = Math.min(255, d[i + 1] * (A[1] + v * WARM[1] * 2.0) * under);
-        d[i + 2] = Math.min(255, d[i + 2] * (A[2] + v * WARM[2] * 2.0) * under);
+        if (fg && d[i + 3] === 0) continue;
+        let v = m[wy * PW + x] * fl;
+        if (!fg && v < 0.04) continue;
+        if (v > 0) v = Math.floor(v * 8 + B4[((y & 3) << 2) | (x & 3)]) / 8;
+        d[i] = Math.min(255, d[i] * (A[0] + v * WARM[0] * gain));
+        d[i + 1] = Math.min(255, d[i + 1] * (A[1] + v * WARM[1] * gain));
+        d[i + 2] = Math.min(255, d[i + 2] * (A[2] + v * WARM[2] * gain));
       }
     }
     c.putImageData(im, 0, 0);
   }
-  // 影子：脚下一小团；夜里灯在旁边，影子顺着地面往背光那边拖长；白天日头在左上，影子短短往右。墙在白天也往右落一道。
+  // 影子：脚下一小团；夜里顺着地面往背光那边拖长；白天日头在左上，影子短短往右。墙在白天也往右落一道。
   function shadows(c, lay, w, mirror, bodies) {
     const p = painter(c, mirror);
-    const sh = a => `rgba(12,10,24,${a.toFixed(2)})`;
+    const sh = a => `rgba(10,8,18,${a.toFixed(2)})`;
     if (w === 'day') for (const s of lay.solids) {
       if (isGround(s)) continue;
-      const gy = groundAt(lay, s.x1 + 1); if (gy >= 90) continue;
-      for (let k = 0; k < 9; k++) p(s.x1 + 2 + k, gy, 1, 2, sh(0.26 * (1 - k / 9)));
+      const gy = groundAt(lay, s.x1 + 2); if (gy >= 90) continue;
+      for (let k = 0; k < 9; k++) p(s.x1 + 2 + k, gy, 1, 2, sh(0.3 * (1 - k / 9)));
     }
     for (const b of bodies) {
       if (!b.ground) continue;
       const fx = Math.round(b.x), fy = Math.round(b.y);
-      p(fx - 3, fy, 7, 1, sh(0.32));
-      if (w === 'day') { for (let k = 0; k < 7; k++) p(fx + 3 + k, fy, 1, 1, sh(0.22 * (1 - k / 7))); continue; }
+      p(fx - 3, fy, 7, 1, sh(0.38)); p(fx - 2, fy + 1, 5, 1, sh(0.2));
+      if (w === 'day') { for (let k = 0; k < 7; k++) p(fx + 3 + k, fy, 1, 1, sh(0.24 * (1 - k / 7))); continue; }
       if (lay.lamp === undefined) continue;
-      const q = lampPos(lay), dx = fx - q.x - 3, r = 76;
+      const q = lampPos(lay), dx = fx - q.x, r = 72;
       if (Math.abs(dx) > r) continue;
-      const dir = dx >= 0 ? 1 : -1, len = Math.min(34, 6 + Math.abs(dx) * 0.45), a0 = 0.5 * (1 - Math.abs(dx) / r);
+      const dir = dx >= 0 ? 1 : -1, len = Math.min(34, 6 + Math.abs(dx) * 0.45), a0 = 0.55 * (1 - Math.abs(dx) / r);
       for (let k = 0; k < len; k++) p(fx + dir * (3 + k), fy, 1, 1 + (k < len * 0.6 ? 1 : 0), sh(a0 * (1 - k / len)));
     }
   }
   // 水面灯影：上面那一面的灯在水面上拖一道碎光
   function waterGlints(c, lay, w) {
     if (lay.lamp === undefined || (w !== 'night' && G.state !== 'won')) return;
-    const q = lampPos(lay), x = q.x + 1;
+    const q = lampPos(lay), x = q.x;
     c.save(); c.globalCompositeOperation = 'lighter';
-    for (let r = 0; r < 22; r++) {
-      const a = 0.42 * (1 - r / 22), wob = Math.round(Math.sin(r * 1.7 + t * 3.1) * (1 + r * 0.08));
-      const len = 2 + ((r * 7 + Math.floor(t * 6)) % 4);
+    for (let r = 0; r < 24; r++) {
       if (((r + Math.floor(t * 5)) % 3) === 0) continue;
-      c.fillStyle = `rgba(255,196,110,${(Math.floor(a * 6) / 6).toFixed(2)})`;
+      const a = 0.45 * (1 - r / 24), wob = Math.round(Math.sin(r * 1.7 + t * 3.1) * (1 + r * 0.08));
+      const len = 2 + ((r * 7 + Math.floor(t * 6)) % 4);
+      c.fillStyle = `rgba(255,170,80,${(Math.floor(a * 6) / 6).toFixed(2)})`;
       c.fillRect(x - (len >> 1) + wob, WY + 1 + r, len, 1);
     }
     c.restore();
+  }
+  // 另一面的轮廓：用一圈虚线描出“换过去以后”脚下和身边会是什么；换过去会卡住的那个人，虚线变朱红
+  function ghosts(c, lay, w, mirror, warn) {
+    const p = painter(c, mirror);
+    const col = warn ? 'rgba(214,74,52,0.75)' : 'rgba(246,238,220,0.32)';
+    for (const s of lay.solids) {
+      const x0 = Math.round(s.x0), x1 = Math.round(s.x1), y0 = Math.round(s.y0);
+      const ground = isGround(s);
+      for (let x = x0; x < x1; x += 2) p(x, y0 - (ground ? 0 : 1), 1, 1, col);
+      if (!ground) for (let y = y0; y < s.y1; y += 2) { p(x0, y, 1, 1, col); p(x1 - 1, y, 1, 1, col); }
+      else { if (x0 > 0) for (let y = y0; y < 88; y += 2) p(x0, y, 1, 1, col); if (x1 < PW) for (let y = y0; y < 88; y += 2) p(x1 - 1, y, 1, 1, col); }
+    }
+    if (lay.lamp !== undefined) { const q = lampPos(lay); for (let y = q.y - 4; y < q.gy; y += 3) p(q.x + 6, y, 1, 1, col); p(q.x - 1, q.y - 2, 1, 1, col); p(q.x - 2, q.y, 3, 1, col); }
+  }
+  // 前景：驳岸边的芦苇（挡在人前面），雨天石板上的水花
+  function foreground(c, lay, w, mirror) {
+    const p = painter(c, mirror), K = PAL[w];
+    for (const s of lay.solids) {
+      if (!isGround(s)) continue;
+      for (const [ex, dir] of [[s.x0, 1], [s.x1 - 1, -1]]) {
+        if (ex <= 0 || ex >= PW - 1) continue;
+        for (let k = 0; k < 4; k++) {
+          const bx = Math.round(ex + dir * (1 + k * 2)), hgt = 5 + Math.floor(hashi(bx, k) * 6), sway = Math.sin(t * 1.6 + bx * 0.7);
+          for (let y = 0; y < hgt; y++) { const off = Math.round(sway * y / hgt * 1.2) - (y > hgt - 3 ? dir : 0); p(bx + off, s.y0 - y, 1, 1, y > hgt - 2 ? K.moss[2] : K.moss[1]); }
+        }
+      }
+    }
+    if (REG[L.region].wx === 'rain') for (let i = 0; i < 8; i++) {
+      const ph = (t * 3 + hash(i, 11)) % 1, x = Math.floor(hash(i + Math.floor(t * 3 + hash(i, 11)) * 13, 12) * PW), gy = groundAt(lay, x);
+      if (gy >= 90 || ph > 0.5) continue;
+      const r = Math.floor(ph * 6);
+      p(x - r, gy - 1, 1, 1, K.stone[5]); p(x + r, gy - 1, 1, 1, K.stone[5]); if (r === 0) p(x, gy - 2, 1, 1, K.stone[5]);
+    }
+  }
+  // ------------------------------------------------------------ 粒子：落地扬尘、换面时脚下的水圈
+  const FX = [];
+  function puff(half, x, y, kind) {
+    if (kind === 'dust') for (let k = 0; k < 6; k++) FX.push({ half, x: x + (k - 2.5) * 1.2, y: y - 1, vx: (k - 2.5) * 9, vy: -6 - hash(k, t) * 10, life: 0.35 + hash(k, 3) * 0.15, t: 0, kind });
+    else FX.push({ half, x, y, life: 0.6, t: 0, kind });
+  }
+  function stepFX(dt) {
+    for (const f of FX) { f.t += dt; if (f.kind === 'dust') { f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 30 * dt; f.vx *= 0.9; } }
+    for (let i = FX.length - 1; i >= 0; i--) if (FX[i].t > FX[i].life) FX.splice(i, 1);
+  }
+  function drawFX(c) {
+    for (const f of FX) {
+      const k = f.t / f.life, p = painter(c, f.half === 1);
+      if (f.kind === 'dust') p(f.x, f.y, 1, 1, `rgba(220,214,200,${(0.6 * (1 - k)).toFixed(2)})`);
+      else { const r = Math.floor(2 + k * 9), a = (0.7 * (1 - k)).toFixed(2); p(f.x - r, f.y, 2, 1, `rgba(240,236,220,${a})`); p(f.x + r - 1, f.y, 2, 1, `rgba(240,236,220,${a})`); p(f.x - r + 2, f.y - 1, 2 * r - 4, 1, `rgba(240,236,220,${(a * 0.4).toFixed(2)})`); }
+    }
   }
 
   function traveler(c, b, mirror, reflect) {
@@ -355,32 +501,49 @@
     }
   }
 
+  const fgc = document.createElement('canvas'); fgc.width = PW; fgc.height = PH;
+  const fctx = fgc.getContext('2d'); fctx.imageSmoothingEnabled = false;
   function scene(c) {
-    const top = G.top, bot = TW.other(top), S = G.S;
-    // 上半
+    const top = G.top, bot = TW.other(top), S = G.S, play = phase !== 'title';
+    // 背景：上半这一面，下半另一面翻过来（水越深越暗，分六档）
     bandBg(c, top, false);
-    solids(c, S.lay[top], top, false);
-    if (phase !== 'title') shadows(c, S.lay[top], top, false, [G.A]);
-    lamp(c, S.lay[top], top, false, G.lit, G.underA ? 0.3 : 0);
-    // 下半（水里，上下翻过来）
     bandBg(c, bot, true);
-    for (let k = 0; k < 6; k++) R(c, 0, WY + k * 15, PW, 15, bot === 'night' ? `rgba(6,14,40,${0.2 + k * 0.05})` : `rgba(20,50,70,${0.16 + k * 0.05})`);   // 水越深越暗，分六档
-    solids(c, S.lay[bot], bot, true);
-    if (phase !== 'title') shadows(c, S.lay[bot], bot, true, [G.B]);
-    lamp(c, S.lay[bot], bot, true, G.lit, G.underB ? 0.3 : 0);
-    if (phase !== 'title') {
-      traveler(c, G.A, false, false);
-      traveler(c, G.B, true, true);
+    for (let k = 0; k < 6; k++) R(c, 0, WY + k * 15, PW, 15, bot === 'night' ? `rgba(2,20,30,${0.18 + k * 0.05})` : `rgba(14,40,50,${0.14 + k * 0.05})`);
+    lightPass(c, false);
+    // 前景层：驳岸、墙、船、灯、影子、人，单独打光
+    fctx.clearRect(0, 0, PW, PH);
+    solids(fctx, S.lay[top], top, false);
+    solids(fctx, S.lay[bot], bot, true);
+    if (play) { shadows(fctx, S.lay[top], top, false, [G.A]); shadows(fctx, S.lay[bot], bot, true, [G.B]); }
+    lamp(fctx, S.lay[top], top, false, G.lit);
+    lamp(fctx, S.lay[bot], bot, true, G.lit);
+    if (play) { traveler(fctx, G.A, false, false); traveler(fctx, G.B, true, true); }
+    lightPass(fctx, true);
+    // 水下那一半的前景也隔着一层水：淡淡压一层水色
+    fctx.save(); fctx.globalCompositeOperation = 'source-atop';
+    fctx.fillStyle = bot === 'night' ? 'rgba(4,40,52,0.22)' : 'rgba(20,60,72,0.2)'; fctx.fillRect(0, WY, PW, 90);
+    fctx.restore();
+    c.drawImage(fgc, 0, 0);
+    foreground(c, S.lay[top], top, false);
+    foreground(c, S.lay[bot], bot, true);
+    drawFX(c);
+    // 另一面的轮廓：站稳不动的时候慢慢浮出来
+    if (play && G.state === 'running') {
+      const still = Math.min(stillT, 1);
+      if (still > 0.4) {
+        const pv = G.shiftPreview();
+        c.save(); c.globalAlpha = Math.min(1, (still - 0.4) / 0.4);
+        ghosts(c, S.lay[bot], bot, false, pv && !pv.air && !pv.a);
+        ghosts(c, S.lay[top], top, true, pv && !pv.air && !pv.b);
+        c.restore();
+      }
     }
-    // 水面上下各压一道淡淡的水汽
-    R(c, 0, WY, PW, 6, 'rgba(200,220,240,0.10)');
+    R(c, 0, WY, PW, 5, 'rgba(200,220,240,0.08)');
     weather(c, REG[L.region].wx);
-    lightPass(c);
-    // 发光的东西在光照之后叠上去，才不会被压暗
     for (const [w, mir, under] of [[top, false, G.underA], [bot, true, G.underB]]) {
       const lay = S.lay[w]; if (lay.lamp === undefined) continue;
       const q = lampPos(lay);
-      if (w === 'night' || G.lit) glow(c, q.x, mir ? PH - q.y : q.y, G.lit ? 18 : under ? 14 : 11, [255, 190, 110], G.lit ? 0.6 : under ? 0.45 : 0.32);
+      if (w === 'night' || G.lit) glow(c, q.x - 1, mir ? PH - q.y : q.y, G.lit ? 18 : under ? 14 : 10, [255, 180, 96], G.lit ? 0.6 : under ? 0.45 : 0.3);
     }
     waterGlints(c, S.lay[top], top);
     waterLine(c);
@@ -440,7 +603,7 @@
       text(c, L.name, 0, 154, a, true);
       text(c, L.line, 0, 166, 0.8 * a, true);
     }
-    if (idx === 0 && card > 3.2 && card < 16) text(c, '← → 走   空格 跳   Shift 水上水下对调   R 重来', 0, PH - 6, 0.7 * Math.min(1, (card - 3.2) / 0.5, (16 - card) / 2), true);
+    if (idx === 0 && card > 3.2 && card < 16) text(c, '← → 走  空格 跳  Shift 对调  Z 退一步  R 重来', 0, PH - 6, 0.7 * Math.min(1, (card - 3.2) / 0.5, (16 - card) / 2), true);
   }
 
   // ------------------------------------------------------------ 一帧
@@ -470,7 +633,7 @@
     if (G.state === 'failing') R(bctx, 0, 0, PW, PH, `rgba(8,8,20,${Math.min(0.7, G.winT * 2)})`);
     // 暗角
     const vg = bctx.createRadialGradient(PW / 2, PH / 2, PH * 0.45, PW / 2, PH / 2, PH * 0.98);
-    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(10,10,24,0.35)');
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(10,10,24,0.22)');
     bctx.fillStyle = vg; bctx.fillRect(0, 0, PW, PH);
     ui(bctx);
     ctx.drawImage(back, 0, 0);
@@ -483,9 +646,13 @@
     while (acc >= C.STEP) {
       acc -= C.STEP; t += C.STEP; card += C.STEP; phaseT += C.STEP;
       if (shiftFx >= 0) { shiftFx += C.STEP; if (shiftFx > 0.32) shiftFx = -1; }
+      stepFX(C.STEP);
       if (G && phase === 'play') {
         G.events.length = 0;
+        const pre = G.snap();
         G.step();
+        if (G.events.some(e => e[0] === 'shift')) { undo.push(pre); if (undo.length > 50) undo.shift(); }
+        stillT = G.A.ground && G.B.ground && Math.abs(G.A.vx) < 1 && G.state === 'running' ? stillT + C.STEP : 0;
         for (const [n, a] of G.events) onEvent(n, a);
         if (G.state === 'won' && G.winT > 1.8) {
           if (idx + 1 < LEVELS.length) startLevel(idx + 1); else { phase = 'end'; sfx('arrive'); }
@@ -503,9 +670,10 @@
       shiftFx = 0;
       sfx(G.top === 'night' ? 'switch_night' : 'switch_day');
       music(L.region, G.top);
+      puff(0, G.A.x, G.A.y, 'ring'); puff(1, G.B.x, G.B.y, 'ring');
     } else if (n === 'blocked') sfx('blocked');
     else if (n === 'jump') sfx('jump', 0.5);
-    else if (n === 'land') sfx('land', 0.5);
+    else if (n === 'land') { sfx('land', 0.5); if (G.A.landed) puff(0, G.A.x, G.A.y, 'dust'); if (G.B.landed) puff(1, G.B.x, G.B.y, 'dust'); }
     else if (n === 'win') { sfx('lantern'); setTimeout(() => sfx('gate'), 350); }
     else if (n === 'fail') sfx('splash');
     if (G.A.ground && Math.abs(G.A.vx) > 20) { const k = Math.floor(G.A.walk / 34); if (k !== stepN) { stepN = k; sfx('step' + (k & 1), 0.35); } }
@@ -523,7 +691,8 @@
     else if (k === 'ArrowRight' || k === 'KeyD') G.input.move(1, true);
     else if (k === 'Space' || k === 'ArrowUp' || k === 'KeyW') G.input.jump();
     else if (k === 'ShiftLeft' || k === 'ShiftRight') G.input.shift();
-    else if (k === 'KeyR') { G.reset(); }
+    else if (k === 'KeyR') { G.reset(); undo.length = 0; }
+    else if (k === 'KeyZ' || k === 'Backspace') { if (undo.length && G.state !== 'won') { G.load(undo.pop()); G.inL = G.inR = false; sfx('ui', 0.5); } }
     else if (k === 'BracketRight' && e.altKey) startLevel(Math.min(LEVELS.length - 1, idx + 1));
     else return;
     e.preventDefault();
@@ -552,6 +721,7 @@
     bind('br', () => G.input.move(1, true), () => G.input.move(1, false));
     bind('bj', () => G.input.jump());
     bind('bs', () => G.input.shift());
+    const bz = document.getElementById('bz'); if (bz) bind('bz', () => { if (undo.length && G.state !== 'won') { G.load(undo.pop()); sfx('ui', 0.5); } });
   }
   if (window.matchMedia && matchMedia('(pointer: coarse)').matches) touchUI();
 

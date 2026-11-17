@@ -141,9 +141,9 @@
     }
 
     // ------------------------------------------------------------ 换面
-    function tryShift() {
+    function tryShift(preview) {
       // 两人都站稳了才换得过去（不能在半空里连按换面“踩着两面”过河）
-      if (!G.A.ground || !G.B.ground) { G.blockedT = 0.35; emit('blocked', 'air'); return; }
+      if (!G.A.ground || !G.B.ground) { if (preview) return { ok: false, air: true, a: true, b: true }; G.blockedT = 0.35; emit('blocked', 'air'); return; }
       const wa = other(G.top), wb = G.top;          // A 将进入的那一面、B 将进入的那一面
       const fit = (b, w) => {
         const lay = S.lay[w], s = bodyHit(lay, b.x, b.y);
@@ -152,6 +152,7 @@
         return null;
       };
       const fa = fit(G.A, wa), fb = fit(G.B, wb);
+      if (preview) return { ok: !!(fa && fb), a: !!fa, b: !!fb };
       if (!fa || !fb) { G.blockedT = 0.35; emit('blocked', !fa ? 'A' : 'B'); return; }
       G.A.y = fa.y; G.B.y = fb.y;
       for (const b of [G.A, G.B]) { b.riding = null; b.rideDx = undefined; }
@@ -191,6 +192,8 @@
       if (ua && ub) { G.state = 'won'; G.winT = 0; G.lit = true; emit('win'); }
     };
 
+    // 画面用：现在换面的话，谁会卡住（不改任何状态）
+    G.shiftPreview = function () { return tryShift(true); };
     // 求解器用：存档 / 读档
     G.snap = function () {
       const cp = b => [b.x, b.y, b.vx, b.vy, b.ground, b.coyote, b.riding ? S.lay.day.movers.indexOf(b.riding) + ':' + S.lay.night.movers.indexOf(b.riding) : '', b.rideDx];
