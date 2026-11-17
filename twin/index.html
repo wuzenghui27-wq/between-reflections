@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>倒影之间</title>
+<style>
+  @font-face { font-family: FusionPixel; src: url('../assets/fonts/fusion-pixel-12.woff2') format('woff2'); }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+  #pad { display: none; position: fixed; inset: auto 0 12px 0; justify-content: space-between; padding: 0 16px; pointer-events: none; }
+  #pad div { pointer-events: auto; display: flex; gap: 12px; }
+  #pad button { width: 64px; height: 64px; border-radius: 50%; border: 0; background: rgba(246, 238, 220, 0.18); color: rgba(246, 238, 220, 0.8); font: 20px sans-serif; touch-action: none; }
+</style>
+</head>
+<body>
+<canvas id="c" width="320" height="180"></canvas>
+<div id="pad"><div><button id="bl">←</button><button id="br">→</button></div><div><button id="bs">⇅</button><button id="bj">↑</button></div></div>
+<script src="../js/atlas.js"></script>
+<script src="core.js"></script>
+<script src="levels.js"></script>
+<script src="play.js"></script>
+</body>
+</html>
