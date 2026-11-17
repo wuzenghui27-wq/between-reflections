@@ -2,12 +2,10 @@
   "unit": "px",
   "note": "坐标以 320×180 画面的像素为单位；y 是脚底/底边；w 是属于哪一面：day / night / both",
   "regions": [
-    {"id":"jiangnan","no":"第一站","name":"江南烟雨","line":"白天水涨，夜里落潮","weathers":{"rain":5,"fog":3,"clear":2}},
-    {"id":"garden","no":"第二站","name":"宫苑园林","line":"白天檐起，夜里檐落","weathers":{"clear":5,"rain":3,"snow":2}},
-    {"id":"autumn","no":"第三站","name":"秋山湖泊","line":"白天风起，夜里萤火","weathers":{"clear":4,"wind":4,"snow":1}},
-    {"id":"wall","no":"第四站","name":"长城","line":"白天搬砖，夜里烽火","weathers":{"clear":5,"wind":4,"snow":2}},
-    {"id":"glacier","no":"第五站","name":"雪山冰川","line":"夜里冰生，白天冰床","weathers":{"clear":4,"fog":3,"snow":3}},
-    {"id":"tibet","no":"第六站","name":"雪域圣湖","line":"夜里湖面结冰","weathers":{"clear":6,"snow":4}}
+    {"id":"jiangnan","no":"第一站","name":"江南水镇","line":"白天水涨，夜里落潮","weathers":{"rain":5,"fog":3,"clear":2}},
+    {"id":"garden","no":"第二站","name":"苏州园林","line":"白天檐起，夜里檐落","weathers":{"clear":5,"rain":3,"snow":2}},
+    {"id":"palace","no":"第三站","name":"宫城","line":"白天灯转，夜里灯停","weathers":{"clear":5,"snow":3,"wind":2}},
+    {"id":"wall","no":"第四站","name":"长城关隘","line":"白天搬砖，夜里烽火","weathers":{"clear":5,"wind":4,"snow":2}}
   ],
   "rooms": [
     { "name": "落潮", "line": "夜里水退，石板出水", "world": "day", "region": 0, "sx": 18, "sy": 140, "exitY": 140, "hint": {"text":"","dur":8,"tag":"switch"},
@@ -39,20 +37,6 @@
         {"t":"deco","kind":"lotus","x":190,"x1":190,"y":140},
         {"t":"deco","kind":"rail","x":228,"x1":250,"y":115},
         {"t":"deco","kind":"spr","x":288,"x1":288,"y":115,"name":"stonelamp"}
-      ] },
-    { "name": "水车", "line": "白天它转，夜里它停", "world": "day", "region": 0, "sx": 18, "sy": 140, "exitY": 140,
-      "items": [
-        {"t":"ground","x0":0,"x1":105,"y":140,"w":"both","kind":"ground"},
-        {"t":"wheel","cx":158,"cy":130,"r":24,"n":4,"period":10,"hw":7},
-        {"t":"ground","x0":208,"x1":260,"y":153,"w":"night","kind":"steps"},
-        {"t":"ground","x0":260,"x1":320,"y":140,"w":"both","kind":"ground"},
-        {"t":"lamp","x":283,"y":140,"w":"both"},
-        {"t":"deco","kind":"willow","x":38,"x1":38,"y":140},
-        {"t":"deco","kind":"rail","x":63,"x1":104,"y":140},
-        {"t":"deco","kind":"spr","x":10,"x1":10,"y":140,"name":"stonelamp"},
-        {"t":"deco","kind":"lotus","x":118,"x1":118,"y":140},
-        {"t":"deco","kind":"lotus","x":198,"x1":198,"y":140},
-        {"t":"deco","kind":"spr","x":265,"x1":265,"y":140,"name":"reed"}
       ] },
     { "name": "压石", "line": "水停的那一刻，箱子落在哪里", "world": "day", "region": 0, "sx": 18, "sy": 140, "exitY": 140,
       "items": [
@@ -113,7 +97,33 @@
         {"t":"deco","kind":"rail","x":230,"x1":250,"y":75},
         {"t":"deco","kind":"spr","x":293,"x1":293,"y":75,"name":"flowers"}
       ] },
-    { "name": "走马灯", "line": "白天灯转，夜里马停", "world": "night", "region": 1, "sx": 18, "sy": 140, "exitY": 95,
+    { "name": "秋千", "line": "荡到最高处，换到夜里", "world": "day", "region": 1, "sx": 18, "sy": 140, "exitY": 125,
+      "items": [
+        {"t":"ground","x0":0,"x1":118,"y":140,"w":"both","kind":"ground"},
+        {"t":"swing","cx":160,"cy":58,"r":63,"amp":0.85,"period":6,"phase":0,"hw":8},
+        {"t":"ground","x0":205,"x1":225,"y":130,"w":"night","kind":"firefly"},
+        {"t":"ground","x0":240,"x1":320,"y":125,"w":"both","kind":"ground"},
+        {"t":"lamp","x":275,"y":125,"w":"both"},
+        {"t":"deco","kind":"spr","x":28,"x1":28,"y":140,"name":"maple"},
+        {"t":"deco","kind":"spr","x":100,"x1":100,"y":140,"name":"tuft"},
+        {"t":"deco","kind":"lotus","x":130,"x1":130,"y":140},
+        {"t":"deco","kind":"lotus","x":190,"x1":190,"y":140},
+        {"t":"deco","kind":"spr","x":300,"x1":300,"y":125,"name":"maple"}
+      ] },
+    { "name": "萤火", "line": "萤火只在夜里连成路", "world": "night", "region": 1, "sx": 18, "sy": 140, "exitY": 88,
+      "items": [
+        {"t":"ground","x0":0,"x1":75,"y":140,"w":"both","kind":"ground"},
+        {"t":"ground","x0":83,"x1":140,"y":125,"w":"night","kind":"firefly"},
+        {"t":"drift","cx":200,"cy":103,"amp":38,"period":8,"phase":-1.5707963267948966,"hw":11,"style":"kite"},
+        {"t":"ground","x0":250,"x1":320,"y":88,"w":"both","kind":"ground"},
+        {"t":"lamp","x":280,"y":88,"w":"both"},
+        {"t":"deco","kind":"spr","x":25,"x1":25,"y":140,"name":"maple"},
+        {"t":"deco","kind":"spr","x":65,"x1":65,"y":140,"name":"stones"},
+        {"t":"deco","kind":"lotus","x":113,"x1":113,"y":140},
+        {"t":"deco","kind":"lotus","x":225,"x1":225,"y":140},
+        {"t":"deco","kind":"spr","x":305,"x1":305,"y":88,"name":"tuft"}
+      ] },
+    { "name": "走马灯", "line": "白天灯转，夜里马停", "world": "night", "region": 2, "sx": 18, "sy": 140, "exitY": 95,
       "items": [
         {"t":"ground","x0":0,"x1":130,"y":140,"w":"both","kind":"ground"},
         {"t":"wheel","cx":175,"cy":125,"r":28,"n":4,"period":12,"hw":7,"style":"lamp"},
@@ -125,7 +135,7 @@
         {"t":"deco","kind":"rail","x":218,"x1":240,"y":95},
         {"t":"deco","kind":"spr","x":290,"x1":290,"y":95,"name":"flowers"}
       ] },
-    { "name": "铜锣", "line": "锣只在白天挂着", "world": "night", "region": 1, "sx": 18, "sy": 140, "exitY": 140,
+    { "name": "铜锣", "line": "锣只在白天挂着", "world": "night", "region": 2, "sx": 18, "sy": 140, "exitY": 140,
       "items": [
         {"t":"ground","x0":0,"x1":113,"y":140,"w":"both","kind":"ground"},
         {"t":"eave","x0":113,"x1":163,"yd":140,"yn":103},
@@ -150,32 +160,6 @@
         {"t":"deco","kind":"lotus","x":140,"x1":140,"y":140},
         {"t":"deco","kind":"lotus","x":200,"x1":200,"y":140},
         {"t":"deco","kind":"spr","x":295,"x1":295,"y":98,"name":"maple"}
-      ] },
-    { "name": "萤火", "line": "萤火只在夜里连成路", "world": "night", "region": 2, "sx": 18, "sy": 140, "exitY": 88,
-      "items": [
-        {"t":"ground","x0":0,"x1":75,"y":140,"w":"both","kind":"ground"},
-        {"t":"ground","x0":83,"x1":140,"y":125,"w":"night","kind":"firefly"},
-        {"t":"drift","cx":200,"cy":103,"amp":38,"period":8,"phase":-1.5707963267948966,"hw":11,"style":"kite"},
-        {"t":"ground","x0":250,"x1":320,"y":88,"w":"both","kind":"ground"},
-        {"t":"lamp","x":280,"y":88,"w":"both"},
-        {"t":"deco","kind":"spr","x":25,"x1":25,"y":140,"name":"maple"},
-        {"t":"deco","kind":"spr","x":65,"x1":65,"y":140,"name":"stones"},
-        {"t":"deco","kind":"lotus","x":113,"x1":113,"y":140},
-        {"t":"deco","kind":"lotus","x":225,"x1":225,"y":140},
-        {"t":"deco","kind":"spr","x":305,"x1":305,"y":88,"name":"tuft"}
-      ] },
-    { "name": "秋千", "line": "荡到最高处，换到夜里", "world": "day", "region": 2, "sx": 18, "sy": 140, "exitY": 125,
-      "items": [
-        {"t":"ground","x0":0,"x1":118,"y":140,"w":"both","kind":"ground"},
-        {"t":"swing","cx":160,"cy":58,"r":63,"amp":0.85,"period":6,"phase":0,"hw":8},
-        {"t":"ground","x0":205,"x1":225,"y":130,"w":"night","kind":"firefly"},
-        {"t":"ground","x0":240,"x1":320,"y":125,"w":"both","kind":"ground"},
-        {"t":"lamp","x":275,"y":125,"w":"both"},
-        {"t":"deco","kind":"spr","x":28,"x1":28,"y":140,"name":"maple"},
-        {"t":"deco","kind":"spr","x":100,"x1":100,"y":140,"name":"tuft"},
-        {"t":"deco","kind":"lotus","x":130,"x1":130,"y":140},
-        {"t":"deco","kind":"lotus","x":190,"x1":190,"y":140},
-        {"t":"deco","kind":"spr","x":300,"x1":300,"y":125,"name":"maple"}
       ] },
     { "name": "湖心", "line": "木箱漂到桩前，萤火夜里才亮", "world": "day", "region": 2, "sx": 18, "sy": 140, "exitY": 103,
       "items": [
@@ -237,100 +221,6 @@
         {"t":"deco","kind":"spr","x":95,"x1":95,"y":140,"name":"stones"},
         {"t":"deco","kind":"spr","x":185,"x1":185,"y":140,"name":"tuft"},
         {"t":"deco","kind":"spr","x":300,"x1":300,"y":140,"name":"banner"}
-      ] },
-    { "name": "冰柱", "line": "冰柱只在夜里长出来", "world": "day", "region": 4, "sx": 18, "sy": 140, "exitY": 140,
-      "items": [
-        {"t":"ground","x0":0,"x1":90,"y":140,"w":"both","kind":"ground"},
-        {"t":"ground","x0":105,"x1":120,"y":133,"w":"night","kind":"pillar"},
-        {"t":"ground","x0":140,"x1":155,"y":118,"w":"night","kind":"pillar"},
-        {"t":"ground","x0":175,"x1":190,"y":133,"w":"night","kind":"pillar"},
-        {"t":"ground","x0":205,"x1":320,"y":140,"w":"both","kind":"ground"},
-        {"t":"lamp","x":260,"y":140,"w":"both"},
-        {"t":"deco","kind":"spr","x":25,"x1":25,"y":140,"name":"pine"},
-        {"t":"deco","kind":"spr","x":70,"x1":70,"y":140,"name":"crystal"},
-        {"t":"deco","kind":"spr","x":225,"x1":225,"y":140,"name":"pine"},
-        {"t":"deco","kind":"spr","x":295,"x1":295,"y":140,"name":"crystal"}
-      ] },
-    { "name": "冰床", "line": "冰床白天滑，夜里停", "world": "day", "region": 4, "sx": 18, "sy": 140, "exitY": 108,
-      "items": [
-        {"t":"ground","x0":0,"x1":75,"y":140,"w":"both","kind":"ground"},
-        {"t":"drift","cx":135,"cy":140,"amp":48,"period":10,"phase":-1.5707963267948966,"hw":11,"style":"sled"},
-        {"t":"ground","x0":195,"x1":208,"y":128,"w":"night","kind":"pillar"},
-        {"t":"ground","x0":225,"x1":320,"y":108,"w":"both","kind":"ground"},
-        {"t":"lamp","x":265,"y":108,"w":"both"},
-        {"t":"deco","kind":"spr","x":23,"x1":23,"y":140,"name":"pine"},
-        {"t":"deco","kind":"spr","x":63,"x1":63,"y":140,"name":"crystal"},
-        {"t":"deco","kind":"spr","x":295,"x1":295,"y":108,"name":"pine"}
-      ] },
-    { "name": "冰裂", "line": "荡过去，夜里落脚", "world": "night", "region": 4, "sx": 18, "sy": 140, "exitY": 130,
-      "items": [
-        {"t":"ground","x0":0,"x1":118,"y":140,"w":"both","kind":"ground"},
-        {"t":"swing","cx":160,"cy":58,"r":63,"amp":0.85,"period":6,"phase":3.141592653589793,"hw":8},
-        {"t":"ground","x0":210,"x1":225,"y":135,"w":"night","kind":"pillar"},
-        {"t":"ground","x0":240,"x1":320,"y":130,"w":"both","kind":"ground"},
-        {"t":"lamp","x":275,"y":130,"w":"both"},
-        {"t":"deco","kind":"spr","x":25,"x1":25,"y":140,"name":"pine"},
-        {"t":"deco","kind":"spr","x":80,"x1":80,"y":140,"name":"crystal"},
-        {"t":"deco","kind":"spr","x":300,"x1":300,"y":130,"name":"pine"}
-      ] },
-    { "name": "雪桥", "line": "冰床滑到尽头，再让夜来", "world": "day", "region": 4, "sx": 18, "sy": 140, "exitY": 90,
-      "items": [
-        {"t":"ground","x0":0,"x1":95,"y":140,"w":"both","kind":"ground"},
-        {"t":"drift","cx":160,"cy":130,"amp":50,"period":8,"phase":1.5707963267948966,"hw":11,"style":"sled"},
-        {"t":"ground","x0":228,"x1":245,"y":110,"w":"night","kind":"pillar"},
-        {"t":"ground","x0":260,"x1":320,"y":90,"w":"both","kind":"ground"},
-        {"t":"lamp","x":290,"y":90,"w":"both"},
-        {"t":"deco","kind":"spr","x":20,"x1":20,"y":140,"name":"pine"},
-        {"t":"deco","kind":"spr","x":70,"x1":70,"y":140,"name":"crystal"},
-        {"t":"deco","kind":"spr","x":305,"x1":305,"y":90,"name":"pine"}
-      ] },
-    { "name": "结冰", "line": "夜里湖面结冰，能走", "world": "day", "region": 5, "sx": 18, "sy": 140, "exitY": 140,
-      "items": [
-        {"t":"ground","x0":0,"x1":95,"y":140,"w":"both","kind":"ground"},
-        {"t":"ground","x0":95,"x1":225,"y":142,"w":"night","kind":"ice"},
-        {"t":"ground","x0":225,"x1":320,"y":140,"w":"both","kind":"ground"},
-        {"t":"box","x":250,"y":140,"w":"day","kind":"mani"},
-        {"t":"lamp","x":280,"y":140,"w":"both"},
-        {"t":"deco","kind":"spr","x":30,"x1":30,"y":140,"name":"chorten"},
-        {"t":"deco","kind":"spr","x":75,"x1":75,"y":140,"name":"flowers"},
-        {"t":"deco","kind":"spr","x":240,"x1":240,"y":140,"name":"stones"},
-        {"t":"deco","kind":"spr","x":300,"x1":300,"y":140,"name":"chorten"}
-      ] },
-    { "name": "冻箱", "line": "箱子漂到哪里，冰就把它冻在哪里", "world": "day", "region": 5, "sx": 18, "sy": 140, "exitY": 113,
-      "items": [
-        {"t":"ground","x0":0,"x1":75,"y":140,"w":"both","kind":"ground"},
-        {"t":"crate","x":50,"y":140,"tx":240},
-        {"t":"ground","x0":75,"x1":250,"y":142,"w":"night","kind":"ice"},
-        {"t":"ground","x0":250,"x1":320,"y":113,"w":"both","kind":"ground"},
-        {"t":"lamp","x":280,"y":113,"w":"both"},
-        {"t":"deco","kind":"spr","x":20,"x1":20,"y":140,"name":"chorten"},
-        {"t":"deco","kind":"spr","x":65,"x1":65,"y":140,"name":"stones"},
-        {"t":"deco","kind":"spr","x":300,"x1":300,"y":113,"name":"flowers"}
-      ] },
-    { "name": "河灯", "line": "河灯白天漂，夜里冻住", "world": "night", "region": 5, "sx": 18, "sy": 140, "exitY": 140,
-      "items": [
-        {"t":"ground","x0":0,"x1":75,"y":140,"w":"both","kind":"ground"},
-        {"t":"drift","cx":150,"cy":145,"amp":55,"period":10,"phase":-1.5707963267948966,"hw":11,"style":"hedeng"},
-        {"t":"ground","x0":75,"x1":105,"y":142,"w":"night","kind":"ice"},
-        {"t":"bellGate","bx":190,"by":108,"bw":"night","gx":250,"gy":140,"kind":"bell"},
-        {"t":"ground","x0":225,"x1":320,"y":140,"w":"both","kind":"ground"},
-        {"t":"lamp","x":280,"y":140,"w":"both"},
-        {"t":"deco","kind":"spr","x":25,"x1":25,"y":140,"name":"chorten"},
-        {"t":"deco","kind":"spr","x":63,"x1":63,"y":140,"name":"flowers"},
-        {"t":"deco","kind":"spr","x":235,"x1":235,"y":140,"name":"stones"},
-        {"t":"deco","kind":"spr","x":300,"x1":300,"y":140,"name":"chorten"}
-      ] },
-    { "name": "圣湖", "line": "最后一盏灯", "world": "day", "region": 5, "sx": 18, "sy": 140, "exitY": 125,
-      "items": [
-        {"t":"ground","x0":0,"x1":65,"y":140,"w":"both","kind":"ground"},
-        {"t":"crate","x":45,"y":140,"tx":160},
-        {"t":"ground","x0":65,"x1":130,"y":142,"w":"night","kind":"ice"},
-        {"t":"plateGate","px":160,"py":142,"gx":270,"gy":125},
-        {"t":"ground","x0":175,"x1":215,"y":142,"w":"night","kind":"ice"},
-        {"t":"ground","x0":215,"x1":320,"y":125,"w":"both","kind":"ground"},
-        {"t":"lamp","x":295,"y":125,"w":"both"},
-        {"t":"deco","kind":"spr","x":20,"x1":20,"y":140,"name":"chorten"},
-        {"t":"deco","kind":"spr","x":230,"x1":230,"y":125,"name":"flowers"}
       ] }
   ]
 }

@@ -97,7 +97,7 @@
   // 粒子与手感
   const PT = RF.Particles;
   const DUST = { jiangnan: ['#b5b7b0', '#8a8c8c'], garden: ['#f4f1ea', '#c9c4b8'], autumn: ['#c8a070', '#d0682a', '#8a9a3a'],
-    wall: ['#c0a888', '#8a6a4c'], glacier: ['#ffffff', '#c8e4f4'], tibet: ['#ffffff', '#dfe6ee'] };
+    palace: ['#f4f1ea', '#c9c4b8'], wall: ['#c0a888', '#8a6a4c'], glacier: ['#ffffff', '#c8e4f4'], tibet: ['#ffffff', '#dfe6ee'] };
   const dustCols = () => DUST[LV.regions[LV.regionAt(G.px)].id] || ['#cccccc'];
   G.on('jump', () => { A.sfx('jump'); PT.dust(G.px, G.foot, 6, dustCols(), 0.6); });
   G.on('land', () => { A.sfx('land'); PT.dust(G.px, G.foot, 8, dustCols(), 0.8); });

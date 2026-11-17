@@ -8,10 +8,12 @@
   const R = {
     jiangnan: { bg: { rain: ['8536', '8537'], fog: ['8538', '8539'], clear: ['8539', '8535', '8538'] },
       water: RF.CFG.WATER.jiangnan, waterCol: ['#5d7f88', '#1f2d4a'], tile: 'stone', glow: 0.7 },
-    garden: { bg: { clear: ['8532', '8531', '8535'], snow: ['8534', '8533'], rain: ['8531', '8532'] },
+    garden: { bg: { clear: ['8535', '8532'], snow: ['8535'], rain: ['8535', '8532'] },
       water: RF.CFG.WATER.garden, waterCol: ['#5a8aa8', '#1a2848'], tile: 'marble', glow: 0.7 },
     autumn: { bg: { clear: ['8522', '8519', '8521'], wind: ['8520', '8522', '8521'], snow: ['8518', '8519'] },
       water: RF.CFG.WATER.autumn, waterCol: ['#2f7a72', '#10283a'], tile: 'earth', glow: 0.8 },
+    palace: { bg: { clear: ['8531', '8533'], snow: ['8534'], wind: ['8531', '8533'] },
+      water: RF.CFG.WATER.palace, waterCol: ['#5a8aa8', '#1a2848'], tile: 'marble', glow: 0.7 },
     wall: { bg: { clear: ['8530'], wind: ['8530'], snow: ['8528'] },
       abyss: ['#3a3040', '#0c0a18'], tile: 'brick', glow: 0.8 },
     glacier: { bg: { clear: ['8524', '8525', '8526'], fog: ['8527', '8526'], snow: ['8527', '8524'] },
@@ -22,9 +24,10 @@
   // 夜景：作者提供的夜景像素画（新背景像素/夜间真实N → assets/bg/night/nN.png），按画面内容分到各站；没载入时退回把白天的图压暗
   const NIGHT_BG = {
     jiangnan: ['n2', 'n12', 'n5'],   // 白墙水巷与乌篷船、灯笼河街与石拱桥、雨后灯笼老街
-    garden: ['n3', 'n10', 'n11'],    // 灯火楼阁、樱花水榭、宫殿与画舫
+    garden: ['n10', 'n3'],           // 樱花水榭、灯火楼阁
+    palace: ['n11', 'n3'],           // 宫殿与画舫、灯火楼阁
     autumn: ['n9', 'n7'],            // 黄昏河谷村落、廊下望山村灯火
-    wall: ['n6'],                    // 悬崖栈道与瀑布（险峻山势，接长城的深谷）
+    wall: ['n6', 'n9'],              // 悬崖栈道与瀑布、廊下望山间灯火
     glacier: ['n1'],                 // 群山云海下的山村
     tibet: ['n4', 'n8']              // 雪山湖畔、湖边山城
   };
@@ -179,7 +182,7 @@
     if (!tilesImg) return null;
     const k = rid + world;
     if (!TSET[k]) {
-      const row = TROW.indexOf(rid); if (row < 0) return null;
+      const row = TROW.indexOf(rid === 'palace' ? 'garden' : rid); if (row < 0) return null;
       const c = X.canvas(128, 16), x = c.getContext('2d');
       x.drawImage(tilesImg, 0, row * 16, 128, 16, 0, 0, 128, 16);
       const lo = REGTONE[rid].low, d = lo ? mixTint(c, lo, 0.16) : c;
@@ -354,6 +357,7 @@
     jiangnan: { col: ['#17251f', '#080b16'], hi: '#2e4a3a', kinds: ['reed', 'reed', 'grass', 'rock'], top: 'willow' },
     garden: { col: ['#241a1e', '#0a0a16'], hi: '#4a3a3a', kinds: ['grass', 'rock', 'grass'], top: 'eave' },
     autumn: { col: ['#2a160e', '#0c0a14'], hi: '#6a3a1a', kinds: ['grass', 'rock', 'grass', 'reed'], top: 'maple' },
+    palace: { col: ['#241a1e', '#0a0a16'], hi: '#4a3a3a', kinds: ['grass', 'rock', 'grass'], top: 'eave' },
     wall: { col: ['#211a18', '#0a0a14'], hi: '#4a3a30', kinds: ['rock', 'grass', 'rock'], top: null },
     glacier: { col: ['#18202e', '#080c18'], hi: '#e8f0f8', kinds: ['rock', 'rock', 'grass'], top: null },
     tibet: { col: ['#1a1e2c', '#080a16'], hi: '#e8eef6', kinds: ['rock', 'grass', 'rock'], top: 'flags' }

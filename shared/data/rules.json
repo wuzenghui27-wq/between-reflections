@@ -40,6 +40,10 @@
       "day": 150,
       "night": 150
     },
+    "palace": {
+      "day": 150,
+      "night": 150
+    },
     "tibet": {
       "day": 146.5,
       "night": 142,

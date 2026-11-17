@@ -20,6 +20,7 @@
     jiangnan: { root: 62, lead: 'pluck', kick: 0.06, wood: 0, gong: 0, seed: 1 },
     garden: { root: 67, lead: 'pluck', kick: 0.08, wood: 0.05, gong: 0, seed: 2 },
     autumn: { root: 64, lead: 'marimba', kick: 0.08, wood: 0.03, gong: 0, seed: 3 },
+    palace: { root: 64, lead: 'bell', kick: 0.07, wood: 0.04, gong: 0.03, seed: 3 },
     wall: { root: 60, lead: 'pluck', kick: 0.13, wood: 0.07, gong: 0.06, seed: 4 },
     glacier: { root: 57, lead: 'marimba', kick: 0.09, wood: 0, gong: 0.03, seed: 5 },
     tibet: { root: 65, lead: 'bell', kick: 0.06, wood: 0, gong: 0.04, seed: 6 }

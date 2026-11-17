@@ -68,7 +68,7 @@
             const sx = wx - e.camPix; r(sx, y - 3, 4, 3, col); r(sx, y - 3, 4, 1, top);
           }
         }
-        if (rid === 'garden') {       // 栏杆
+        if (rid === 'garden' || rid === 'palace') {       // 栏杆
           const col = night ? '#8a8ca8' : '#ece8de';
           r(x0, y - 4, w, 1, col);
           for (let wx = Math.ceil((x0 + e.camPix) / 10) * 10; wx < x1 + e.camPix; wx += 10) r(wx - e.camPix, y - 5, 1, 5, col);
@@ -212,7 +212,7 @@
   // 地面边缘：积雪的檐、垂下的草，让方块的地面不那么生硬
   const LIP = {
     jiangnan: { grass: ['#5d7a4a', '#3e5a34'] }, autumn: { grass: ['#9aa83a', '#5a6a2a'], leaf: '#d0682a' },
-    garden: null, wall: { grass: ['#7a8a4a', '#4a5a2a'] }, glacier: { snow: true }, tibet: { snow: true }
+    garden: null, palace: null, wall: { grass: ['#7a8a4a', '#4a5a2a'] }, glacier: { snow: true }, tibet: { snow: true }
   };
   function edgeLip(s, x0, x1, y, rid, e) {
     const night = e.world === 'night', w = x1 - x0;
@@ -518,6 +518,7 @@
     jiangnan: ['reed', 'stonelamp', 'post', 'tuft', 'reed'],
     garden: ['peony', 'redpost', 'stones', 'flowers'],
     autumn: ['maple', 'tuft', 'stones', 'flowers', 'maple'],
+    palace: ['redpost', 'stones', 'flowers'],
     wall: ['banner', 'stones', 'tuft'],
     glacier: ['crystal', 'pine', 'stones', 'pine'],
     tibet: ['chorten', 'flowers', 'stones', 'tuft']
