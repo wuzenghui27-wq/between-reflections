@@ -406,8 +406,7 @@ def deco_wall(cv, d, ox):
             p = PROPS['lattice_window']                  # 32×32
             px, py = hx1, hy1
         inside = atlas.flood_inside(p, p.w // 2, p.h // 2)
-        if h['kind'] == 'gate':                          # 门洞一直开到门槛以下（人要走进去）
-            inside |= {(x, y) for x in range(4, 44) for y in range(40, 58) if not p.get(x, y)}
+        # 月洞门只开圆圈里面；圈外到门槛之间的角落仍是白墙，免得里层从圈外漏出来
         for (x, y) in inside:
             cv.put(px + x, py + y, None)
         if h['kind'] == 'window':                        # 漏窗下沿到地面也开通（窗做成落地的“景窗”）
