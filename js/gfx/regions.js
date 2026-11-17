@@ -439,7 +439,7 @@
   }
 
   RF.Regions = {
-    R, load, foreground, backdrop, regionMix, lowland, pattern, tileset, weatherBack, weatherFront, bgAt,
+    R, load, foreground, backdrop, drawImg, regionMix, lowland, pattern, tileset, weatherBack, weatherFront, bgAt,
     get sprites() { return (curRid && spritesReg[curRid]) || sprites; }, get spritesNight() { return spritesNight; }, get spritesDim() { return spritesDim; }, get spritesGhost() { return spritesGhost; }
   };
 })();

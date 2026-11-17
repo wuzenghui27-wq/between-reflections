@@ -716,27 +716,38 @@
     X.glow(cx, by - 6, 12, [255, 200, 120], night ? 0.85 : 0.35);
     if (!e.reduce) { const k = (e.t * 4) | 0; r(bx0 - 3 - k % 3, by + 4, 3, 1, 'rgba(255,220,160,0.5)'); r(bx1 + k % 3, by + 4, 3, 1, 'rgba(255,220,160,0.5)'); }
   }
+  // 会动的踏板本身（轮上的踏板、走马灯下挂灯的踏板、秋千板）。引擎版把它们单独做成精灵，按逻辑位置逐像素画，不跟着转动帧走。
+  function boardOf(q, e) {
+    const night = e.world === 'night', W = night ? WDN : WD;
+    const bx0 = Math.round(q.x0 / P) - e.camPix, bx1 = Math.round(q.x1 / P) - e.camPix, by = Math.round(q.y / P);
+    if (q.kind === 'wheel' && q.style === 'lamp') { board(bx0, bx1, by, night, e); spr('lantern', Math.round((bx0 + bx1) / 2), by + 16, night); still(bx0, bx1, by, e); return; }
+    if (q.kind === 'wheel') { r(bx0 + 2, by + 3, 1, 2, W[3]); r(bx1 - 3, by + 3, 1, 2, W[3]); board(bx0, bx1, by, night, e); still(bx0, bx1, by, e); return; }
+    if (q.kind === 'swing') {
+      board(bx0, bx1, by, night, e);
+      const lx = Math.round((bx0 + bx1) / 2);                          // 板下挂一盏小红灯
+      r(lx, by + 3, 1, 2, '#3a2216'); spr('lantern', lx, by + 14, night);
+      X.glow(lx, by + 9, 8, [255, 180, 110], night ? 0.6 : 0.3);
+      still(bx0, bx1, by, e);
+    }
+  }
   function movers(e, x0, x1) {
     const night = e.world === 'night', done = {};
     const sx = x => Math.round(x / P) - e.camPix, sy = y => Math.round(y / P);
     for (const m of LV.movers) {
       if (m.cx + 400 < x0 || m.cx - 400 > x1) continue;
+      if (e.onlyTrail && m.kind !== 'drift') continue;
+      if (e.onlyGroup !== undefined && e.onlyGroup !== m) { if (!(m.kind === 'wheel' && e.onlyGroup.group === m.group && e.onlyGroup.kind === 'wheel')) continue; }
       if (m.kind === 'wheel') {
         if (done[m.group]) continue; done[m.group] = 1;
         const ms = LV.movers.filter(q => q.group === m.group), cx = sx(m.cx), cy = sy(m.cy), R = m.r / P;
         const W = night ? WDN : WD;
         if (m.style === 'lamp') {
           horseLamp(ms, cx, cy, R, night, e);
-          for (const q of ms) { const bx0 = sx(q.x0), bx1 = sx(q.x1), by = sy(q.y); board(bx0, bx1, by, night, e); spr('lantern', Math.round((bx0 + bx1) / 2), by + 16, night); still(bx0, bx1, by, e); }
+          if (!e.noBoards) for (const q of ms) boardOf(q, e);
           continue;
         }
         RF.Scene.waterwheel(ms, cx, cy, R, LV.regions[LV.regionAt(m.cx)].id, e);
-        for (const q of ms) {
-          const bx0 = sx(q.x0), bx1 = sx(q.x1), by = sy(q.y);
-          r(bx0 + 2, by + 3, 1, 2, W[3]); r(bx1 - 3, by + 3, 1, 2, W[3]);              // 踏板底下的两个托
-          board(bx0, bx1, by, night, e);
-          still(bx0, bx1, by, e);
-        }
+        if (!e.noBoards) for (const q of ms) boardOf(q, e);
         continue;
       }
       if (m.kind === 'swing') {
@@ -746,7 +757,7 @@
         // 横梁：小檐头
         r(px - 9, py - 3, 19, 2, night ? '#2a2c40' : '#3a3c50'); r(px - 8, py - 1, 17, 2, night ? '#7a3a4a' : '#b8302a');
         r(px - 10, py - 4, 1, 1, '#e8c25a'); r(px + 10, py - 4, 1, 1, '#e8c25a');
-        if (!night) {                                                    // 摆动的弧线
+        if (!night && !e.noTrail) {                                      // 摆动的弧线
           for (let k = -10; k <= 10; k++) { const th = m.amp * k / 10; r(Math.round(px + Math.sin(th) * m.r / P), Math.round(py + Math.cos(th) * m.r / P) + 4, 1, 1, 'rgba(255,255,255,0.22)'); }
         }
         const rope = night ? '#8a8070' : '#d8c8a0';
@@ -754,17 +765,14 @@
           const n = Math.max(Math.abs(bx - ax), Math.abs(by - py));
           for (let k = 0; k <= n; k++) r(Math.round(ax + (bx - ax) * k / n), Math.round(py + (by - py) * k / n), 1, 1, rope);
         }
-        board(bx0, bx1, by, night, e);
-        const lx = Math.round((bx0 + bx1) / 2);                          // 板下挂一盏小红灯
-        r(lx, by + 3, 1, 2, '#3a2216'); spr('lantern', lx, by + 14, night);
-        X.glow(lx, by + 9, 8, [255, 180, 110], night ? 0.6 : 0.3);
-        still(bx0, bx1, by, e);
+        if (!e.noBoards) boardOf(m, e);
         continue;
       }
       // 浮木：一截圆木，两头有年轮，下面一圈水纹
       const bx0 = sx(m.x0), bx1 = sx(m.x1), by = sy(m.y), w = bx1 - bx0;
       if (m.style) {
-        if (!night) for (let k = sx(m.cx - m.amp - m.hw); k <= sx(m.cx + m.amp + m.hw); k += 3) r(k, by + (m.style === 'kite' ? -3 : 5), 1, 1, 'rgba(255,255,255,0.25)');
+        if (!night && !e.noTrail) for (let k = sx(m.cx - m.amp - m.hw); k <= sx(m.cx + m.amp + m.hw); k += 3) r(k, by + (m.style === 'kite' ? -3 : 5), 1, 1, 'rgba(255,255,255,0.25)');
+        if (e.onlyTrail) continue;
         if (m.style === 'boat') {                 // 龙头朝着划的方向
           if (m.dir < 0) { const c = X.ctx; c.save(); c.translate(bx0 + bx1, 0); c.scale(-1, 1); dragonBoat(bx0, bx1, by, night, !night, e); c.restore(); }
           else dragonBoat(bx0, bx1, by, night, !night, e);
@@ -776,7 +784,8 @@
         still(bx0, bx1, by, e);
         continue;
       }
-      if (!night) for (let k = sx(m.cx - m.amp - m.hw); k <= sx(m.cx + m.amp + m.hw); k += 3) r(k, by + 5, 1, 1, 'rgba(255,255,255,0.25)');
+      if (!night && !e.noTrail) for (let k = sx(m.cx - m.amp - m.hw); k <= sx(m.cx + m.amp + m.hw); k += 3) r(k, by + 5, 1, 1, 'rgba(255,255,255,0.25)');
+      if (e.onlyTrail) continue;
       const L1 = night ? ['#8a7a7a', '#5e5260', '#3e3446'] : ['#b88a5a', '#8a5e38', '#5e3c24'];
       r(bx0 - 1, by - 1, w + 2, 6, '#17131c');
       r(bx0, by, w, 1, L1[0]); r(bx0, by + 1, w, 2, L1[1]); r(bx0, by + 3, w, 1, L1[2]);
@@ -787,5 +796,5 @@
     }
   }
 
-  RF.Props = { movers, spr, solid, ghostSolid, hazard, bell, lantern, mirage, decorations, coins, moongate, roller, chimes };
+  RF.Props = { movers, boardOf, spr, solid, ghostSolid, hazard, bell, lantern, mirage, decorations, coins, moongate, roller, chimes };
 })();
