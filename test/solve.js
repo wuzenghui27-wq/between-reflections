@@ -4,7 +4,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const dir = process.argv[2] || '.';
 const ctx = { console, Math, Object, Array, JSON, Infinity, localStorage: { getItem() { return null; }, setItem() { } } };
 ctx.window = ctx; vm.createContext(ctx);
-for (const f of ['js/config.js', 'js/util.js', 'js/level.js', 'js/game.js'])
+for (const f of ['js/config.js', 'js/util.js', 'js/rooms_data.js', 'js/level.js', 'js/game.js'])
   vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f });
 const RF = ctx.RF, C = RF.CFG, LV = RF.LEVEL;
 const G = RF.createGame();
