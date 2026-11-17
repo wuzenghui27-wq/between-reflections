@@ -131,6 +131,7 @@ func _autoplay_feed() -> void:
 	if plan_room != G.room:
 		plan_room = G.room
 		plan_step = 0
+		G.load_room(G.room, true)        # 和求解器一样，从这一景的起点开始走
 	var acts: Array = []
 	for rp in plan["rooms"]:
 		if int(rp["room"]) == G.room:
