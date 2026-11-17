@@ -180,6 +180,7 @@ namespace BR
                 DrawLayer(i, G.world, "base");
                 if (G.state == "running" || G.state == "intro") DrawLayer(i, G.world, "ghost");
             }
+            foreach (int i in VisibleRooms()) Reflection(i);
             // 换天：旧的一面盖上来，从人身上往外洇开（圈边三道 4 像素宽的抖动带，和 godot/wipe.gdshader 同一算法）
             if (G.wipeT >= 0)
             {
@@ -201,6 +202,71 @@ namespace BR
                 Glow(Px(G.px) - CamPix(), (int)cy, 30, col, (1 - k) * 0.4);
             }
             WeatherBack(Wx(), G.world, G.animT, CamPix());
+        }
+
+        // ------------------------------------------------------------ 倒影：静水里映出的是另一面的世界
+        // 水线以下、没被地面和障碍挡住的格子，按水线上下翻过来取另一面底层图的像素；只翻转、不缩放，涟漪是整像素的错行。
+        readonly Dictionary<string, bool[]> waterMask = new Dictionary<string, bool[]>();
+
+        public static int ReflWy(double water, double pix) => (int)Math.Round(water / pix, MidpointRounding.AwayFromZero);
+        // 第 depth 行（水线下第几行）的错位与不透明度：两个引擎同一公式
+        public static int ReflShift(int depth, double t) => depth <= 2 ? 0 : (int)Math.Round(Math.Sin(depth * 0.8 + t * 2.5) * 1.2, MidpointRounding.AwayFromZero);
+        public static double ReflAlpha(int depth, bool night)
+        {
+            double a = Math.Max(0, (night ? 0.6 : 0.45) - depth * 0.012);
+            return Math.Floor(a * 8) / 8;
+        }
+
+        bool[] WaterMask(int i, string w, int wy)
+        {
+            string key = i + w;
+            if (waterMask.TryGetValue(key, out var m)) return m;
+            m = new bool[PW * PH];
+            var r = LV.rooms[i];
+            int ox = Px(r.x0);
+            for (int y = wy + 1; y < PH; y++)
+                for (int x = 0; x < PW; x++) m[y * PW + x] = true;
+            foreach (var s in LV.solids)
+            {
+                if (s.thin || (s.w != "both" && s.w != w) || s.x1 <= r.x0 || s.x0 >= r.x1) continue;
+                int x0 = Math.Max(0, Px(s.x0) - ox), x1 = Math.Min(PW, Px(s.x1) - ox), y0 = Math.Max(0, Px(s.y));
+                for (int y = y0; y < PH; y++) for (int x = x0; x < x1; x++) m[y * PW + x] = false;
+            }
+            foreach (var h in LV.hazards)
+            {
+                if (h.gate != "" || (h.w != "both" && h.w != w) || h.x1 <= r.x0 || h.x0 >= r.x1) continue;
+                int x0 = Math.Max(0, Px(h.x0) - ox), x1 = Math.Min(PW, Px(h.x1) - ox), y0 = Math.Max(0, Px(h.y0)), y1 = Math.Min(PH, Px(h.y1));
+                for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) m[y * PW + x] = false;
+            }
+            waterMask[key] = m;
+            return m;
+        }
+
+        void Reflection(int i)
+        {
+            if (!(G.state == "running" || G.state == "intro" || G.state == "failing" || G.state == "paused")) return;
+            if (!LV.WATER.TryGetValue(LV.regions[LV.rooms[i].region].id, out var wl)) return;
+            string w = G.world, ow = Game.Other(w);
+            int wy = ReflWy(wl.Get(w), P), dx = RoomDx(i);
+            var src = T(S(O(O(Art(i)["layers"])[ow])["base"]));
+            var mask = WaterMask(i, w, wy);
+            bool night = w == "night";
+            for (int y = wy + 1; y < PH; y++)
+            {
+                int depth = y - wy, sy = wy - depth;
+                if (sy < 0) break;
+                double a = ReflAlpha(depth, night);
+                if (a <= 0) break;
+                int sh = ReflShift(depth, G.animT);
+                for (int x = 0; x < PW; x++)
+                {
+                    if (!mask[y * PW + x]) continue;
+                    int fx = x + dx, sx = x + sh;
+                    if (fx < 0 || fx >= PW || sx < 0 || sx >= PW) continue;
+                    int si = (sy * PW + sx) * 4;
+                    frame.Blend(fx, y, src.p[si], src.p[si + 1], src.p[si + 2], (int)(a * src.p[si + 3]));
+                }
+            }
         }
 
         string Wx() => G.weather[LV.RegionAt(G.camX + LV.C["W"] / 2)];

@@ -5,6 +5,7 @@ extends Node2D
 const LevelT := preload("res://godot/level.gd")
 const GameT := preload("res://godot/game.gd")
 const WIPE := preload("res://godot/wipe.gdshader")
+const REFLECT := preload("res://godot/reflect.gdshader")
 const PW := 320
 const PH := 180
 const NUM := ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十"]
@@ -20,6 +21,8 @@ var tex := {}             # 路径 → Texture2D
 var font: FontFile
 var base_node: Node2D
 var wipe_node: Sprite2D
+var refl_nodes: Array[Sprite2D] = []   # 倒影：最多同时三景（换景时镜头滑过）
+var refl_mask := {}       # "景,昼夜" → 水面遮罩
 var top_node: Node2D
 var glow_node: Node2D     # 光：加色叠加
 var ui_node: Node2D       # 暗角、淡出、界面
@@ -60,6 +63,14 @@ func _ready() -> void:
 	base_node = Node2D.new()
 	add_child(base_node)
 	base_node.draw.connect(_draw_base)
+	for k in 3:
+		var rs := Sprite2D.new()
+		rs.centered = false
+		rs.material = ShaderMaterial.new()
+		rs.material.shader = REFLECT
+		rs.visible = false
+		add_child(rs)
+		refl_nodes.append(rs)
 	wipe_node = Sprite2D.new()
 	wipe_node.centered = false
 	wipe_node.material = ShaderMaterial.new()
@@ -208,6 +219,7 @@ func _physics_process(delta: float) -> void:
 		if n != step_n:
 			step_n = n
 			sfx("step%d" % (n & 1))
+	_update_reflections()
 	base_node.queue_redraw()
 	top_node.queue_redraw()
 	glow_node.queue_redraw()
@@ -287,6 +299,61 @@ func _draw_base() -> void:
 		glow(px(G.px) - cam_pix(), cy, 30, wc, (1.0 - k) * 0.4)
 	else:
 		wipe_node.visible = false
+
+# ------------------------------------------------------------ 倒影
+func _water_mask(i: int, w: String, wy: int) -> Texture2D:
+	var key := "%d,%s" % [i, w]
+	if refl_mask.has(key):
+		return refl_mask[key]
+	var im := Image.create(PW, PH, false, Image.FORMAT_L8)
+	im.fill(Color.BLACK)
+	im.fill_rect(Rect2i(0, wy + 1, PW, PH - wy - 1), Color.WHITE)
+	var r: LevelT.Room = LV.rooms[i]
+	var ox := px(r.x0)
+	for s in LV.solids:
+		if s.thin or not GameT.active(s.w, w) or s.x1 <= r.x0 or s.x0 >= r.x1:
+			continue
+		var x0 := maxi(0, px(s.x0) - ox)
+		var x1 := mini(PW, px(s.x1) - ox)
+		var y0 := maxi(0, px(s.y))
+		if x1 > x0 and y0 < PH:
+			im.fill_rect(Rect2i(x0, y0, x1 - x0, PH - y0), Color.BLACK)
+	for h in LV.hazards:
+		if h.gate != "" or not GameT.active(h.w, w) or h.x1 <= r.x0 or h.x0 >= r.x1:
+			continue
+		var hx0 := maxi(0, px(h.x0) - ox)
+		var hx1 := mini(PW, px(h.x1) - ox)
+		var hy0 := maxi(0, px(h.y0))
+		var hy1 := mini(PH, px(h.y1))
+		if hx1 > hx0 and hy1 > hy0:
+			im.fill_rect(Rect2i(hx0, hy0, hx1 - hx0, hy1 - hy0), Color.BLACK)
+	var tx := ImageTexture.create_from_image(im)
+	refl_mask[key] = tx
+	return tx
+
+func _update_reflections() -> void:
+	for rs in refl_nodes:
+		rs.visible = false
+	if not ["running", "intro", "failing", "paused"].has(G.state):
+		return
+	var k := 0
+	var w := G.world
+	var ow := GameT.other(w)
+	for i in visible_rooms():
+		var rid: String = LV.regions[LV.rooms[i].region]["id"]
+		var wl: Dictionary = LV.C["WATER"].get(rid, {})
+		if wl.is_empty():
+			continue
+		var wy := px(float(wl[w]))
+		var rs := refl_nodes[k]
+		k += 1
+		rs.texture = T(art["rooms"][i]["layers"][ow]["base"])
+		rs.position = Vector2(room_dx(i), 0)
+		rs.material.set_shader_parameter("mask", _water_mask(i, w, wy))
+		rs.material.set_shader_parameter("wy", wy)
+		rs.material.set_shader_parameter("t", G.anim_t)
+		rs.material.set_shader_parameter("night", w == "night")
+		rs.visible = true
 
 func _draw_layer(n: CanvasItem, i: int, w: String, which: String) -> void:
 	var L: Dictionary = art["rooms"][i]["layers"][w]

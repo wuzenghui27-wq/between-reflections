@@ -70,6 +70,8 @@ namespace BR
             p[di + 2] = (byte)Math.Min(255, p[di + 2] + b);
         }
 
+        public void Blend(int x, int y, int r, int g, int b, int a) { if (a > 0 && x >= 0 && x < w && y >= 0 && y < h) Put(x, y, r, g, b, Math.Min(255, a)); }
+
         // 盖在不透明的底上（画面底色总是先铺满），所以只算颜色
         void Put(int x, int y, int r, int g, int b, int a)
         {
