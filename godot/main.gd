@@ -151,6 +151,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					G.pause()
 
 func sfx(name: String) -> void:
+	if sfx_pool.is_empty():        # 开场设置时（--autoplay）声音还没准备好
+		return
 	var sp := sfx_pool[sfx_i]
 	sfx_i = (sfx_i + 1) % sfx_pool.size()
 	sp.stream = load("res://shared/audio/sfx_%s.ogg" % name)
