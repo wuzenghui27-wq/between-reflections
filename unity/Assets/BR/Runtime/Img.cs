@@ -60,6 +60,16 @@ namespace BR
                 for (int xx = x0; xx < x1; xx++) Put(xx, yy, c.r, c.g, c.b, c.a);
         }
 
+        // 光：加色叠上去（只加不减，满了就停在 255）
+        public void Add(int x, int y, int r, int g, int b)
+        {
+            if (x < 0 || x >= w || y < 0 || y >= h) return;
+            int di = (y * w + x) * 4;
+            p[di] = (byte)Math.Min(255, p[di] + r);
+            p[di + 1] = (byte)Math.Min(255, p[di + 1] + g);
+            p[di + 2] = (byte)Math.Min(255, p[di + 2] + b);
+        }
+
         // 盖在不透明的底上（画面底色总是先铺满），所以只算颜色
         void Put(int x, int y, int r, int g, int b, int a)
         {

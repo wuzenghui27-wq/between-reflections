@@ -21,6 +21,9 @@ var font: FontFile
 var base_node: Node2D
 var wipe_node: Sprite2D
 var top_node: Node2D
+var glow_node: Node2D     # 光：加色叠加
+var ui_node: Node2D       # 暗角、淡出、界面
+var glows: Array = []     # [x, y, r, Color(0..1), a]
 var vignette: Dictionary = {}
 var acc := 0.0
 var card_t := 99.0        # 题名卡计时
@@ -66,6 +69,15 @@ func _ready() -> void:
 	top_node = Node2D.new()
 	add_child(top_node)
 	top_node.draw.connect(_draw_top)
+	glow_node = Node2D.new()
+	var gm := CanvasItemMaterial.new()
+	gm.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	glow_node.material = gm
+	add_child(glow_node)
+	glow_node.draw.connect(_draw_glows)
+	ui_node = Node2D.new()
+	add_child(ui_node)
+	ui_node.draw.connect(_draw_overlay)
 	for w in ["day", "night"]:
 		var mp := AudioStreamPlayer.new()
 		mp.volume_db = -80.0
@@ -198,6 +210,8 @@ func _physics_process(delta: float) -> void:
 			sfx("step%d" % (n & 1))
 	base_node.queue_redraw()
 	top_node.queue_redraw()
+	glow_node.queue_redraw()
+	ui_node.queue_redraw()
 
 func _autoplay_feed() -> void:
 	if plan_room != G.room:
@@ -249,6 +263,7 @@ func spr(n: CanvasItem, t: Texture2D, s, ax: int, ay: int, mod := Color.WHITE) -
 # ------------------------------------------------------------ 底层：背景、地面、陈设、另一面的预告
 func _draw_base() -> void:
 	var n := base_node
+	glows.clear()
 	n.draw_rect(Rect2(0, 0, PW, PH), Color8(12, 18, 38) if G.world == "night" else Color8(159, 179, 196))
 	if G.state == "title":
 		_draw_layer(n, 0, G.world, "base")
@@ -268,6 +283,8 @@ func _draw_base() -> void:
 		wipe_node.material.set_shader_parameter("center", Vector2(cx - room_dx(G.room), cy))
 		wipe_node.material.set_shader_parameter("radius", e * 380.0 + 12.0)
 		wipe_node.visible = true
+		var wc := Color8(200, 215, 255) if G.world == "night" else Color8(255, 230, 170)
+		glow(px(G.px) - cam_pix(), cy, 30, wc, (1.0 - k) * 0.4)
 	else:
 		wipe_node.visible = false
 
@@ -278,17 +295,165 @@ func _draw_layer(n: CanvasItem, i: int, w: String, which: String) -> void:
 # ------------------------------------------------------------ 上层：物件、人、近景、界面
 func _draw_top() -> void:
 	var n := top_node
-	if G.state != "title":
-		for i in visible_rooms():
-			_draw_objects(n, i)
-		if G.state != "ended":
-			_draw_player(n)
-		for i in visible_rooms():
-			_draw_layer(n, i, G.world, "front")
+	if G.state == "title":
+		return
+	_weather_back(n, _wx(), G.world, G.anim_t, cam_pix())
+	for i in visible_rooms():
+		_draw_objects(n, i)
+		_object_glows(i)
+	if G.state != "ended":
+		_draw_player(n)
+	_weather_front(n, _wx(), G.world, G.anim_t, cam_pix())
+	for i in visible_rooms():
+		_draw_layer(n, i, G.world, "front")
+
+func _draw_overlay() -> void:
+	var n := ui_node
 	n.draw_texture(vignette[G.world], Vector2.ZERO)
 	if G.fade > 0.0:
 		n.draw_rect(Rect2(0, 0, PW, PH), Color(8 / 255.0, 8 / 255.0, 20 / 255.0, G.fade * 0.6))
 	_draw_ui(n)
+
+# ------------------------------------------------------------ 天气（全部是 1x 的像素点和像素块，位置取整；和网页版同一套算法）
+func _wx() -> String:
+	return G.weather[LV.region_at(G.cam_x + float(LV.C["W"]) / 2.0)]
+
+static func _hash(i: float, s: float) -> float:
+	var x := sin(i * 127.1 + s * 311.7) * 43758.5453
+	return x - floor(x)
+
+static func _noise(x: float, s: float) -> float:
+	var i := floorf(x)
+	var f := x - i
+	var t := f * f * (3.0 - 2.0 * f)
+	return _hash(i, s) * (1.0 - t) + _hash(i + 1.0, s) * t
+
+static func _mod(a: float, n: int) -> int:
+	return posmod(int(floor(a)), n)
+
+func _weather_back(n: CanvasItem, w: String, world: String, t: float, cam: int) -> void:
+	if w == "rain":
+		n.draw_rect(Rect2(0, 0, PW, PH), Color8(20, 30, 50, 56))
+	elif w == "fog":
+		n.draw_rect(Rect2(0, 0, PW, PH), Color8(200, 206, 214, 46))
+	elif w == "snow":
+		n.draw_rect(Rect2(0, 0, PW, PH), Color8(220, 230, 245, 20))
+	if w != "fog":
+		return
+	for b in 4:
+		var y0 := 70 + b * 22
+		for x in range(-8, PW + 8, 4):
+			var nz := _noise((x + cam * (0.3 + b * 0.1) + t * 4.0) / 40.0, b + 3)
+			if nz < 0.35:
+				continue
+			n.draw_rect(Rect2(x, y0 + int(round(sin(x / 30.0 + b) * 2.0)), 4, 6 + b * 2), Color(226 / 255.0, 230 / 255.0, 236 / 255.0, (0.10 + nz * 0.18) * (0.6 if world == "night" else 1.0)))
+
+const LEAF := [Color8(0xd0, 0x68, 0x2a), Color8(0xe0, 0xa0, 0x30), Color8(0xb8, 0x40, 0x2a), Color8(0xc8, 0x8a, 0x2a)]
+
+func _weather_front(n: CanvasItem, w: String, world: String, t: float, cam: int) -> void:
+	if w == "rain":
+		var c := Color(210 / 255.0, 225 / 255.0, 245 / 255.0, 0.55) if world == "day" else Color(160 / 255.0, 180 / 255.0, 230 / 255.0, 0.5)
+		for i in 140:
+			var x := _mod(floor(_hash(i, 1) * 360.0 - t * 40.0 - cam), 360) - 20
+			var y := _mod(floor(_hash(i, 2) * 200.0 + t * 230.0), 200) - 10
+			n.draw_rect(Rect2(x, y, 1, 4), c)
+		var sp := Color(220 / 255.0, 235 / 255.0, 1.0, 0.5)
+		for i in 14:          # 地上的水花
+			var ph := fmod(t * 3.0 + _hash(i, 5), 1.0)
+			if ph > 0.3:
+				continue
+			var x2 := int(floor(_hash(i + floor(t * 3.0 + _hash(i, 5)), 6) * PW))
+			n.draw_rect(Rect2(x2 - 1, 139, 1, 1), sp)
+			n.draw_rect(Rect2(x2 + 1, 139, 1, 1), sp)
+			n.draw_rect(Rect2(x2, 138, 1, 1), sp)
+	elif w == "snow":
+		var c2 := Color(1, 1, 1, 0.9)
+		for i in 110:
+			var big := i % 5 == 0
+			var x := _mod(floor(_hash(i, 3) * 340.0 + sin(t * 0.8 + i) * 5.0 - cam * (1.1 if big else 0.7) - t * 6.0), 340) - 10
+			var y := _mod(floor(_hash(i, 4) * 190.0 + t * (22.0 if big else 13.0)), 190) - 5
+			n.draw_rect(Rect2(x, y, 2 if big else 1, 2 if big else 1), c2)
+	elif w == "wind":
+		for i in 34:
+			var x := _mod(floor(_hash(i, 7) * 360.0 - t * (90.0 + _hash(i, 8) * 60.0) - cam * 0.4), 360) - 20
+			var y := int(floor(30.0 + _hash(i, 9) * 130.0 + sin(t * 3.0 + i) * 6.0))
+			n.draw_rect(Rect2(x, y, 2, 1), LEAF[i % 4])
+			if i % 3 == 0:
+				n.draw_rect(Rect2(x + 1, y + 1, 1, 1), LEAF[i % 4])
+		var c3 := Color(1, 1, 1, 0.25)
+		for i in 8:
+			var x := _mod(floor(_hash(i, 11) * 400.0 - t * 220.0), 400) - 40
+			n.draw_rect(Rect2(x, int(floor(40.0 + _hash(i, 12) * 100.0)), 16 + (i % 3) * 8, 1), c3)
+
+# ------------------------------------------------------------ 光：一格一格加上去，亮度分八档、用 2×2 抖动过渡，不做平滑模糊
+const BAYER := [0.125, 0.625, 0.875, 0.375]
+
+func glow(x: int, y: int, r: int, col: Color, a: float) -> void:
+	if a > 0.003 and r > 0:
+		glows.append([x, y, r, col, a])
+
+func _draw_glows() -> void:
+	var n := glow_node
+	var st := (1.0 if G.world == "night" else 0.55) * 1.6      # 网页版另叠一层模糊的光（×0.7），这里并成一层
+	for g in glows:
+		var gx: int = g[0]
+		var gy: int = g[1]
+		var r: int = g[2]
+		var col: Color = g[3]
+		var a: float = g[4]
+		for yy in range(-r, r + 1):
+			for xx in range(-r, r + 1):
+				var d := sqrt(float(xx * xx + yy * yy)) / r
+				if d >= 1.0:
+					continue
+				var p := 1.0 - 0.6 * d / 0.4 if d < 0.4 else 0.4 * (1.0 - (d - 0.4) / 0.6)
+				var v := a * p * st * 8.0
+				var qx := gx + xx
+				var qy := gy + yy
+				var lv := floorf(v) + (1.0 if v - floorf(v) > BAYER[((qy & 1) << 1) | (qx & 1)] else 0.0)
+				if lv <= 0.0:
+					continue
+				var k := lv / 8.0
+				n.draw_rect(Rect2(qx, qy, 1, 1), Color(floor(col.r8 * k) / 255.0, floor(col.g8 * k) / 255.0, floor(col.b8 * k) / 255.0, 1.0))
+
+func _object_glows(i: int) -> void:
+	var cam := cam_pix()
+	var w := G.world
+	var r: LevelT.Room = LV.rooms[i]
+	for l in LV.lanterns:
+		if l.room != i or not GameT.active(l.w, w):
+			continue
+		var x := px(l.x) - cam
+		var y := px(l.y)
+		if G.got.has(l.i):
+			var fl: float = G.flashes.get("l%d" % l.i, 0.0)
+			glow(x, y, int(round(11.0 + fl * 7.0)), Color8(255, 190, 110), 0.6 + fl * 0.2)
+		else:
+			glow(x, y, 6, Color8(255, 220, 150), 0.12 + 0.12 * (0.5 + 0.5 * sin(G.anim_t * 3.0)))
+	for b in LV.bells:
+		if b.x < r.x0 or b.x >= r.x1 or not GameT.active(b.w, w):
+			continue
+		var rung: bool = G.gates.has(b.id)
+		var fl2: float = G.flashes.get(b.id, 0.0)
+		glow(px(b.x) - cam, px(b.y + 34.0) - 9, int(round(8.0 + fl2 * 14.0 if rung else 7.0)), Color8(255, 210, 120), 0.25 + fl2 * 0.5 if rung else 0.5)
+	for h in LV.hazards:
+		if h.gate == "" or h.x0 < r.x0 - 40.0 or h.x0 >= r.x1:
+			continue
+		var open: bool = G.gates.has(h.gate) and not (G.flashes.get(h.gate, 0.0) > 0.5)
+		if not open:
+			glow(int((px(h.x0) + px(h.x1)) / 2) - cam, int(round(px(h.y0) + (px(h.y1) - px(h.y0)) * 0.45)), 6, Color8(255, 200, 90), 0.5)
+	for s in LV.solids:
+		if s.kind != "firefly" or s.x0 < r.x0 or s.x0 >= r.x1 or not GameT.active(s.w, w):
+			continue
+		var x0 := px(s.x0) - cam
+		var x1 := px(s.x1) - cam
+		var y2 := px(s.y)
+		var k := 0
+		for fx in range(x0 + 1, x1, 3):
+			var on := 0.55 + 0.45 * sin(G.anim_t * 3.0 + k * 1.7)
+			if k % 2 == 0:
+				glow(fx, y2 + (k % 2) - (1 if on > 0.8 else 0), 6, Color8(190, 255, 120), 0.6 * on)
+			k += 1
 
 func _draw_objects(n: CanvasItem, i: int) -> void:
 	var A: Dictionary = art["rooms"][i]

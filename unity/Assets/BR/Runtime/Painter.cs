@@ -197,21 +197,133 @@ namespace BR
                     int idx = (ix == 0 && iy == 0) ? 0 : (ix == 1 && iy == 1) ? 1 : (ix == 1 && iy == 0) ? 2 : 3;
                     return idx >= n;
                 });
+                var col = G.world == "night" ? new[] { 200, 215, 255 } : new[] { 255, 230, 170 };
+                Glow(Px(G.px) - CamPix(), (int)cy, 30, col, (1 - k) * 0.4);
             }
+            WeatherBack(Wx(), G.world, G.animT, CamPix());
         }
+
+        string Wx() => G.weather[LV.RegionAt(G.camX + LV.C["W"] / 2)];
 
         void DrawTop()
         {
             if (G.state != "title")
             {
                 var vis = VisibleRooms();
-                foreach (int i in vis) DrawObjects(i);
+                foreach (int i in vis) { DrawObjects(i); ObjectGlows(i); }
                 if (G.state != "ended") DrawPlayer();
+                WeatherFront(Wx(), G.world, G.animT, CamPix());
                 foreach (int i in vis) DrawLayer(i, G.world, "front");
             }
+            FlushGlows();
             frame.Draw(vignette[G.world], 0, 0);
             if (G.fade > 0) frame.Rect(0, 0, PW, PH, new Col(8, 8, 20).A(G.fade * 0.6));
             DrawUI();
+        }
+
+        // ------------------------------------------------------------ 天气（全部是 1x 的像素点和像素块，位置取整）
+        static double Hash(double i, double s) { double x = Math.Sin(i * 127.1 + s * 311.7) * 43758.5453; return x - Math.Floor(x); }
+        static double Noise(double x, double s)
+        {
+            double i = Math.Floor(x), f = x - i, t = f * f * (3 - 2 * f);
+            return Hash(i, s) * (1 - t) + Hash(i + 1, s) * t;
+        }
+        static int Mod(double a, int n) { int v = (int)Math.Floor(a); return ((v % n) + n) % n; }
+
+        void WeatherBack(string w, string world, double t, int cam)
+        {
+            if (w == "rain") frame.Rect(0, 0, PW, PH, new Col(20, 30, 50).A(0.22));
+            else if (w == "fog") frame.Rect(0, 0, PW, PH, new Col(200, 206, 214).A(0.18));
+            else if (w == "snow") frame.Rect(0, 0, PW, PH, new Col(220, 230, 245).A(0.08));
+            if (w != "fog") return;
+            for (int b = 0; b < 4; b++)
+            {
+                int y0 = 70 + b * 22;
+                for (int x = -8; x < PW + 8; x += 4)
+                {
+                    double n = Noise((x + cam * (0.3 + b * 0.1) + t * 4) / 40, b + 3);
+                    if (n < 0.35) continue;
+                    frame.Rect(x, y0 + (int)Math.Round(Math.Sin(x / 30.0 + b) * 2), 4, 6 + b * 2, new Col(226, 230, 236).A((0.10 + n * 0.18) * (world == "night" ? 0.6 : 1)));
+                }
+            }
+        }
+
+        static readonly Col[] LEAF = { new Col(0xd0, 0x68, 0x2a), new Col(0xe0, 0xa0, 0x30), new Col(0xb8, 0x40, 0x2a), new Col(0xc8, 0x8a, 0x2a) };
+
+        void WeatherFront(string w, string world, double t, int cam)
+        {
+            if (w == "rain")
+            {
+                var c = world == "day" ? new Col(210, 225, 245).A(0.55) : new Col(160, 180, 230).A(0.5);
+                for (int i = 0; i < 140; i++)
+                {
+                    int x = Mod(Math.Floor(Hash(i, 1) * 360 - t * 40 - cam), 360) - 20;
+                    int y = Mod(Math.Floor(Hash(i, 2) * 200 + t * 230), 200) - 10;
+                    frame.Rect(x, y, 1, 4, c);
+                }
+                var sp = new Col(220, 235, 255).A(0.5);
+                for (int i = 0; i < 14; i++)                      // 地上的水花
+                {
+                    double ph = (t * 3 + Hash(i, 5)) % 1;
+                    if (ph > 0.3) continue;
+                    int x = (int)Math.Floor(Hash(i + Math.Floor(t * 3 + Hash(i, 5)), 6) * PW);
+                    frame.Rect(x - 1, 139, 1, 1, sp); frame.Rect(x + 1, 139, 1, 1, sp); frame.Rect(x, 138, 1, 1, sp);
+                }
+            }
+            else if (w == "snow")
+            {
+                var c = new Col(255, 255, 255).A(0.9);
+                for (int i = 0; i < 110; i++)
+                {
+                    bool big = i % 5 == 0;
+                    int x = Mod(Math.Floor(Hash(i, 3) * 340 + Math.Sin(t * 0.8 + i) * 5 - cam * (big ? 1.1 : 0.7) - t * 6), 340) - 10;
+                    int y = Mod(Math.Floor(Hash(i, 4) * 190 + t * (big ? 22 : 13)), 190) - 5;
+                    frame.Rect(x, y, big ? 2 : 1, big ? 2 : 1, c);
+                }
+            }
+            else if (w == "wind")
+            {
+                for (int i = 0; i < 34; i++)
+                {
+                    int x = Mod(Math.Floor(Hash(i, 7) * 360 - t * (90 + Hash(i, 8) * 60) - cam * 0.4), 360) - 20;
+                    int y = (int)Math.Floor(30 + Hash(i, 9) * 130 + Math.Sin(t * 3 + i) * 6);
+                    frame.Rect(x, y, 2, 1, LEAF[i % 4]);
+                    if (i % 3 == 0) frame.Rect(x + 1, y + 1, 1, 1, LEAF[i % 4]);
+                }
+                var c = new Col(255, 255, 255).A(0.25);
+                for (int i = 0; i < 8; i++)
+                {
+                    int x = Mod(Math.Floor(Hash(i, 11) * 400 - t * 220), 400) - 40;
+                    frame.Rect(x, (int)Math.Floor(40 + Hash(i, 12) * 100), 16 + (i % 3) * 8, 1, c);
+                }
+            }
+        }
+
+        // ------------------------------------------------------------ 光：一格一格加上去，亮度分八档、用 2×2 抖动过渡，不做平滑模糊
+        struct GlowQ { public int x, y, r; public int[] col; public double a; }
+        readonly List<GlowQ> glows = new List<GlowQ>();
+        static readonly double[] BAYER = { 0.125, 0.625, 0.875, 0.375 };
+
+        void Glow(int x, int y, int r, int[] col, double a) { if (a > 0.003 && r > 0) glows.Add(new GlowQ { x = x, y = y, r = r, col = col, a = a }); }
+
+        void FlushGlows()
+        {
+            double str = (G.world == "night" ? 1.0 : 0.55) * 1.6;      // 网页版另叠一层模糊的光（×0.7），这里并成一层
+            foreach (var g in glows)
+                for (int yy = -g.r; yy <= g.r; yy++)
+                    for (int xx = -g.r; xx <= g.r; xx++)
+                    {
+                        double d = Math.Sqrt(xx * xx + yy * yy) / g.r;
+                        if (d >= 1) continue;
+                        double p = d < 0.4 ? 1 - 0.6 * d / 0.4 : 0.4 * (1 - (d - 0.4) / 0.6);
+                        double v = g.a * p * str * 8;
+                        int px = g.x + xx, py = g.y + yy;
+                        double lv = Math.Floor(v) + ((v - Math.Floor(v)) > BAYER[((py & 1) << 1) | (px & 1)] ? 1 : 0);
+                        if (lv <= 0) continue;
+                        double k = lv / 8;
+                        frame.Add(px, py, (int)(g.col[0] * k), (int)(g.col[1] * k), (int)(g.col[2] * k));
+                    }
+            glows.Clear();
         }
 
         void DrawObjects(int i)
@@ -294,6 +406,47 @@ namespace BR
                 if (lw != "both" && lw != w) continue;
                 var at = A(l["at"]);
                 Spr(ot, O(O(l["spr"])[w])[G.got.Contains(I(l["i"])) ? "lit" : "unlit"], I(at[0]) + dx, I(at[1]));
+            }
+        }
+
+        void ObjectGlows(int i)
+        {
+            int cam = CamPix();
+            string w = G.world;
+            foreach (var l in LV.lanterns)
+            {
+                if (l.room != i || (l.w != "both" && l.w != w)) continue;
+                int x = Px(l.x) - cam, y = Px(l.y);
+                if (G.got.Contains(l.i))
+                {
+                    double fl = G.flashes.TryGetValue("l" + l.i, out var f) ? f : 0;
+                    Glow(x, y, (int)Math.Round(11 + fl * 7), new[] { 255, 190, 110 }, 0.6 + fl * 0.2);
+                }
+                else Glow(x, y, 6, new[] { 255, 220, 150 }, 0.12 + 0.12 * (0.5 + 0.5 * Math.Sin(G.animT * 3)));
+            }
+            var r = LV.rooms[i];
+            foreach (var b in LV.bells)
+            {
+                if (b.x < r.x0 || b.x >= r.x1 || (b.w != "both" && b.w != w)) continue;
+                bool rung = G.gates.Contains(b.id);
+                double fl = G.flashes.TryGetValue(b.id, out var f) ? f : 0;
+                Glow(Px(b.x) - cam, Px(b.y + 34) - 9, (int)Math.Round(rung ? 8 + fl * 14 : 7), new[] { 255, 210, 120 }, rung ? 0.25 + fl * 0.5 : 0.5);
+            }
+            foreach (var h in LV.hazards)
+            {
+                if (h.gate == "" || h.x0 < r.x0 - 40 || h.x0 >= r.x1) continue;
+                bool open = G.gates.Contains(h.gate) && !(G.flashes.TryGetValue(h.gate, out var f) && f > 0.5);
+                if (!open) Glow((Px(h.x0) + Px(h.x1)) / 2 - cam, (int)Math.Round(Px(h.y0) + (Px(h.y1) - Px(h.y0)) * 0.45), 6, new[] { 255, 200, 90 }, 0.5);
+            }
+            foreach (var s in LV.solids)
+            {
+                if (s.kind != "firefly" || s.x0 < r.x0 || s.x0 >= r.x1 || (s.w != "both" && s.w != w)) continue;
+                int x0 = Px(s.x0) - cam, x1 = Px(s.x1) - cam, y = Px(s.y);
+                for (int fx = x0 + 1, k = 0; fx < x1; fx += 3, k++)
+                {
+                    double on = 0.55 + 0.45 * Math.Sin(G.animT * 3 + k * 1.7);
+                    if (k % 2 == 0) Glow(fx, y + (k % 2) - (on > 0.8 ? 1 : 0), 6, new[] { 190, 255, 120 }, 0.6 * on);
+                }
             }
         }
 

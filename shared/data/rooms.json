@@ -4,8 +4,8 @@
   "regions": [
     {"id":"jiangnan","no":"第一站","name":"江南水镇","line":"白天水涨，夜里落潮","weathers":{"rain":5,"fog":3,"clear":2}},
     {"id":"garden","no":"第二站","name":"苏州园林","line":"白天檐起，夜里檐落","weathers":{"clear":5,"rain":3,"snow":2}},
-    {"id":"palace","no":"第三站","name":"宫城","line":"白天灯转，夜里灯停","weathers":{"clear":5,"snow":3,"wind":2}},
-    {"id":"wall","no":"第四站","name":"长城关隘","line":"白天搬砖，夜里烽火","weathers":{"clear":5,"wind":4,"snow":2}}
+    {"id":"palace","no":"第三站","name":"宫城","line":"白天灯转，夜里灯停","weathers":{"snow":3,"clear":5,"wind":2}},
+    {"id":"wall","no":"第四站","name":"长城关隘","line":"白天搬砖，夜里烽火","weathers":{"wind":4,"clear":5,"snow":2}}
   ],
   "rooms": [
     { "name": "落潮", "line": "夜里水退，石板出水", "world": "day", "region": 0, "sx": 18, "sy": 140, "exitY": 140, "hint": {"text":"","dur":8,"tag":"switch"},
