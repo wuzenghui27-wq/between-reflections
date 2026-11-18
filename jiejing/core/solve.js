@@ -24,7 +24,7 @@ const I = (dir, o) => Object.assign({ dir, jump: false, push: false, sel: -1, un
 
 function keyOf(G) {
   const p = G.p;
-  return G.o.join(',') + '|' + p.L + ':' + p.line + ':' + Math.round(p.x * 8);
+  return G.o.join(',') + '|' + G.lit.join('') + '|' + p.L + ':' + p.line + ':' + Math.round(p.x * 8);
 }
 
 // 逐帧执行一个宏动作，返回按键序列；失败返回 null。G 会被推进。
@@ -37,7 +37,8 @@ function runMacro(G, m) {
     const a = G.span(), lim = m.dir > 0 ? a[1] - 0.05 : a[0] + 0.05;
     const ok = () => (m.dir > 0 ? p.x + JJ.C.WALK <= lim : p.x - JJ.C.WALK >= lim);
     if (!ok()) return null;
-    for (let n = 0; n < 1200 && ok(); n++) { go(I(m.dir)); if (G.won) return ins; }
+    const lit0 = G.lit.join('');
+    for (let n = 0; n < 1200 && ok(); n++) { go(I(m.dir)); if (G.won) return ins; if (G.lit.join('') !== lit0) break; }
     go(I(0));
     return ins;
   }
@@ -81,13 +82,14 @@ function runMacro(G, m) {
 // 对第 k 层的每个偏移 v 算一个“接得上哪些”的指纹，指纹相同的连续区间只取中间一个，再加上所有接缝点。
 const ICACHE = new Map();
 function interesting(G, k) {
-  const ck = G.S.id + '|' + k + '|' + G.o.map((v, j) => j === k ? '*' : v).join(',');
+  const ck = G.S.id + '|' + k + '|' + G.o.map((v, j) => j === k ? '*' : v).join(',') + '|' + G.lit.join('');
   if (ICACHE.has(ck)) return ICACHE.get(ck);
   const A = G.S.layers[k], save = G.o[k], tg = new Set();
   let prev = null, runStart = A.min;
   const sig = () => {
     let s = '';
     for (let j = 0; j < 3; j++) for (let li = 0; li < G.S.layers[j].lines.length; li++) for (const q of G.pieces(j, li)) for (const dir of [-1, 1]) {
+      if (dir < 0) s += q[0] + '~' + q[1] + ':';
       const p0 = G.p; G.p = { L: j, line: li, x: (q[0] + q[1]) / 2, y: 0, ground: true };
       const t = G.findTransfer(dir); G.p = p0;
       s += t ? t.L + '.' + t.line + '.' + t.lo + ';' : '-;';
@@ -113,9 +115,14 @@ function fastWalk(G, m) {
   const ok = () => (m.dir > 0 ? p.x + W <= lim : p.x - W >= lim);
   if (!ok()) return null;
   const onLamp = p.L === lm.layer && p.line === lm.line;
+  const mine = [];
+  G.S.lamps.forEach((q, i) => { if (!G.lit[i] && q.layer === p.L && q.line === p.line) mine.push(i); });
   for (let n = 0; n < 1200 && ok(); n++) {
     p.x = p.x + m.dir * W;
+    let lit = false;
+    for (const i of mine) if (Math.abs(p.x - G.S.lamps[i].x) <= JJ.C.LAMP) { G.lit[i] = true; lit = true; }
     if (onLamp && Math.abs(p.x - lm.x) <= JJ.C.LAMP) { G.won = true; return []; }
+    if (lit) break;
   }
   p.y = JJ.yAt(a, p.x); p.face = m.dir;
   return [];

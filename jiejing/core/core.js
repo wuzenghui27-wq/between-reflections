@@ -12,6 +12,9 @@
 // 走出线端后 6 帧内还能起跳（不至于反应不及走空）。
 // 框景（第二卷）：近层上的月洞门、漏窗是“框”。被框住的目标层只在框里存在：框外看不见、也走不上去；
 //   目标层的线被框的左右边裁成几段，段的两端就是框边，走到框边就要借到别层去。站在框里时，带框的层推不动。
+// 虚实（第三卷）：淡墨“虚线”（line.faint）走不上去，只有被点亮的灯照到的那一段才是实路。
+//   灯（lamps）可以有好几盏，走到灯前站稳就点亮；灯光是一个圆（半径 r），推动挂灯的那一层，光也跟着走。
+//   站在虚线上时，挂着亮灯的层推不动（不然脚下的路会被推走）。终点宫灯（lamp）点亮即过关。
 //
 // 约定：所有坐标是 320×180 画面里的像素，y 向下增大。时间按固定 60 帧一秒走，没有随机数。
 // 取整一律用 rnd(v) = floor(v + 0.5)（GDScript 的 round 对 -0.5 的处理与 JS 不同，所以不用内置 round）。
@@ -19,7 +22,7 @@
   'use strict';
   const C = {
     W: 320, H: 180,
-    WALK: 40 / 60,              // 每帧走 2/3 像素
+    WALK: 50 / 60,              // 每帧走 5/6 像素
     PUSH: [20 / 60, 32 / 60, 48 / 60],   // 远、中、近三层每帧推多少像素（远处的东西推起来慢）
     SNAP: 3, SNAP_SLOW: 0.35,   // 吸附半径、吸附范围内的减速
     GLOW: 5,                    // 5 像素以内亮起预光（画面用）
@@ -39,15 +42,18 @@
   //   frames: [ { layer, x1, x2, y1, y2, target, kind } ] }   框：长在 layer 层上（层内坐标），框里只露出 target 层
   // 线的点坐标是层内坐标；屏幕 x = 层内 x + 该层偏移 o。y 不随推动变。
   function build(L) {
-    const S = { id: L.id, layers: [], start: L.start, lamp: L.lamp, frames: (L.frames || []).map(f => ({ layer: f.layer, x1: f.x1, x2: f.x2, y1: f.y1, y2: f.y2, target: f.target })) };
+    const S = { id: L.id, layers: [], start: L.start, lamp: L.lamp,
+      lamps: (L.lamps || []).map(m => ({ layer: m.layer, line: m.line, x: m.x, r: m.r || 40, lit: !!m.lit })), frames: (L.frames || []).map(f => ({ layer: f.layer, x1: f.x1, x2: f.x2, y1: f.y1, y2: f.y2, target: f.target })) };
     S.isTarget = [false, false, false];
     S.hasFrames = [false, false, false];
     for (const f of S.frames) { S.isTarget[f.target] = true; S.hasFrames[f.layer] = true; }
+    S.hasLamps = [false, false, false];
+    for (const m of S.lamps) S.hasLamps[m.layer] = true;
     for (let i = 0; i < 3; i++) {
       const d = (L.layers && L.layers[i]) || { o: 0, min: 0, max: 0, lines: [] };
       S.layers.push({
         o0: d.o || 0, min: d.min === undefined ? (d.o || 0) : d.min, max: d.max === undefined ? (d.o || 0) : d.max,
-        lines: (d.lines || []).map(l => ({ pts: l.pts, x1: l.pts[0][0], x2: l.pts[l.pts.length - 1][0], boat: !!l.boat }))
+        lines: (d.lines || []).map(l => ({ pts: l.pts, x1: l.pts[0][0], x2: l.pts[l.pts.length - 1][0], boat: !!l.boat, faint: !!l.faint }))
       });
     }
     return S;
@@ -78,9 +84,11 @@
       G.foot = { L: st.layer, line: st.line, x: st.x };
       G.bloom = 0; G.won = false; G.wonT = 0; G.frame = 0;
       G.pushing = false; G.pushDir = 0;
+      G.lit = S.lamps.map(m => m.lit);
       G.undo = [];
       G.events = [];
       G.snapCache = {};
+      G.pc = { key: '', m: {} };
     };
     G.reset();
     const emit = (n, a) => G.events.push([n, a]);
@@ -91,27 +99,64 @@
     G.sx = () => G.p.x + G.o[G.p.L];
 
     function snapshot() {
-      return { o: G.o.slice(), p: Object.assign({}, G.p), foot: Object.assign({}, G.foot), sel: G.sel };
+      return { o: G.o.slice(), p: Object.assign({}, G.p), foot: Object.assign({}, G.foot), sel: G.sel, lit: G.lit.slice() };
     }
     function restore(s) {
-      G.o = s.o.slice(); G.p = Object.assign({}, s.p); G.foot = Object.assign({}, s.foot); G.sel = s.sel;
+      G.o = s.o.slice(); G.p = Object.assign({}, s.p); G.foot = Object.assign({}, s.foot); G.sel = s.sel; G.lit = s.lit.slice();
       G.bloom = 0; G.pushing = false; G.pushDir = 0;
     }
     G.snapshot = snapshot; G.restore = restore;
 
     // ---- 框景：第 j 层第 bi 条线现在露出来的几段（层内 x 区间）。不是被框的层就是整条线。
+    // 虚线再和灯光圈求交：逐个整数 x 看线上那一点在不在某盏亮灯的圆里，连成段。
+    // 结果只取决于各层的整数偏移和哪些灯亮着，按这个缓存。
+    G.lampPos = function (i) {
+      const m = S.lamps[i];
+      return [m.x + oi(m.layer), yAt(S.layers[m.layer].lines[m.line], m.x)];
+    };
     G.pieces = function (j, bi) {
       const b = S.layers[j].lines[bi];
-      if (!S.isTarget[j]) return [[b.x1, b.x2]];
-      const out = [], oj = oi(j);
-      for (const f of S.frames) {
-        if (f.target !== j) continue;
-        const of = oi(f.layer);
-        const a1 = Math.max(b.x1, f.x1 + of - oj), a2 = Math.min(b.x2, f.x2 + of - oj);
-        if (a2 - a1 >= 1) out.push([a1, a2]);
+      if (!S.isTarget[j] && !b.faint) return [[b.x1, b.x2]];
+      const key = oi(0) + ',' + oi(1) + ',' + oi(2) + ',' + G.lit.join('');
+      if (G.pc.key !== key) { G.pc.key = key; G.pc.m = {}; }
+      const ck = j * 1000 + bi;
+      if (G.pc.m[ck]) return G.pc.m[ck];
+      let out = [];
+      const oj = oi(j);
+      if (S.isTarget[j]) {
+        for (const f of S.frames) {
+          if (f.target !== j) continue;
+          const of = oi(f.layer);
+          const a1 = Math.max(b.x1, f.x1 + of - oj), a2 = Math.min(b.x2, f.x2 + of - oj);
+          if (a2 - a1 >= 1) out.push([a1, a2]);
+        }
+        out.sort((u, v) => u[0] - v[0]);
+      } else out = [[b.x1, b.x2]];
+      if (b.faint) {
+        const lamps = [];
+        for (let i = 0; i < S.lamps.length; i++) if (G.lit[i]) lamps.push(G.lampPos(i).concat([S.lamps[i].r]));
+        const res = [];
+        for (const q of out) {
+          let run = -1;
+          for (let x = Math.ceil(q[0]); x <= Math.floor(q[1]) + 1; x++) {
+            let on = false;
+            if (x <= Math.floor(q[1])) {
+              const sx = x + oj, sy = yAt(b, x);
+              for (const m of lamps) { const dx = sx - m[0], dy = sy - m[1]; if (dx * dx + dy * dy <= m[2] * m[2]) { on = true; break; } }
+            }
+            if (on && run < 0) run = x;
+            if (!on && run >= 0) { if (x - 1 - run >= 1) res.push([run, x - 1]); run = -1; }
+          }
+        }
+        out = res;
       }
-      out.sort((u, v) => u[0] - v[0]);
+      G.pc.m[ck] = out;
       return out;
+    };
+    // 她脚下有没有路（虚线没被照到、或被框裁掉时就没有）
+    G.supported = function () {
+      for (const q of G.pieces(G.p.L, G.p.line)) if (G.p.x >= q[0] - 1e-6 && G.p.x <= q[1] + 1e-6) return true;
+      return false;
     };
     // 她脚下这一段的左右端（层内 x）
     G.span = function () {
@@ -126,6 +171,7 @@
       if (!p.ground) return true;
       if (k === p.L && !G.line().boat) return false;
       if (S.isTarget[p.L]) for (const f of S.frames) if (f.target === p.L && f.layer === k) return false;
+      if (G.line().faint && S.hasLamps[k]) return false;
       return true;
     };
 
@@ -133,7 +179,7 @@
     // 其他层的偏移不变时结果不变，所以按其他层的偏移缓存。
     G.snapPoints = function (k) {
       const A = S.layers[k];
-      const key = k + ':' + G.o.map((v, j) => j === k ? '*' : oi(j)).join(',');
+      const key = k + ':' + G.o.map((v, j) => j === k ? '*' : oi(j)).join(',') + ':' + G.lit.join('');
       if (G.snapCache[key]) return G.snapCache[key];
       const save = G.o[k], out = [];
       for (let v = A.min; v <= A.max; v++) {
@@ -144,8 +190,9 @@
           S.layers[j].lines.forEach((b, bi) => {
             for (const q of G.pieces(j, bi)) {
               // 端点是线本来的端点：随本层动；是被框边裁出来的：随带框的层动
-              const m1 = q[0] === b.x1 ? j === k : S.hasFrames[k] && S.isTarget[j];
-              const m2 = q[1] === b.x2 ? j === k : S.hasFrames[k] && S.isTarget[j];
+              const cut = (S.hasFrames[k] && S.isTarget[j]) || (b.faint && (S.hasLamps[k] || j === k));
+              const m1 = q[0] === b.x1 ? j === k : cut;
+              const m2 = q[1] === b.x2 ? j === k : cut;
               ends.push([q[0] + oj, yAt(b, q[0]), j, -1, m1]);
               ends.push([q[1] + oj, yAt(b, q[1]), j, 1, m2]);
             }
@@ -235,8 +282,13 @@
       if (G.bloom > 0) {
         G.bloom--;
         if (G.bloom === 0) {
-          const f = G.foot, l = S.layers[f.L].lines[f.line];
+          let f = G.foot, l = S.layers[f.L].lines[f.line];
           Object.assign(G.p, { L: f.L, line: f.line, x: f.x, y: yAt(l, f.x), vx: 0, vy: 0, ground: true });
+          if (!G.supported()) {         // 落脚点的路已经不在了（灯光推走了）：回到起点
+            f = S.start; l = S.layers[f.layer].lines[f.line];
+            Object.assign(G.p, { L: f.layer, line: f.line, x: f.x, y: yAt(l, f.x) });
+            Object.assign(G.foot, { L: f.layer, line: f.line, x: f.x });
+          }
           emit('respawn');
         }
         return;
@@ -313,7 +365,7 @@
           for (let i = 0; i < lay.lines.length; i++) {
             const l = lay.lines[i];
             if (p.x < l.x1 || p.x > l.x2) continue;
-            if (S.isTarget[p.L] && !G.pieces(p.L, i).some(q => p.x >= q[0] && p.x <= q[1])) continue;
+            if ((S.isTarget[p.L] || l.faint) && !G.pieces(p.L, i).some(q => p.x >= q[0] && p.x <= q[1])) continue;
             const ly = yAt(l, p.x);
             if (py <= ly + 0.001 && p.y >= ly) {
               p.y = ly; p.ground = true; p.vy = 0; p.line = i; emit('land');
@@ -328,6 +380,10 @@
       if (p.ground) {
         const sp = G.span();
         if (p.x >= sp[0] + 3 && p.x <= sp[1] - 3) { G.foot.L = p.L; G.foot.line = p.line; G.foot.x = p.x; }
+        for (let i = 0; i < S.lamps.length; i++) {
+          const m = S.lamps[i];
+          if (!G.lit[i] && p.L === m.layer && p.line === m.line && Math.abs(p.x - m.x) <= C.LAMP) { G.lit[i] = true; emit('light', i); }
+        }
         const lm = S.lamp;
         if (p.L === lm.layer && p.line === lm.line && Math.abs(p.x - lm.x) <= C.LAMP) { G.won = true; emit('win'); }
       }
