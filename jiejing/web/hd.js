@@ -4,7 +4,8 @@
   'use strict';
   const S = 6, W = 1920, H = 1080;
   const base = document.currentScript.dataset.base || '..';
-  const cv = document.getElementById('c'), g = cv.getContext('2d');
+  const cv = document.getElementById('c'), mainG = cv.getContext('2d');
+  let g = mainG;
   cv.width = W; cv.height = H;
 
   const load = src => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(src); i.src = src; });
@@ -66,7 +67,8 @@
     const w = x2 - x1;
     c.save(); c.beginPath(); c.rect(x1 - 2, 0, w + 4, H + 400); c.clip();
     if (w >= L.w + R.w) {
-      for (let x = x1 + L.w; x < x2 - R.w; x += Mi.w) c.drawImage(img('w_' + kind + '_middle'), x, y - Mi.top);
+      // 中段先铺满（伸到两端头底下一截），端头压在上面，接口就不会露缝
+      for (let x = x1 + L.w * 0.45; x < x2 - R.w * 0.45; x += Mi.w - 2) c.drawImage(img('w_' + kind + '_middle'), Math.round(x), y - Mi.top);
       c.drawImage(img('w_' + kind + '_left'), x1, y - L.top);
       c.drawImage(img('w_' + kind + '_right'), x2 - R.w, y - R.top);
     } else {
@@ -377,21 +379,51 @@
     tile(img(B.mountains), layerX(0) * 0.5 - 600, 150);
     g.globalAlpha = 0.9; tile(img(B.mist), t * 0.15, 560, B.mist_w); g.globalAlpha = 1;
     tile(img(B.midground), layerX(1) * 0.5 - 900, 300);
-    g.globalAlpha = 0.7; tile(img(B.mist), -t * 0.25 + 700, 760, B.mist_w); g.globalAlpha = 1;
-    // 水
-    const wy = (LV[li].water || 150) * S - 70;
-    if (B.water) { g.globalAlpha = 0.95; tile(img(B.water), t * 0.2, wy, 0, H - wy); g.globalAlpha = 1; }
-    else {
-      const gr = g.createLinearGradient(0, wy, 0, H);
-      if (scene.ch === 3) { gr.addColorStop(0, 'rgba(26,32,44,0.85)'); gr.addColorStop(1, 'rgba(12,16,24,0.95)'); }
-      else { gr.addColorStop(0, 'rgba(214,220,222,0.85)'); gr.addColorStop(1, 'rgba(170,182,190,0.95)'); }
-      g.fillStyle = gr; g.fillRect(0, wy, W, H - wy);
-      g.strokeStyle = scene.ch === 3 ? 'rgba(200,210,230,0.18)' : 'rgba(90,100,110,0.25)'; g.lineWidth = 2;
-      for (let i = 0; i < 60; i++) {
-        const yy = wy + 10 + ((i * 37) % (H - wy - 10)), xx = ((i * 211 + t * (0.3 + (i % 3) * 0.1)) % (W + 200)) - 100;
-        g.beginPath(); g.moveTo(xx, yy); g.lineTo(xx + 40 + (i % 5) * 20, yy); g.stroke();
-      }
+    g.globalAlpha = 0.45; tile(img(B.mist), -t * 0.25 + 700, 640, B.mist_w); g.globalAlpha = 1;
+  }
+  const waterY = () => (LV[li].water || 150) * S - 20;
+  // 水：岸上的东西（远山、中景、各层）倒映下来，逐行左右晃，越远晃得越大；再罩一层水色和水纹
+  let fgC = null, fgG = null, refC = null, refG = null;
+  function drawWater(wy) {
+    const B = M.bg[scene.ch], t = levelT, R = H - wy, night = scene.ch === 3;
+    refG.clearRect(0, 0, W, R);
+    for (let i = 0; i < R; i++) {
+      const sy = wy - 1 - Math.floor(i * 0.92);
+      if (sy < 0) break;
+      const amp = 1.2 + i * 0.03;
+      const dx = Math.sin(i * 0.21 + t * 0.07) * amp + Math.sin(i * 0.053 - t * 0.031) * amp * 0.8;
+      refG.drawImage(cv, 0, sy, W, 1, dx, i, W, 1);
+      refG.drawImage(fgC, 0, sy, W, 1, dx, i, W, 1);
     }
+    // 倒影偏淡、偏冷，往下渐渐看不清
+    refG.globalCompositeOperation = 'source-atop';
+    const tint = refG.createLinearGradient(0, 0, 0, R);
+    if (night) { tint.addColorStop(0, 'rgba(20,26,38,0.35)'); tint.addColorStop(1, 'rgba(10,14,22,0.75)'); }
+    else { tint.addColorStop(0, 'rgba(200,210,208,0.30)'); tint.addColorStop(1, 'rgba(150,170,175,0.65)'); }
+    refG.fillStyle = tint; refG.fillRect(0, 0, W, R);
+    refG.globalCompositeOperation = 'source-over';
+    g.drawImage(refC, 0, 0, W, R, 0, wy, W, R);
+    // 水纹：生成的水面贴图淡淡叠上去，慢慢漂
+    if (B.water) { g.globalAlpha = 0.28; tile(img(B.water), t * 0.25, wy, 0, R); g.globalAlpha = 1; }
+    // 横向的亮纹：一道道短的波光，缓慢移动
+    g.save(); g.globalCompositeOperation = night ? 'lighter' : 'source-over';
+    for (let i = 0; i < 90; i++) {
+      const yy = wy + 6 + Math.pow(((i * 0.6180339) % 1), 1.6) * (R - 6);
+      const len = 20 + (i % 7) * 12 + (yy - wy) * 0.3;
+      const xx = ((i * 271.3 + t * (0.2 + (i % 4) * 0.08)) % (W + 300)) - 150;
+      const a = (0.10 + 0.12 * Math.sin(t / 40 + i)) * (1 - (yy - wy) / R * 0.5);
+      g.strokeStyle = night ? 'rgba(255,220,160,' + a * 0.6 + ')' : 'rgba(255,252,240,' + a * 1.6 + ')';
+      g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(xx, yy); g.lineTo(xx + len, yy); g.stroke();
+      g.strokeStyle = night ? 'rgba(0,0,0,' + a + ')' : 'rgba(70,84,92,' + a + ')';
+      g.beginPath(); g.moveTo(xx + len * 0.3, yy + 3); g.lineTo(xx + len * 1.1, yy + 3); g.stroke();
+    }
+    g.restore();
+    // 岸线：一条很淡的亮雾，把岸和水接起来
+    const sh = g.createLinearGradient(0, wy - 30, 0, wy + 70);
+    const mc = night ? '120,130,150' : '238,234,222';
+    sh.addColorStop(0, 'rgba(' + mc + ',0)'); sh.addColorStop(0.3, 'rgba(' + mc + ',' + (night ? 0.2 : 0.5) + ')'); sh.addColorStop(1, 'rgba(' + mc + ',0)');
+    g.fillStyle = sh; g.fillRect(0, wy - 30, W, 100);
   }
   function drawLayer(k) {
     const L = LV[li], sl = scene.layers[k];
@@ -560,13 +592,26 @@
     g.globalAlpha = 1;
   }
   function draw() {
+    if (!fgC) { fgC = mk(W, H); fgG = fgC.getContext('2d'); refC = mk(W, H); refG = refC.getContext('2d'); }
+    g = mainG;
     g.globalCompositeOperation = 'source-over';
     drawBackdrop();
+    // 各层先画到前景画布上：伸进水里的部分渐渐化进水里
+    g = fgG; g.clearRect(0, 0, W, H);
     for (let k = 0; k < 3; k++) {
       drawLayer(k);
       drawLamps(k);
       if (G.p.L === k) drawTraveler();
     }
+    const wy = waterY();
+    g.globalCompositeOperation = 'destination-out';
+    const fade = g.createLinearGradient(0, wy + 4, 0, wy + 110);
+    fade.addColorStop(0, 'rgba(0,0,0,0)'); fade.addColorStop(1, 'rgba(0,0,0,1)');
+    g.fillStyle = fade; g.fillRect(0, wy + 4, W, H - wy);
+    g.globalCompositeOperation = 'source-over';
+    g = mainG;
+    drawWater(wy);
+    g.drawImage(fgC, 0, 0);
     drawGlow();
     drawBloom();
     drawParticles();
