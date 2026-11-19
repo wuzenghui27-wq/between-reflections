@@ -96,7 +96,7 @@
     c.restore();
   }
   const KIND = { bank: 'bank', plank: 'plank', terrace: 'terrace', floor: 'floor', path: 'path', stair: 'path', arch: 'bank' };
-  function snowKind(k, ch) { if (ch !== 4) return k; return k === 'bank' ? 'snowbank' : k === 'plank' ? 'snowplank' : k; }
+  function snowKind(k, ch) { if (ch !== 4) return k; return { bank: 'snowbank', plank: 'snowplank', path: 'snowpath' }[k] || k; }
   function drawLine(c, l, ch, forceKind) {
     const pts = l.pts;
     if (l.kind === 'boat') {
@@ -182,6 +182,7 @@
     const P = M.props;
     const put = (k, sc, ax = 0.5) => { const p = P[k]; c.drawImage(img('p_' + k), x - p.w * sc * ax, y - p.h * sc, p.w * sc, p.h * sc); };
     if (d.k === 'willow') put('willow', near ? 0.75 : 0.55);
+    else if (d.k === 'pine') put(d.v === 'cliff' ? 'pine_cliff' : 'pine_upright', (near ? 0.8 : 0.5) * (d.s || 1));
     else if (d.k === 'reeds') put('reeds', near ? 0.55 : 0.4);
     else if (d.k === 'house' || d.k === 'hall') { const w = (d.w || 46) * S; put('house', w / P.house.w * 1.25, 0.1); }
     
@@ -569,7 +570,20 @@
       g.beginPath(); g.arc(bloomAt.x + Math.cos(an) * rr, bloomAt.y - 20 + Math.sin(an) * rr * 0.6, 10 + t * 0.5, 0, 7); g.fill();
     }
   }
+  // 前景垂柳：从画面顶上垂下来的几枝，随风慢慢摆（各自的相位不同）
+  const BRANCHES = [[560, 'branch1', 0.9, 0], [690, 'branch3', 0.75, 1.7], [1560, 'branch2', 0.85, 3.1], [1700, 'branch4', 1.0, 4.4]];
+  function drawBranches() {
+    if (scene.ch !== 1 && scene.ch !== 2) return;
+    const t = levelT / 60;
+    for (const [x, k, sc, ph] of BRANCHES) {
+      const P = M.props[k], a = Math.sin(t * 0.7 + ph) * 0.05 + Math.sin(t * 1.9 + ph * 2) * 0.015;
+      g.save(); g.translate(x, -40); g.rotate(a);
+      g.drawImage(img('p_' + k), -P.w * sc / 2, 0, P.w * sc, P.h * sc);
+      g.restore();
+    }
+  }
   function drawFore() {
+    drawBranches();
     if (scene.ch === 1 || scene.ch === 4) {
       const P = M.props.plum, sway = Math.sin(levelT / 90) * 0.01;
       g.save(); g.translate(-30, -20); g.rotate(sway); g.drawImage(img('p_plum'), 0, 0, P.w * 0.9, P.h * 0.9); g.restore();

@@ -128,7 +128,7 @@ def tight(im):
 
 COMPS = {
     'bank': 'W-01_stone_bank', 'plank': 'W-02_wood_bridge', 'terrace': 'W-05_terrace', 'floor': 'W-06_garden_paving',
-    'path': 'W-08_mountain_path', 'snowbank': 'W-09_snow_stone_bank', 'snowplank': 'W-09_snow_wood_bridge', 'ghost': 'W-10_ghost_bridge',
+    'path': 'W-08_mountain_path', 'snowpath': 'W-09_snow_mountain_path', 'snowbank': 'W-09_snow_stone_bank', 'snowplank': 'W-09_snow_wood_bridge', 'ghost': 'W-10_ghost_bridge',
 }
 
 
@@ -168,6 +168,8 @@ def deck_top_soft(im):
 
 
 PROPS = {'willow': 'P-01_weeping_willow', 'plum': 'P-03_plum_corner', 'reeds': 'P-04_reeds', 'house': 'P-05_jiangnan_house',
+         'pine_cliff': 'P-02_pine_cliff', 'pine_upright': 'P-02_pine_upright',
+         'branch1': 'P-01_willow_branch_1', 'branch2': 'P-01_willow_branch_2', 'branch3': 'P-01_willow_branch_3', 'branch4': 'P-01_willow_branch_4',
          'lamp_on': 'P-12_stone_lantern_lit', 'lamp_off': 'P-12_stone_lantern_unlit', 'paper_on': 'P-13_paper_lantern_lit', 'paper_off': 'P-13_paper_lantern_unlit'}
 
 
@@ -175,7 +177,7 @@ def props():
     out = {}
     for k, name in PROPS.items():
         im = load(name)
-        if k != 'plum':
+        if k != 'plum' and not k.startswith('branch'):
             bb = im.getbbox(); im = im.crop(bb)
         save(im, 'p_' + k, 88)
         out[k] = {'w': im.width, 'h': im.height}
@@ -183,7 +185,13 @@ def props():
 
 
 if __name__ == '__main__':
-    characters(); backgrounds(); components(); props()
+    only = os.environ.get('ONLY')          # ONLY=props,components 只重做这几步（其余沿用 data/hd.json）
+    if only:
+        META.update(json.load(open(os.path.join(ROOT, 'data/hd.json'))))
+        for f in only.split(','):
+            globals()[f]()
+    else:
+        characters(); backgrounds(); components(); props()
     json.dump(META, open(os.path.join(ROOT, 'data/hd.json'), 'w'), ensure_ascii=False, indent=1)
     tot = sum(os.path.getsize(os.path.join(OUT, f)) for f in os.listdir(OUT))
     print('hd/ %d 个文件，共 %.1f MB' % (len(os.listdir(OUT)), tot / 1e6))
