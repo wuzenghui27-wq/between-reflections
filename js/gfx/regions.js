@@ -1,5 +1,5 @@
-// 六个区域的背景（来自 assets/bg 的像素画）、地面花纹、水面 / 深谷、天气粒子。
-// 背景按“区域 × 天气”挑图，走过一个区域时依次淡入下一张；夜里用压暗偏蓝的版本。
+// 六个区域的背景（assets/bg 的像素画贴图，原生 320×180，游戏里整数倍放大）、地面花纹、水面 / 深谷、天气粒子。
+// 背景按“区域 × 天气”挑图，走过一个区域时依次淡入下一张；夜里换成 assets/bg/night 的夜景像素画。
 (function () {
   const C = RF.CFG, U = RF.U, X = RF.FX, LV = RF.LEVEL;
   const PW = X.PW, PH = X.PH, P = C.PIX;
@@ -7,22 +7,29 @@
   // ------------------------------------------------------------ 区域设定
   const R = {
     jiangnan: { bg: { rain: ['8536', '8537'], fog: ['8538', '8539'], clear: ['8539', '8535', '8538'] },
-      water: { day: 584, night: 626 }, waterCol: ['#5d7f88', '#1f2d4a'], tile: 'stone', glow: 0.7 },
-    garden: { bg: { clear: ['8532', '8531', '8535'], snow: ['8534', '8533'], rain: ['8531', '8532'] },
-      water: { day: 600, night: 600 }, waterCol: ['#5a8aa8', '#1a2848'], tile: 'marble', glow: 0.7 },
+      water: RF.CFG.WATER.jiangnan, waterCol: ['#5d7f88', '#1f2d4a'], tile: 'stone', glow: 0.7 },
+    garden: { bg: { clear: ['8535', '8532'], snow: ['8535'], rain: ['8535', '8532'] },
+      water: RF.CFG.WATER.garden, waterCol: ['#5a8aa8', '#1a2848'], tile: 'marble', glow: 0.7 },
     autumn: { bg: { clear: ['8522', '8519', '8521'], wind: ['8520', '8522', '8521'], snow: ['8518', '8519'] },
-      water: { day: 600, night: 600 }, waterCol: ['#2f7a72', '#10283a'], tile: 'earth', glow: 0.8 },
+      water: RF.CFG.WATER.autumn, waterCol: ['#2f7a72', '#10283a'], tile: 'earth', glow: 0.8 },
+    palace: { bg: { clear: ['8531', '8533'], snow: ['8534'], wind: ['8531', '8533'] },
+      water: RF.CFG.WATER.palace, waterCol: ['#5a8aa8', '#1a2848'], tile: 'marble', glow: 0.7 },
     wall: { bg: { clear: ['8530'], wind: ['8530'], snow: ['8528'] },
       abyss: ['#3a3040', '#0c0a18'], tile: 'brick', glow: 0.8 },
     glacier: { bg: { clear: ['8524', '8525', '8526'], fog: ['8527', '8526'], snow: ['8527', '8524'] },
       abyss: ['#3a4658', '#0a1020'], tile: 'ice', glow: 0.8 },
     tibet: { bg: { clear: ['8523'], snow: ['8518', '8523'] },
-      water: { day: 586, night: 568, frozen: 'night' }, waterCol: ['#3a78a8', '#0c1a3e'], tile: 'snowrock', glow: 0.8 }
+      water: RF.CFG.WATER.tibet, waterCol: ['#3a78a8', '#0c1a3e'], tile: 'snowrock', glow: 0.8 }
   };
-  // 夜景：实拍的中国夜景照片像素化而成（assets/bg/night，来源与署名见 CREDITS.md）；没载入时退回把白天的图压暗
+  // 夜景：作者提供的夜景像素画（新背景像素/夜间真实N → assets/bg/night/nN.png），按画面内容分到各站；没载入时退回把白天的图压暗
   const NIGHT_BG = {
-    jiangnan: ['jiangnan1', 'jiangnan2'], garden: ['garden1', 'garden2'], autumn: ['autumn1', 'autumn2', 'autumn3'],
-    wall: ['wall1'], glacier: ['glacier1', 'glacier2'], tibet: ['tibet1', 'tibet2']
+    jiangnan: ['n2', 'n12', 'n5'],   // 白墙水巷与乌篷船、灯笼河街与石拱桥、雨后灯笼老街
+    garden: ['n10', 'n3'],           // 樱花水榭、灯火楼阁
+    palace: ['n11', 'n3'],           // 宫殿与画舫、灯火楼阁
+    autumn: ['n9', 'n7'],            // 黄昏河谷村落、廊下望山村灯火
+    wall: ['n6', 'n9'],              // 悬崖栈道与瀑布、廊下望山间灯火
+    glacier: ['n1'],                 // 群山云海下的山村
+    tibet: ['n4', 'n8']              // 雪山湖畔、湖边山城
   };
   const ALL_NIGHT = Object.values(NIGHT_BG).flat();
   const ALL_BG = [...new Set(Object.values(R).flatMap(r => Object.values(r.bg).flat()))];
@@ -43,10 +50,13 @@
 
   // ------------------------------------------------------------ 载入
   const IMG = {}, NIGHT = {};
-  let sprites = null, spritesNight = null, spritesDim = null, curRid = null;
+  let spritesGhost = null;
+  let sprites = null, spritesNight = null, spritesDim = null, curRid = null, tilesImg = null;
+  const TSET = {};
+  const TROW = ['jiangnan', 'garden', 'autumn', 'wall', 'glacier', 'tibet'];
   const spritesReg = {};
   function load(done) {
-    const list = ALL_BG.map(id => ['bg/' + id + '.png', id]).concat(ALL_NIGHT.map(id => ['bg/night/' + id + '.png', 'n:' + id]), [['sprites.png', '__sprites']]);
+    const list = ALL_BG.map(id => ['bg/' + id + '.png', id]).concat(ALL_NIGHT.map(id => ['bg/night/' + id + '.png', 'n:' + id]), [['sprites.png', '__sprites'], ['tiles.png', '__tiles']]);
     let left = list.length;
     list.forEach(([file, id]) => {
       const im = new Image();
@@ -56,9 +66,11 @@
             sprites = im;
             spritesNight = tint(im, '#7684c0');
             spritesDim = tint(im, '#aab2d8');
+            spritesGhost = { day: silhouette(im, '#4a6cf0'), night: silhouette(im, '#ffe0a0') };
             // 每站的人物与道具带一点这一站背景的色温
             for (const id in R) if (REGTONE[id].hor) spritesReg[id] = mixTint(im, REGTONE[id].hor, 0.14);
-          } else if (id.startsWith('n:')) NIGHT[id] = im;
+          } else if (id === '__tiles') tilesImg = im;
+          else if (id.startsWith('n:')) NIGHT[id] = im;
           else { IMG[id] = im; NIGHT[id] = X.nightOf(im); }
         }
         if (--left === 0) { buildTiles(); RF.Regions.ready = true; done(); }
@@ -71,6 +83,27 @@
     const c = X.canvas(im.width, im.height), x = c.getContext('2d');
     x.drawImage(im, 0, 0);
     x.globalCompositeOperation = 'source-atop'; x.globalAlpha = a; x.fillStyle = col; x.fillRect(0, 0, c.width, c.height);
+    return c;
+  }
+  // 剪影：另一面的预告用。描边那一圈（最暗的像素）提成亮色，里面按原图明暗留一层淡淡的单色，
+  // 远看是一道发光的轮廓，近看还认得出门钉、窗格这些细节，像水里映出来的东西。
+  function silhouette(im, col) {
+    // 只用合成模式（不读像素），本地直接打开 index.html 也能用
+    const W = im.width, H = im.height;
+    const flat = X.canvas(W, H), f = flat.getContext('2d');
+    f.drawImage(im, 0, 0); f.globalCompositeOperation = 'source-in'; f.fillStyle = col; f.fillRect(0, 0, W, H);
+    const ero = X.canvas(W, H), o = ero.getContext('2d');              // 往里收一圈
+    o.drawImage(flat, 0, 0); o.globalCompositeOperation = 'destination-in';
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) o.drawImage(flat, dx, dy);
+    const ring = X.canvas(W, H), r = ring.getContext('2d');            // 本体减去收进去的那块 = 最外一圈发光轮廓
+    r.drawImage(flat, 0, 0); r.globalCompositeOperation = 'destination-out'; r.drawImage(ero, 0, 0);
+    const body = X.canvas(W, H), b = body.getContext('2d');            // 本体：保留明暗的单色
+    b.drawImage(im, 0, 0); b.globalCompositeOperation = 'color'; b.fillStyle = col; b.fillRect(0, 0, W, H);
+    b.globalCompositeOperation = 'screen'; b.globalAlpha = 0.35; b.drawImage(flat, 0, 0);
+    b.globalCompositeOperation = 'destination-in'; b.globalAlpha = 1; b.drawImage(im, 0, 0);
+    const c = X.canvas(W, H), x = c.getContext('2d');
+    x.globalAlpha = 0.42; x.drawImage(body, 0, 0);
+    x.globalAlpha = 1; x.drawImage(ring, 0, 0);
     return c;
   }
   function tint(im, col) {
@@ -143,6 +176,19 @@
       const d = lo ? mixTint(base, lo, 0.3) : base;
       TILE[id] = { day: d, night: tint(d, '#6a78b4') };
     }
+  }
+  // 地面拼接图块（tools/terrain_art.py → assets/tiles.png）：每站一行，往这站背景的颜色上靠一点，夜里压暗
+  function tileset(rid, world) {
+    if (!tilesImg) return null;
+    const k = rid + world;
+    if (!TSET[k]) {
+      const row = TROW.indexOf(rid === 'palace' ? 'garden' : rid); if (row < 0) return null;
+      const c = X.canvas(128, 16), x = c.getContext('2d');
+      x.drawImage(tilesImg, 0, row * 16, 128, 16, 0, 0, 128, 16);
+      const lo = REGTONE[rid].low, d = lo ? mixTint(c, lo, 0.16) : c;
+      TSET[rid + 'day'] = d; TSET[rid + 'night'] = tint(d, '#6a78b4');
+    }
+    return TSET[k];
   }
   function pattern(ctx, rid, world) {
     const key = rid + world;
@@ -229,14 +275,23 @@
       let top0 = lo ? U.mix(lo, U.hex(cfg.abyss[0]), 0.4) : U.hex(cfg.abyss[0]);
       if (world === 'night') top0 = U.mix(top0, U.hex(cfg.abyss[1]), 0.6);
       const c0 = '#' + top0.map(v => Math.round(v).toString(16).padStart(2, '0')).join(''), c1 = cfg.abyss[1];
-      const top = 150;
-      for (let y = top; y < PH + 16; y += 2) {
-        ctx.fillStyle = U.rgb(U.mix(U.hex(c0), U.hex(c1), (y - top) / (PH - top)), world === 'day' ? 1 : 1);
-        ctx.fillRect(0, y, PW, 2);
+      // 背景一路透下来，越往下越深，像谷里升起的雾；不再是一块平的深色板
+      const top = 146;
+      for (let y = top; y < PH + 16; y += 1) {
+        const k = Math.min(1, (y - top) / (PH - top));
+        ctx.fillStyle = U.rgb(U.mix(U.hex(c0), U.hex(c1), k), Math.min(1, 0.15 + k * k * 1.1));
+        ctx.fillRect(0, y, PW, 1);
       }
-      // 抖动的边：像素风的雾气
-      ctx.fillStyle = 'rgba(200,210,230,0.18)';
-      for (let x = 0; x < PW; x += 2) if (U.hash(Math.floor(x + camPix * 0.5), 3) > 0.5) ctx.fillRect(x, top - 1, 2, 1);
+      // 谷口的雾：几道慢慢飘的淡带
+      for (let b = 0; b < 3; b++) {
+        const yy = top + 4 + b * 7;
+        for (let x = -6; x < PW + 6; x += 3) {
+          const n = U.noise((x + camPix * (0.4 + b * 0.15) + t * (3 + b)) / 36, b + 11);
+          if (n < 0.45) continue;
+          ctx.fillStyle = `rgba(214,224,240,${((n - 0.45) * (world === 'night' ? 0.3 : 0.5)).toFixed(3)})`;
+          ctx.fillRect(x, yy, 3, 2);
+        }
+      }
     }
     ctx.globalAlpha = 1;
   }
@@ -302,6 +357,7 @@
     jiangnan: { col: ['#17251f', '#080b16'], hi: '#2e4a3a', kinds: ['reed', 'reed', 'grass', 'rock'], top: 'willow' },
     garden: { col: ['#241a1e', '#0a0a16'], hi: '#4a3a3a', kinds: ['grass', 'rock', 'grass'], top: 'eave' },
     autumn: { col: ['#2a160e', '#0c0a14'], hi: '#6a3a1a', kinds: ['grass', 'rock', 'grass', 'reed'], top: 'maple' },
+    palace: { col: ['#241a1e', '#0a0a16'], hi: '#4a3a3a', kinds: ['grass', 'rock', 'grass'], top: 'eave' },
     wall: { col: ['#211a18', '#0a0a14'], hi: '#4a3a30', kinds: ['rock', 'grass', 'rock'], top: null },
     glacier: { col: ['#18202e', '#080c18'], hi: '#e8f0f8', kinds: ['rock', 'rock', 'grass'], top: null },
     tibet: { col: ['#1a1e2c', '#080a16'], hi: '#e8eef6', kinds: ['rock', 'grass', 'rock'], top: 'flags' }
@@ -383,7 +439,7 @@
   }
 
   RF.Regions = {
-    R, load, foreground, backdrop, regionMix, lowland, pattern, weatherBack, weatherFront, bgAt,
-    get sprites() { return (curRid && spritesReg[curRid]) || sprites; }, get spritesNight() { return spritesNight; }, get spritesDim() { return spritesDim; }
+    R, load, foreground, backdrop, drawImg, regionMix, lowland, pattern, tileset, weatherBack, weatherFront, bgAt,
+    get sprites() { return (curRid && spritesReg[curRid]) || sprites; }, get spritesNight() { return spritesNight; }, get spritesDim() { return spritesDim; }, get spritesGhost() { return spritesGhost; }
   };
 })();

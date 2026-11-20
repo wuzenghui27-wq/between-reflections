@@ -1,0 +1,404 @@
+{
+ "char": {
+  "idle": {
+   "w": 87,
+   "h": 150,
+   "ax": 62.9,
+   "ay": 149.8
+  },
+  "walk_a": {
+   "w": 114,
+   "h": 146,
+   "ax": 78.4,
+   "ay": 145.9
+  },
+  "walk_b": {
+   "w": 112,
+   "h": 142,
+   "ax": 76.9,
+   "ay": 141.6
+  },
+  "jump": {
+   "w": 122,
+   "h": 137,
+   "ax": 95.3,
+   "ay": 136.7
+  },
+  "fall": {
+   "w": 123,
+   "h": 150,
+   "ax": 31.9,
+   "ay": 150.2
+  },
+  "land": {
+   "w": 137,
+   "h": 110,
+   "ax": 103.3,
+   "ay": 109.8
+  },
+  "push": {
+   "w": 143,
+   "h": 132,
+   "ax": 96.0,
+   "ay": 131.9
+  },
+  "bow_lantern": {
+   "w": 133,
+   "h": 140,
+   "ax": 98.2,
+   "ay": 140.1
+  }
+ },
+ "bg": {
+  "1": {
+   "sky": "sky1",
+   "mountains": "mountains1",
+   "mountains_w": 3640,
+   "midground": "midground1",
+   "midground_w": 3640,
+   "mist": "mist1",
+   "mist_w": 3600,
+   "water": "water1"
+  },
+  "2": {
+   "sky": "sky2",
+   "mountains": "mountains2",
+   "mountains_w": 3640,
+   "midground": "midground2",
+   "midground_w": 3640,
+   "mist": "mist2",
+   "mist_w": 3600,
+   "water": "water2"
+  },
+  "3": {
+   "sky": "sky3",
+   "mountains": "mountains3",
+   "mountains_w": 3640,
+   "midground": "midground3",
+   "midground_w": 3640,
+   "mist": "mist3",
+   "mist_w": 3600,
+   "water": null
+  },
+  "4": {
+   "sky": "sky4",
+   "mountains": "mountains4",
+   "mountains_w": 3640,
+   "midground": "midground4",
+   "midground_w": 3640,
+   "mist": "mist4",
+   "mist_w": 3600,
+   "water": null
+  }
+ },
+ "comp": {
+  "bank": {
+   "left": {
+    "w": 192,
+    "h": 213,
+    "top": 146,
+    "bot": 212
+   },
+   "middle": {
+    "w": 192,
+    "h": 231,
+    "top": 160,
+    "bot": 216
+   },
+   "right": {
+    "w": 192,
+    "h": 214,
+    "top": 136,
+    "bot": 185
+   }
+  },
+  "plank": {
+   "left": {
+    "w": 96,
+    "h": 180,
+    "top": 133,
+    "bot": 147
+   },
+   "middle": {
+    "w": 192,
+    "h": 63,
+    "top": 25,
+    "bot": 44
+   },
+   "right": {
+    "w": 96,
+    "h": 33,
+    "top": 5,
+    "bot": 11
+   }
+  },
+  "terrace": {
+   "left": {
+    "w": 120,
+    "h": 118,
+    "top": 80,
+    "bot": 117
+   },
+   "middle": {
+    "w": 192,
+    "h": 259,
+    "top": 122,
+    "bot": 225
+   },
+   "right": {
+    "w": 120,
+    "h": 291,
+    "top": 158,
+    "bot": 223
+   }
+  },
+  "floor": {
+   "left": {
+    "w": 192,
+    "h": 32,
+    "top": 18,
+    "bot": 30
+   },
+   "middle": {
+    "w": 192,
+    "h": 116,
+    "top": 18,
+    "bot": 26
+   },
+   "right": {
+    "w": 192,
+    "h": 30,
+    "top": 4,
+    "bot": 13
+   }
+  },
+  "path": {
+   "left": {
+    "w": 192,
+    "h": 50,
+    "top": 18,
+    "bot": 43
+   },
+   "middle": {
+    "w": 192,
+    "h": 38,
+    "top": 6,
+    "bot": 25
+   },
+   "right": {
+    "w": 192,
+    "h": 124,
+    "top": 24,
+    "bot": 67
+   }
+  },
+  "snowpath": {
+   "left": {
+    "w": 192,
+    "h": 95,
+    "top": 48,
+    "bot": 93
+   },
+   "middle": {
+    "w": 192,
+    "h": 117,
+    "top": 48,
+    "bot": 70
+   },
+   "right": {
+    "w": 192,
+    "h": 39,
+    "top": 12,
+    "bot": 39
+   }
+  },
+  "snowbank": {
+   "left": {
+    "w": 192,
+    "h": 88,
+    "top": 28,
+    "bot": 86
+   },
+   "middle": {
+    "w": 192,
+    "h": 183,
+    "top": 107,
+    "bot": 182
+   },
+   "right": {
+    "w": 192,
+    "h": 237,
+    "top": 41,
+    "bot": 186
+   }
+  },
+  "snowplank": {
+   "left": {
+    "w": 96,
+    "h": 45,
+    "top": 8,
+    "bot": 33
+   },
+   "middle": {
+    "w": 192,
+    "h": 174,
+    "top": 33,
+    "bot": 68
+   },
+   "right": {
+    "w": 96,
+    "h": 46,
+    "top": 10,
+    "bot": 38
+   }
+  },
+  "ghost": {
+   "left": {
+    "w": 96,
+    "h": 46,
+    "top": 22,
+    "bot": 28
+   },
+   "middle": {
+    "w": 192,
+    "h": 148,
+    "top": 113,
+    "bot": 119
+   },
+   "right": {
+    "w": 96,
+    "h": 37,
+    "top": 6,
+    "bot": 17
+   }
+  },
+  "arch": {
+   "w": 464,
+   "h": 352,
+   "top": 76
+  },
+  "stair": {
+   "w": 300,
+   "h": 276,
+   "top": 162
+  },
+  "boat": {
+   "w": 343,
+   "h": 161,
+   "top": 100
+  },
+  "boat_lit": {
+   "w": 346,
+   "h": 167,
+   "top": 100
+  }
+ },
+ "props": {
+  "willow": {
+   "w": 600,
+   "h": 720
+  },
+  "plum": {
+   "w": 900,
+   "h": 600
+  },
+  "reeds": {
+   "w": 590,
+   "h": 353
+  },
+  "house": {
+   "w": 591,
+   "h": 480
+  },
+  "pine_cliff": {
+   "w": 476,
+   "h": 720
+  },
+  "pine_upright": {
+   "w": 473,
+   "h": 693
+  },
+  "branch1": {
+   "w": 180,
+   "h": 540
+  },
+  "branch2": {
+   "w": 180,
+   "h": 540
+  },
+  "branch3": {
+   "w": 180,
+   "h": 540
+  },
+  "branch4": {
+   "w": 180,
+   "h": 540
+  },
+  "lamp_on": {
+   "w": 98,
+   "h": 176
+  },
+  "lamp_off": {
+   "w": 109,
+   "h": 174
+  },
+  "paper_on": {
+   "w": 39,
+   "h": 111
+  },
+  "paper_off": {
+   "w": 44,
+   "h": 117
+  },
+  "hall": {
+   "w": 712,
+   "h": 517
+  },
+  "pavilion": {
+   "w": 360,
+   "h": 473
+  },
+  "pagoda": {
+   "w": 229,
+   "h": 590
+  },
+  "moongate": {
+   "w": 540,
+   "h": 518,
+   "hole": {
+    "x1": 146,
+    "x2": 387,
+    "y1": 174,
+    "y2": 425
+   }
+  },
+  "floorwin": {
+   "w": 360,
+   "h": 420,
+   "hole": {
+    "x1": 128,
+    "x2": 232,
+    "y1": 90,
+    "y2": 401
+   }
+  },
+  "lattice": {
+   "w": 360,
+   "h": 406,
+   "hole": {
+    "x1": 85,
+    "x2": 275,
+    "y1": 121,
+    "y2": 329
+   }
+  },
+  "wall_l": {
+   "w": 192,
+   "h": 378
+  },
+  "wall_m": {
+   "w": 192,
+   "h": 347
+  }
+ }
+}

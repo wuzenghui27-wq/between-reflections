@@ -1,0 +1,53 @@
+{
+  "unit": "px",
+  "note": "长度、速度、加速度都以 320×180 画面的像素为单位。运行时乘以 SUB 换成逻辑单位（与网页版逻辑完全一致）。",
+  "SUB": 4,
+  "W": 320,
+  "H": 180,
+  "STEP": 0.016666666666666666,
+  "BPM": 96,
+  "GROUND": 140,
+  "HALF_W": 2.5,
+  "BODY_H": 15,
+  "STEP_UP": 3,
+  "PUSH": 24,
+  "DRIFT": 16,
+  "CRATE": 14,
+  "FLOAT": 9.5,
+  "WALK": 47.5,
+  "WALK_ACC": 650,
+  "AIR_ACC": 375,
+  "FALL_MAX": 225,
+  "GRAVITY": 475,
+  "JUMP_V": 160,
+  "EAVE_V": 130,
+  "FALL_LIMIT": 197.5,
+  "JUMP_CUT": 0.45,
+  "SHIFT_HOP": 0.72,
+  "COYOTE": 0.09,
+  "JUMP_BUFFER": 0.12,
+  "SWITCH_WIPE": 0.42,
+  "WATER": {
+    "jiangnan": {
+      "day": 141.5,
+      "night": 156.5
+    },
+    "garden": {
+      "day": 150,
+      "night": 150
+    },
+    "autumn": {
+      "day": 150,
+      "night": 150
+    },
+    "palace": {
+      "day": 150,
+      "night": 150
+    },
+    "tibet": {
+      "day": 146.5,
+      "night": 142,
+      "frozen": "night"
+    }
+  }
+}

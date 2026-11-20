@@ -54,6 +54,7 @@
       ['欲穷千里目，更上一层楼', '登鹳雀楼', '王之涣']
     ]
   };
+  POEMS.palace = POEMS.palace || POEMS.garden;
 
   RF.Meta = {
     data, save, POEMS,

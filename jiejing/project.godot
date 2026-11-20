@@ -1,0 +1,48 @@
+; 借景 · Borrowed Scenery — Godot 4 工程（Game Off 2026，主题 SHIFT）
+; 像素完美：画面内部 320×180，只按整数倍放大，余下补黑边；最近邻过滤，不生成 mipmap，不压缩；2D 变换与顶点对齐到像素。
+
+config_version=5
+
+[application]
+
+config/name="借景 Borrowed Scenery"
+config/description="推动画卷的远近层，让墨线在眼前接上，借景而行。Game Off 2026 · SHIFT"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+boot_splash/bg_color=Color(0.937, 0.91, 0.847, 1)
+boot_splash/show_image=false
+
+[display]
+
+window/size/viewport_width=320
+window/size/viewport_height=180
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="viewport"
+window/stretch/aspect="keep"
+window/stretch/scale_mode="integer"
+
+[importer_defaults]
+
+texture={
+"compress/mode": 0,
+"mipmaps/generate": false,
+"process/fix_alpha_border": false,
+"process/premult_alpha": false,
+"detect_3d/compress_to": 0
+}
+
+[physics]
+
+common/physics_ticks_per_second=60
+common/max_physics_steps_per_frame=8
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/canvas_textures/default_texture_filter=0
+textures/vram_compression/import_etc2_astc=true
+2d/snap/snap_2d_transforms_to_pixel=true
+2d/snap/snap_2d_vertices_to_pixel=true
+environment/defaults/default_clear_color=Color(0, 0, 0, 1)
