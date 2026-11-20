@@ -476,7 +476,9 @@ def bake_level(L, meta, report):
                 name = {'willow': 'willow', 'house': 'horse_wall', 'pavilion': 'pavilion'}[dd['k']]
                 deco_prop(name)(cv, dd['x'] + ox, dd['y'])
                 continue
-            fn = DECO[dd['k']]
+            fn = DECO.get(dd['k'])
+            if fn is None:          # 高清版才有的摆件（松树、亭、塔），像素版不画
+                continue
             args = [cv, dd['x'] + ox, dd['y']]
             if 'w' in dd:
                 args.append(dd['w'])
@@ -507,6 +509,8 @@ def bake_level(L, meta, report):
             if dd['k'] == 'wall':
                 deco_wall(cv, dd, ox)
         for l in lines:
+            if l.get('faint') or l.get('kind') == 'post':   # 虚路由画面按灯光现画
+                continue
             walk_stroke(cv, l['pts'], ox, k)
         name = '%s_L%d.png' % (L['id'], k)
         cv.save(os.path.join(OUT, 'levels', name))

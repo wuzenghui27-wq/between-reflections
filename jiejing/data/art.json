@@ -36,11 +36,11 @@
    "layers": [
     {
      "img": "levels/1-3_L0.png",
-     "dx": 0
+     "dx": -250
     },
     {
      "img": "levels/1-3_L1.png",
-     "dx": -230
+     "dx": -200
     },
     {
      "img": "levels/1-3_L2.png",
@@ -52,11 +52,11 @@
    "layers": [
     {
      "img": "levels/1-4_L0.png",
-     "dx": 0
+     "dx": -190
     },
     {
      "img": "levels/1-4_L1.png",
-     "dx": -240
+     "dx": -160
     },
     {
      "img": "levels/1-4_L2.png",
@@ -116,7 +116,7 @@
    "layers": [
     {
      "img": "levels/2-4_L0.png",
-     "dx": 0
+     "dx": -220
     },
     {
      "img": "levels/2-4_L1.png",
@@ -124,7 +124,135 @@
     },
     {
      "img": "levels/2-4_L2.png",
-     "dx": -120
+     "dx": -240
+    }
+   ]
+  },
+  "3-1": {
+   "layers": [
+    {
+     "img": "levels/3-1_L0.png",
+     "dx": -260
+    },
+    {
+     "img": "levels/3-1_L1.png",
+     "dx": 0
+    },
+    {
+     "img": "levels/3-1_L2.png",
+     "dx": 0
+    }
+   ]
+  },
+  "3-2": {
+   "layers": [
+    {
+     "img": "levels/3-2_L0.png",
+     "dx": 0
+    },
+    {
+     "img": "levels/3-2_L1.png",
+     "dx": -160
+    },
+    {
+     "img": "levels/3-2_L2.png",
+     "dx": 0
+    }
+   ]
+  },
+  "3-3": {
+   "layers": [
+    {
+     "img": "levels/3-3_L0.png",
+     "dx": -260
+    },
+    {
+     "img": "levels/3-3_L1.png",
+     "dx": 0
+    },
+    {
+     "img": "levels/3-3_L2.png",
+     "dx": 0
+    }
+   ]
+  },
+  "3-4": {
+   "layers": [
+    {
+     "img": "levels/3-4_L0.png",
+     "dx": -180
+    },
+    {
+     "img": "levels/3-4_L1.png",
+     "dx": -160
+    },
+    {
+     "img": "levels/3-4_L2.png",
+     "dx": 0
+    }
+   ]
+  },
+  "4-1": {
+   "layers": [
+    {
+     "img": "levels/4-1_L0.png",
+     "dx": -248
+    },
+    {
+     "img": "levels/4-1_L1.png",
+     "dx": -126
+    },
+    {
+     "img": "levels/4-1_L2.png",
+     "dx": 0
+    }
+   ]
+  },
+  "4-2": {
+   "layers": [
+    {
+     "img": "levels/4-2_L0.png",
+     "dx": -200
+    },
+    {
+     "img": "levels/4-2_L1.png",
+     "dx": -200
+    },
+    {
+     "img": "levels/4-2_L2.png",
+     "dx": 0
+    }
+   ]
+  },
+  "4-3": {
+   "layers": [
+    {
+     "img": "levels/4-3_L0.png",
+     "dx": -190
+    },
+    {
+     "img": "levels/4-3_L1.png",
+     "dx": -160
+    },
+    {
+     "img": "levels/4-3_L2.png",
+     "dx": 0
+    }
+   ]
+  },
+  "4-4": {
+   "layers": [
+    {
+     "img": "levels/4-4_L0.png",
+     "dx": -160
+    },
+    {
+     "img": "levels/4-4_L1.png",
+     "dx": -130
+    },
+    {
+     "img": "levels/4-4_L2.png",
+     "dx": 0
     }
    ]
   }

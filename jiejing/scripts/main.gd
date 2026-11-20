@@ -174,6 +174,8 @@ func _physics_process(_dt: float) -> void:
 				play("fall")
 			"undo":
 				play("knock_hi")
+			"light":
+				play("pluck%d" % [5, 7][note % 2]); note += 1
 			"push":
 				if not guided:
 					guided = true; guide_fade = 30
@@ -346,12 +348,42 @@ func draw_layer(L: Dictionary, A: Dictionary, k: int) -> void:
 	if not framed:
 		draw_texture(t, Vector2(X, 0))
 
+# 虚实：淡墨虚线点着画，被亮灯照到的段画成实线；灯画成一点暖光加光圈
+func draw_faint(k: int) -> void:
+	var o := float(G.oi(k))
+	var lines: Array = G.layers[k].lines
+	for bi in lines.size():
+		var l: Dictionary = lines[bi]
+		if not l.faint:
+			continue
+		var x: float = l.x1
+		while x <= l.x2:
+			if int(x) % 4 < 2:
+				px(Core.rnd(x + o), Core.rnd(Core.y_at(l, x)), INK1)
+			x += 1.0
+		for q in G.pieces(k, bi):
+			var xx: float = q[0]
+			while xx <= q[1]:
+				draw_rect(Rect2(Core.rnd(xx + o), Core.rnd(Core.y_at(l, xx)), 1, 2), INK)
+				xx += 1.0
+	for i in G.lamps.size():
+		var m: Dictionary = G.lamps[i]
+		if int(m.layer) != k:
+			continue
+		var lp: Array = G.lamp_pos(i)
+		var on: bool = G.lit[i]
+		if on:
+			draw_circle(Vector2(lp[0], lp[1]), m.r, Color(GOLD, 0.10))
+			draw_arc(Vector2(lp[0], lp[1]), m.r, 0, TAU, 48, Color(GOLD, 0.45), 1.0)
+		draw_rect(Rect2(Core.rnd(lp[0]) - 1, Core.rnd(lp[1]) - 5, 3, 4), GOLD if on else INK3)
+
 func _draw() -> void:
 	var L: Dictionary = LV[li]
 	var A: Dictionary = ART.levels[L.id]
 	draw_texture(tex[L.id + "_bg"], Vector2.ZERO)
 	for k in 3:
 		draw_layer(L, A, k)
+		draw_faint(k)
 		if int(L.lamp.layer) == k:
 			draw_lamp()
 		if G.p.L == k:
