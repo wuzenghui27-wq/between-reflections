@@ -7,6 +7,7 @@
 //   --nopush   不许推层（每一景都应当无解）
 //   --nocarry  不许推自己脚下那一层（“乘船”应当无解）
 //   --nohop    不许跳（用到跳的景应当无解）
+//   --nolight  开头没亮的灯一律点不亮（第三卷应当无解）
 //   --write    把找到的解写进 data/plans.json
 const fs = require('fs'), path = require('path');
 const JJ = require('./core.js');
@@ -17,6 +18,7 @@ const args = process.argv.slice(2);
 const flag = f => args.includes(f);
 const pick = args.filter(a => !a.startsWith('--'));
 const NOFRAME = flag('--noframe');   // 被框住的层一律不许踏上去（应当无解）
+const NOLIGHT = flag('--nolight');
 const NOPUSH = flag('--nopush'), NOCARRY = flag('--nocarry'), NOHOP = flag('--nohop');
 const LOCK = (args.find(a => a.startsWith('--lock=')) || '--lock=-1').slice(7) | 0;   // --lock=k：第 k 层不许推
 
@@ -89,10 +91,17 @@ function interesting(G, k) {
   const sig = () => {
     let s = '';
     for (let j = 0; j < 3; j++) for (let li = 0; li < G.S.layers[j].lines.length; li++) for (const q of G.pieces(j, li)) for (const dir of [-1, 1]) {
-      if (dir < 0) s += q[0] + '~' + q[1] + ':';
+      if (dir < 0) {
+        // 段的确切边界不要紧，要紧的是这一段上够得着哪些灯（没点的灯、终点宫灯）——否则灯光一动指纹就变，状态爆炸
+        s += '[';
+        G.S.lamps.forEach((m, i) => { if (!G.lit[i] && m.layer === j && m.line === li && m.x >= q[0] - JJ.C.LAMP && m.x <= q[1] + JJ.C.LAMP) s += i + ','; });
+        const lm = G.S.lamp;
+        if (lm.layer === j && lm.line === li && lm.x >= q[0] - JJ.C.LAMP && lm.x <= q[1] + JJ.C.LAMP) s += 'W';
+        s += ']';
+      }
       const p0 = G.p; G.p = { L: j, line: li, x: (q[0] + q[1]) / 2, y: 0, ground: true };
       const t = G.findTransfer(dir); G.p = p0;
-      s += t ? t.L + '.' + t.line + '.' + t.lo + ';' : '-;';
+      s += t ? t.L + '.' + t.line + '.' + G.pieces(t.L, t.line).findIndex(q => q[0] === t.lo) + ';' : '-;';
     }
     return s;
   };
@@ -128,6 +137,7 @@ function fastWalk(G, m) {
   return [];
 }
 function solve(L) {
+  if (NOLIGHT) L = Object.assign({}, L, { lamps: (L.lamps || []).filter(m => m.lit) });
   const G = JJ.Game(L);
   const start = G.snapshot();
   const seen = new Map();
@@ -208,7 +218,7 @@ for (const L of LV) {
   if (!e || !e.won) { bad++; continue; }
   plans[L.id] = { runs: rle(e.ins), final: e.final };
 }
-if (flag('--write') && !NOPUSH && !NOCARRY && !NOHOP && !NOFRAME && LOCK < 0) {
+if (flag('--write') && !NOLIGHT && !NOPUSH && !NOCARRY && !NOHOP && !NOFRAME && LOCK < 0) {
   const f = path.join(ROOT, 'data/plans.json');
   const old = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {};
   Object.assign(old, plans);

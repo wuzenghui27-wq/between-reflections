@@ -6,7 +6,7 @@
 // 走到线的尽头时，如果别的层有一条线在屏幕上正好接上（高差 ≤ 1 像素，缝 ≤ 2 像素），她就“借过去”，从此属于那一层。
 // 站在普通墨线上时，脚下这一层推不动（得先借到别的层上去）；站在船（boat）上，可以推船所在的层，人跟着走。推层和走路不能同时做。
 // 推层时离“接缝点”±3 像素会被吸住（变慢），松手就吸上去；不在吸附范围内则落到最近的整数像素。
-// 走到同层、同一条线上宫灯 ±4 像素内并站稳，灯亮，过关。掉出画面：墨晕一下，回到最近的落脚点（不死）。
+// 走到同层、同一条线上宫灯 ±4 像素内并站稳，灯亮，过关。掉出画面：墨晕一下，回到最近的落脚点（不死）；落脚点那一层后来被推动过就回到起点（不能靠落水“传送”）。
 // 每次开始推层、每次借过去之前存一步，Z 退回。
 // 鼠标拖层：层直接跟着鼠标走（远 0.4、中 0.7、近 1.0 倍），接缝点 ±3 像素内阻尼减半，松手吸准。
 // 走出线端后 6 帧内还能起跳（不至于反应不及走空）。
@@ -81,7 +81,7 @@
       G.sel = G.pushable.length ? G.pushable[0] : -1;
       const st = S.start;
       G.p = { L: st.layer, line: st.line, x: st.x, y: yAt(S.layers[st.layer].lines[st.line], st.x), vx: 0, vy: 0, ground: true, face: 1, coyote: 0 };
-      G.foot = { L: st.layer, line: st.line, x: st.x };
+      G.foot = { L: st.layer, line: st.line, x: st.x, o: rnd(G.o[st.layer]) };
       G.bloom = 0; G.won = false; G.wonT = 0; G.frame = 0;
       G.pushing = false; G.pushDir = 0;
       G.lit = S.lamps.map(m => m.lit);
@@ -284,10 +284,10 @@
         if (G.bloom === 0) {
           let f = G.foot, l = S.layers[f.L].lines[f.line];
           Object.assign(G.p, { L: f.L, line: f.line, x: f.x, y: yAt(l, f.x), vx: 0, vy: 0, ground: true });
-          if (!G.supported()) {         // 落脚点的路已经不在了（灯光推走了）：回到起点
+          if (!G.supported() || oi(f.L) !== f.o) {   // 落脚点的路已经不在了（灯光推走了），或那一层后来被推动过：回到起点
             f = S.start; l = S.layers[f.layer].lines[f.line];
             Object.assign(G.p, { L: f.layer, line: f.line, x: f.x, y: yAt(l, f.x) });
-            Object.assign(G.foot, { L: f.layer, line: f.line, x: f.x });
+            Object.assign(G.foot, { L: f.layer, line: f.line, x: f.x, o: oi(f.layer) });
           }
           emit('respawn');
         }
@@ -379,7 +379,7 @@
       // ---- 落脚点、灯
       if (p.ground) {
         const sp = G.span();
-        if (p.x >= sp[0] + 3 && p.x <= sp[1] - 3) { G.foot.L = p.L; G.foot.line = p.line; G.foot.x = p.x; }
+        if (p.x >= sp[0] + 3 && p.x <= sp[1] - 3) { G.foot.L = p.L; G.foot.line = p.line; G.foot.x = p.x; G.foot.o = oi(p.L); }
         for (let i = 0; i < S.lamps.length; i++) {
           const m = S.lamps[i];
           if (!G.lit[i] && p.L === m.layer && p.line === m.line && Math.abs(p.x - m.x) <= C.LAMP) { G.lit[i] = true; emit('light', i); }
