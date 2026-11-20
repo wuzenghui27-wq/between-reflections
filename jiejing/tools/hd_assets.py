@@ -151,7 +151,9 @@ def components():
             save(im, 'w_%s_%s' % (k, part), 88)
             if k in TOPS:
                 top = TOPS[k][('left', 'middle', 'right').index(part)]
-            e[part] = {'w': im.width, 'h': im.height, 'top': top}
+            cov = (np.asarray(im)[..., 3] > 60).mean(axis=1)
+            rows = np.nonzero(cov > 0.3)[0]
+            e[part] = {'w': im.width, 'h': im.height, 'top': top, 'bot': int(rows.max()) + 1 if len(rows) else im.height}
         out[k] = e
     for k, name in (('arch', 'W-03_stone_arch_half'), ('stair', 'W-04_stone_steps'), ('boat', 'W-07_covered_boat_unlit'), ('boat_lit', 'W-07_covered_boat_lit')):
         im = load(name); bb = im.getbbox(); im = im.crop(bb)
@@ -170,7 +172,23 @@ def deck_top_soft(im):
 PROPS = {'willow': 'P-01_weeping_willow', 'plum': 'P-03_plum_corner', 'reeds': 'P-04_reeds', 'house': 'P-05_jiangnan_house',
          'pine_cliff': 'P-02_pine_cliff', 'pine_upright': 'P-02_pine_upright',
          'branch1': 'P-01_willow_branch_1', 'branch2': 'P-01_willow_branch_2', 'branch3': 'P-01_willow_branch_3', 'branch4': 'P-01_willow_branch_4',
-         'lamp_on': 'P-12_stone_lantern_lit', 'lamp_off': 'P-12_stone_lantern_unlit', 'paper_on': 'P-13_paper_lantern_lit', 'paper_off': 'P-13_paper_lantern_unlit'}
+         'lamp_on': 'P-12_stone_lantern_lit', 'lamp_off': 'P-12_stone_lantern_unlit', 'paper_on': 'P-13_paper_lantern_lit', 'paper_off': 'P-13_paper_lantern_unlit',
+         'hall': 'P-06_garden_hall', 'pavilion': 'P-07_hexagonal_pavilion', 'pagoda': 'P-08_distant_pagoda',
+         'moongate': 'P-09_moon_gate', 'floorwin': 'P-10_floor_window', 'lattice': 'P-10_lattice_window',
+         'wall_l': 'P-11_garden_wall_left', 'wall_m': 'P-11_garden_wall_middle'}
+HOLED = ('moongate', 'floorwin', 'lattice')
+
+
+def hole_of(im):
+    # 门洞/窗洞：不和图边连着的透明像素（从四边灌水，灌不到的透明处就是洞），取它们的外框（图内像素）
+    import numpy as np
+    from scipy import ndimage
+    t = np.array(im.getchannel('A')) < 100
+    lab, n = ndimage.label(t)
+    edge = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]])))
+    inner = np.isin(lab, [i for i in range(1, n + 1) if i not in edge])
+    ys, xs = np.nonzero(inner)
+    return {'x1': int(xs.min()), 'x2': int(xs.max()) + 1, 'y1': int(ys.min()), 'y2': int(ys.max()) + 1}
 
 
 def props():
@@ -181,6 +199,7 @@ def props():
             bb = im.getbbox(); im = im.crop(bb)
         save(im, 'p_' + k, 88)
         out[k] = {'w': im.width, 'h': im.height}
+        if k in HOLED: out[k]['hole'] = hole_of(im)
     META['props'] = out
 
 

@@ -1,12 +1,14 @@
 # 借景 · 规则核心（逐行对照 core/core.js 移植；两边用 data/plans.json 的回放核对，结果必须一字不差）。
 # 只管规则，不碰画面和声音。坐标是 320×180 画面里的像素；固定 60 帧一秒；没有随机数。
 # 取整一律用 rnd(v) = floor(v + 0.5)。
+# 虚实（第三卷）：淡墨虚线只有被亮灯的光圈照到的那一段才是实路；灯随所在层推动。站在虚线上时挂灯的层推不动。
+# 掉水后回到落脚点；落脚点那一层后来被推过（或路不在了）就回到起点。
 class_name JJCore
 extends RefCounted
 
 const W := 320
 const H := 180
-const WALK := 40.0 / 60.0
+const WALK := 50.0 / 60.0
 const PUSH := [20.0 / 60.0, 32.0 / 60.0, 48.0 / 60.0]
 const SNAP := 3.0
 const SNAP_SLOW := 0.35
@@ -45,6 +47,8 @@ var lamp: Dictionary
 var frames: Array = []          # [{layer, x1, x2, y1, y2, target}]
 var is_target := [false, false, false]
 var has_frames := [false, false, false]
+var lamps: Array = []           # [{layer, line, x, r, lit}]
+var has_lamps := [false, false, false]
 
 # ------------------------------------------------------------ 状态
 var o: Array = [0.0, 0.0, 0.0]
@@ -61,6 +65,9 @@ var push_dir := 0
 var undo: Array = []
 var events: Array = []
 var snap_cache := {}
+var lit: Array = []
+var pc_key := ""
+var pc_m := {}
 
 func _init(L: Dictionary) -> void:
 	id = str(L.id)
@@ -74,7 +81,7 @@ func _init(L: Dictionary) -> void:
 			var pts := []
 			for q in l.pts:
 				pts.append([float(q[0]), float(q[1])])
-			lines.append({"pts": pts, "x1": pts[0][0], "x2": pts[pts.size() - 1][0], "boat": bool(l.get("boat", false))})
+			lines.append({"pts": pts, "x1": pts[0][0], "x2": pts[pts.size() - 1][0], "boat": bool(l.get("boat", false)), "faint": bool(l.get("faint", false))})
 		layers.append({"o0": o0, "min": float(d.get("min", o0)), "max": float(d.get("max", o0)), "lines": lines})
 	start = {"layer": int(L.start.layer), "line": int(L.start.line), "x": float(L.start.x)}
 	lamp = {"layer": int(L.lamp.layer), "line": int(L.lamp.line), "x": float(L.lamp.x)}
@@ -83,6 +90,10 @@ func _init(L: Dictionary) -> void:
 		frames.append(fr)
 		is_target[fr.target] = true
 		has_frames[fr.layer] = true
+	for m in L.get("lamps", []):
+		var lm := {"layer": int(m.layer), "line": int(m.line), "x": float(m.x), "r": float(m.get("r", 40)), "lit": bool(m.get("lit", false))}
+		lamps.append(lm)
+		has_lamps[lm.layer] = true
 	reset()
 
 func reset() -> void:
@@ -94,7 +105,11 @@ func reset() -> void:
 	sel = pushable[0] if pushable.size() > 0 else -1
 	var st := start
 	p = {"L": st.layer, "line": st.line, "x": st.x, "y": y_at(layers[st.layer].lines[st.line], st.x), "vx": 0.0, "vy": 0.0, "ground": true, "face": 1, "coyote": 0}
-	foot = {"L": st.layer, "line": st.line, "x": st.x}
+	foot = {"L": st.layer, "line": st.line, "x": st.x, "o": rnd(o[st.layer])}
+	lit = []
+	for m in lamps:
+		lit.append(m.lit)
+	pc_key = ""; pc_m = {}
 	bloom = 0; won = false; won_t = 0; frame = 0
 	pushing = false; push_dir = 0
 	undo = []
@@ -114,29 +129,86 @@ func sx() -> float:
 	return p.x + o[p.L]
 
 func snapshot() -> Dictionary:
-	return {"o": o.duplicate(), "p": p.duplicate(), "foot": foot.duplicate(), "sel": sel}
+	return {"o": o.duplicate(), "p": p.duplicate(), "foot": foot.duplicate(), "sel": sel, "lit": lit.duplicate()}
 
 func restore(s: Dictionary) -> void:
-	o = s.o.duplicate(); p = s.p.duplicate(); foot = s.foot.duplicate(); sel = s.sel
+	o = s.o.duplicate(); p = s.p.duplicate(); foot = s.foot.duplicate(); sel = s.sel; lit = s.lit.duplicate()
 	bloom = 0; pushing = false; push_dir = 0
 
-# 框景：第 j 层第 bi 条线现在露出来的几段（层内 x 区间）
+func lit_key() -> String:
+	var k := ""
+	for v in lit:
+		k += "1" if v else "0"
+	return k
+
+func lamp_pos(i: int) -> Array:
+	var m: Dictionary = lamps[i]
+	return [m.x + oi(m.layer), y_at(layers[m.layer].lines[m.line], m.x)]
+
+# 框景、虚实：第 j 层第 bi 条线现在露出来（且有路）的几段（层内 x 区间）
 func pieces(j: int, bi: int) -> Array:
 	var b: Dictionary = layers[j].lines[bi]
-	if not is_target[j]:
+	if not is_target[j] and not b.faint:
 		return [[b.x1, b.x2]]
+	var key := "%d,%d,%d,%s" % [int(oi(0)), int(oi(1)), int(oi(2)), lit_key()]
+	if pc_key != key:
+		pc_key = key; pc_m = {}
+	var ck := j * 1000 + bi
+	if pc_m.has(ck):
+		return pc_m[ck]
 	var out := []
 	var oj := oi(j)
-	for f in frames:
-		if f.target != j:
-			continue
-		var of_ := oi(f.layer)
-		var a1: float = maxf(b.x1, f.x1 + of_ - oj)
-		var a2: float = minf(b.x2, f.x2 + of_ - oj)
-		if a2 - a1 >= 1:
-			out.append([a1, a2])
-	out.sort_custom(func(u, v): return u[0] < v[0])
+	if is_target[j]:
+		for f in frames:
+			if f.target != j:
+				continue
+			var of_ := oi(f.layer)
+			var a1: float = maxf(b.x1, f.x1 + of_ - oj)
+			var a2: float = minf(b.x2, f.x2 + of_ - oj)
+			if a2 - a1 >= 1:
+				out.append([a1, a2])
+		out.sort_custom(func(u, v): return u[0] < v[0])
+	else:
+		out = [[b.x1, b.x2]]
+	if b.faint:
+		var ls := []
+		for i in lamps.size():
+			if lit[i]:
+				var lp := lamp_pos(i)
+				ls.append([lp[0], lp[1], lamps[i].r])
+		var res := []
+		for q in out:
+			var run := -1
+			var x := int(ceil(q[0]))
+			var xe := int(floor(q[1]))
+			while x <= xe + 1:
+				var on := false
+				if x <= xe:
+					var s_x: float = x + oj
+					var s_y := y_at(b, x)
+					for m in ls:
+						var dx: float = s_x - m[0]
+						var dy: float = s_y - m[1]
+						if dx * dx + dy * dy <= m[2] * m[2]:
+							on = true
+							break
+				if on and run < 0:
+					run = x
+				if not on and run >= 0:
+					if x - 1 - run >= 1:
+						res.append([float(run), float(x - 1)])
+					run = -1
+				x += 1
+		out = res
+	pc_m[ck] = out
 	return out
+
+# 她脚下有没有路
+func supported() -> bool:
+	for q in pieces(p.L, p.line):
+		if p.x >= q[0] - 1e-6 and p.x <= q[1] + 1e-6:
+			return true
+	return false
 
 # 她脚下这一段的左右端（层内 x）
 func span() -> Array:
@@ -156,6 +228,8 @@ func can_push(k: int) -> bool:
 		for f in frames:
 			if f.target == p.L and f.layer == k:
 				return false
+	if line().faint and has_lamps[k]:
+		return false
 	return true
 
 # 接缝点（与 core.js 同一算法，按其他层偏移缓存）
@@ -164,6 +238,7 @@ func snap_points(k: int) -> Array:
 	var key := str(k) + ":"
 	for j in 3:
 		key += ("*" if j == k else str(oi(j))) + ","
+	key += ":" + lit_key()
 	if snap_cache.has(key):
 		return snap_cache[key]
 	var save: float = o[k]
@@ -176,9 +251,10 @@ func snap_points(k: int) -> Array:
 			var oj := oi(j)
 			for bi in layers[j].lines.size():
 				var b: Dictionary = layers[j].lines[bi]
+				var cut: bool = (has_frames[k] and is_target[j]) or (b.faint and (has_lamps[k] or j == k))
 				for q in pieces(j, bi):
-					var m1: bool = (j == k) if q[0] == b.x1 else (has_frames[k] and is_target[j])
-					var m2: bool = (j == k) if q[1] == b.x2 else (has_frames[k] and is_target[j])
+					var m1: bool = (j == k) if q[0] == b.x1 else cut
+					var m2: bool = (j == k) if q[1] == b.x2 else cut
 					ends.append([q[0] + oj, y_at(b, q[0]), j, -1, m1])
 					ends.append([q[1] + oj, y_at(b, q[1]), j, 1, m2])
 		var lefts := {}
@@ -296,6 +372,11 @@ func step(inp: Dictionary) -> void:
 			var l: Dictionary = layers[foot.L].lines[foot.line]
 			p.L = foot.L; p.line = foot.line; p.x = foot.x; p.y = y_at(l, foot.x)
 			p.vx = 0.0; p.vy = 0.0; p.ground = true
+			if not supported() or oi(foot.L) != foot.o:
+				var st := start
+				l = layers[st.layer].lines[st.line]
+				p.L = st.layer; p.line = st.line; p.x = st.x; p.y = y_at(l, st.x)
+				foot.L = st.layer; foot.line = st.line; foot.x = st.x; foot.o = oi(st.layer)
 			emit("respawn")
 		return
 
@@ -376,7 +457,7 @@ func step(inp: Dictionary) -> void:
 				var l: Dictionary = lay.lines[i]
 				if p.x < l.x1 or p.x > l.x2:
 					continue
-				if is_target[p.L]:
+				if is_target[p.L] or l.faint:
 					var inside := false
 					for q in pieces(p.L, i):
 						if p.x >= q[0] and p.x <= q[1]:
@@ -393,7 +474,11 @@ func step(inp: Dictionary) -> void:
 	if p.ground:
 		var sp2 := span()
 		if p.x >= sp2[0] + 3 and p.x <= sp2[1] - 3:
-			foot.L = p.L; foot.line = p.line; foot.x = p.x
+			foot.L = p.L; foot.line = p.line; foot.x = p.x; foot.o = oi(p.L)
+		for i in lamps.size():
+			var m: Dictionary = lamps[i]
+			if not lit[i] and p.L == m.layer and p.line == m.line and absf(p.x - m.x) <= LAMP:
+				lit[i] = true; emit("light", i)
 		if p.L == lamp.layer and p.line == lamp.line and absf(p.x - lamp.x) <= LAMP:
 			won = true; emit("win")
 

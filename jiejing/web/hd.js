@@ -47,8 +47,9 @@
     levelT = 0; nextT = -1; flash = null; bloomAt = null; landT = 0;
     scene = buildScene(LV[li]);
     particles.length = 0;
+    Sound.amb(chap(LV[li]));
   }
-  window.JJView = { start: i => start(i), get G() { return G; }, levels: () => LV, get levelT() { return levelT; }, set levelT(v) { levelT = v; } };
+  window.JJView = { start: i => start(i), feed: a => { feedQ.length = 0; feedQ.push(...a); }, get queued() { return feedQ.length; }, get G() { return G; }, levels: () => LV, get levelT() { return levelT; }, set levelT(v) { levelT = v; } };
   function resize() {
     const r = Math.min(innerWidth / W, innerHeight / H);
     cv.style.width = Math.floor(W * r) + 'px'; cv.style.height = Math.floor(H * r) + 'px';
@@ -65,14 +66,23 @@
     const C = M.comp[kind]; if (!C) return;
     const L = C.left, Mi = C.middle, R = C.right;
     const w = x2 - x1;
+    // 三截图的“桥面以下”深浅不一：一律拉到同一深度，接口处就不会一高一低
+    const solid = /bank|terrace|floor/.test(kind);          // 实心的石岸才按不透明底边对齐；木桥的桥腿细，按整图
+    const bot = m => (solid && m.bot) || m.h;
+    const D = Math.max(bot(L) - L.top, bot(Mi) - Mi.top, bot(R) - R.top);
+    const put = (name, m, x) => {
+      const im = img(name);
+      c.drawImage(im, 0, 0, m.w, m.top, x, y - m.top, m.w, m.top);
+      c.drawImage(im, 0, m.top, m.w, bot(m) - m.top, x, y, m.w, D);
+    };
     c.save(); c.beginPath(); c.rect(x1 - 2, 0, w + 4, H + 400); c.clip();
     if (w >= L.w + R.w) {
       // 中段先铺满（伸到两端头底下一截），端头压在上面，接口就不会露缝
-      for (let x = x1 + L.w * 0.45; x < x2 - R.w * 0.45; x += Mi.w - 2) c.drawImage(img('w_' + kind + '_middle'), Math.round(x), y - Mi.top);
-      c.drawImage(img('w_' + kind + '_left'), x1, y - L.top);
-      c.drawImage(img('w_' + kind + '_right'), x2 - R.w, y - R.top);
+      for (let x = x1 + L.w * 0.45; x < x2 - R.w * 0.45; x += Mi.w - 2) put('w_' + kind + '_middle', Mi, Math.round(x));
+      put('w_' + kind + '_left', L, x1);
+      put('w_' + kind + '_right', R, x2 - R.w);
     } else {
-      for (let x = x1; x < x2; x += Mi.w) c.drawImage(img('w_' + kind + '_middle'), x, y - Mi.top);
+      for (let x = x1; x < x2; x += Mi.w) put('w_' + kind + '_middle', Mi, x);
     }
     c.restore();
   }
@@ -105,6 +115,15 @@
       c.drawImage(img('w_boat'), (x1 + x2) / 2 - B.w * sc / 2, y - B.top * sc, B.w * sc, B.h * sc);
       return;
     }
+    if (l.kind === 'post') {
+      // 远处挑灯的石柱：从灯座一直落到水里
+      const x1 = pts[0][0] * S, x2 = pts[pts.length - 1][0] * S, y = pts[0][1] * S, yb = 152 * S, w = x2 - x1;
+      // 用石岸中段的石纹切一条竖着拉长，做成石柱；顶上压一块石板
+      const Bm = M.comp.bank.middle, im = img('w_bank_middle');
+      c.drawImage(im, 40, Bm.top + 6, 60, Bm.h - Bm.top - 10, x1 + w * 0.22, y + 6, w * 0.56, yb - y - 6);
+      c.drawImage(im, 0, Bm.top - 8, Bm.w, 30, x1 - 6, y - 6, w + 12, 26);
+      return;
+    }
     if (l.kind === 'arch' && !forceKind) { archHalf(c, pts, pts[0][1] < pts[pts.length - 1][1]); return; }
     const kind = forceKind || snowKind(KIND[l.kind] || 'bank', ch);
     for (let i = 1; i < pts.length; i++) {
@@ -116,6 +135,37 @@
 
   // ------------------------------------------------------------ 程序画的建筑（素材没到时顶上）：粉墙黛瓦，开月洞门 / 漏窗
   function wall(c, d, x0) {
+    const x1 = (d.x1 + x0) * S, x2 = (d.x2 + x0) * S, y1 = d.y1 * S, y2 = d.y2 * S;
+    const P = M.props;
+    if (!P.wall_m) return wallDrawn(c, d, x0);
+    const ROOF = 70;     // 粉墙图上头一截是瓦顶，不拉伸；墙身按墙高拉
+    const t = mk(x2 - x1 + 120, y2 - y1 + ROOF + 40), q = t.getContext('2d'), ox = 60, oy = ROOF + 10;
+    const put = (k, x, w, flip) => {
+      const m = P[k], im = img('p_' + k);
+      q.save(); if (flip) { q.translate(2 * x + w, 0); q.scale(-1, 1); }
+      q.drawImage(im, 0, 0, m.w, ROOF, x, oy - ROOF, w, ROOF);
+      q.drawImage(im, 0, ROOF, m.w, m.h - ROOF, x, oy, w, y2 - y1);
+      q.restore();
+    };
+    const Wm = P.wall_m.w, Wl = P.wall_l.w * 0.6;
+    for (let x = ox + Wl * 0.5; x < ox + x2 - x1 - Wl * 0.5; x += Wm - 4) put('wall_m', Math.round(x), Wm, false);
+    put('wall_l', ox - 20, Wl, false);
+    put('wall_l', ox + x2 - x1 - Wl + 20, Wl, true);
+    // 开洞，再把门、窗的图按洞对上去
+    for (const h of d.holes || []) {
+      const hx1 = (h.x1 + x0) * S - x1 + ox, hx2 = (h.x2 + x0) * S - x1 + ox, hy1 = h.y1 * S - y1 + oy, hy2 = h.y2 * S - y1 + oy;
+      const k = h.kind === 'gate' ? 'moongate' : 'lattice', m = P[k], ho = m.hole;
+      const sc = (hx2 - hx1) / (ho.x2 - ho.x1);
+      const ix = hx1 - ho.x1 * sc, iy = h.kind === 'gate' ? hy2 - ho.y2 * sc : (hy1 + hy2) / 2 - (ho.y1 + ho.y2) / 2 * sc;
+      q.save(); q.globalCompositeOperation = 'destination-out';
+      // 把门窗图整张的外框先挖掉，再贴图：墙和门窗之间就不会叠出两层瓦
+      q.fillRect(ix + m.w * sc * 0.08, Math.max(0, iy), m.w * sc * 0.84, m.h * sc - Math.max(0, -iy));
+      q.restore();
+      q.drawImage(img('p_' + k), ix, iy, m.w * sc, m.h * sc);
+    }
+    c.drawImage(t, x1 - ox, y1 - oy);
+  }
+  function wallDrawn(c, d, x0) {
     const x1 = (d.x1 + x0) * S, x2 = (d.x2 + x0) * S, y1 = d.y1 * S, y2 = d.y2 * S;
     const t = mk(x2 - x1 + 80, y2 - y1 + 80), q = t.getContext('2d'), ox = 40, oy = 60;
     // 墙身
@@ -184,7 +234,10 @@
     if (d.k === 'willow') put('willow', near ? 0.75 : 0.55);
     else if (d.k === 'pine') put(d.v === 'cliff' ? 'pine_cliff' : 'pine_upright', (near ? 0.8 : 0.5) * (d.s || 1));
     else if (d.k === 'reeds') put('reeds', near ? 0.55 : 0.4);
-    else if (d.k === 'house' || d.k === 'hall') { const w = (d.w || 46) * S; put('house', w / P.house.w * 1.25, 0.1); }
+    else if (d.k === 'house') { const w = (d.w || 46) * S; put('house', w / P.house.w * 1.25, 0.1); }
+    else if (d.k === 'hall') { const w = (d.w || 60) * S; put(P.hall ? 'hall' : 'house', w / (P.hall || P.house).w * 1.1, 0.06); }
+    else if (d.k === 'pavilion' && P.pavilion) put('pavilion', (d.s || 1) * (near ? 0.7 : 0.45));
+    else if (d.k === 'pagoda' && P.pagoda) put('pagoda', (d.s || 1) * 0.42);
     
   }
 
@@ -204,8 +257,13 @@
         if (l.faint) {
           // 虚线：先画虚桥；实的那一版另画一张，点亮的段再贴上去
           drawLine(q, l, ch, 'ghost');
+          // 再勾一道淡墨虚线，一眼看得出“这里本该有路”
+          q.save(); q.lineCap = 'round'; q.setLineDash([22, 16]);
+          q.strokeStyle = ch === 3 ? 'rgba(226,234,255,0.85)' : 'rgba(58,58,70,0.6)'; q.lineWidth = 6;
+          q.beginPath(); l.pts.forEach((p2, i) => (i ? q.lineTo : q.moveTo).call(q, p2[0] * S, p2[1] * S + 3)); q.stroke();
+          q.setLineDash([]); q.restore();
           const s = mk((maxX - minX) * S, H), sq = s.getContext('2d');
-          sq.translate(-minX * S, 0); drawLine(sq, Object.assign({}, l, { faint: false }), ch);
+          sq.translate(-minX * S, 0); drawLine(sq, Object.assign({}, l, { faint: false, kind: l.kind === 'ghost' ? 'plank' : l.kind }), ch);
           sc.faint.push({ k, bi, c: s, minX });
         } else drawLine(q, l, ch);
       });
@@ -269,7 +327,10 @@
     const i = P.indexOf(G.sel);
     return P[(i + d + P.length) % P.length];
   }
+  // 回放：排进来的按键一帧一个，代替键盘（测试和“看解法”用）
+  const feedQ = [];
   function readInput() {
+    if (feedQ.length) return feedQ.shift();
     const k = keys, once = c => { const v = pressed[c]; pressed[c] = false; return !!v; };
     const shift = !!(k.ShiftLeft || k.ShiftRight);
     let sel = -1;
@@ -316,6 +377,7 @@
     if (selT > 0) selT--;
     for (const i in lightT) lightT[i]++;
     stepParticles();
+    Sound.tick();
     if (nextT > 0 && --nextT === 0) start(li + 1);
   }
   const lightT = {};
@@ -393,8 +455,9 @@
       if (sy < 0) break;
       const amp = 1.2 + i * 0.03;
       const dx = Math.sin(i * 0.21 + t * 0.07) * amp + Math.sin(i * 0.053 - t * 0.031) * amp * 0.8;
-      refG.drawImage(cv, 0, sy, W, 1, dx, i, W, 1);
-      refG.drawImage(fgC, 0, sy, W, 1, dx, i, W, 1);
+      // 两边各多画 12 像素，波动时边缘不露底
+      refG.drawImage(cv, 0, sy, W, 1, dx - 12, i, W + 24, 1);
+      refG.drawImage(fgC, 0, sy, W, 1, dx - 12, i, W + 24, 1);
     }
     // 倒影偏淡、偏冷，往下渐渐看不清
     refG.globalCompositeOperation = 'source-atop';
@@ -403,7 +466,8 @@
     else { tint.addColorStop(0, 'rgba(200,210,208,0.30)'); tint.addColorStop(1, 'rgba(150,170,175,0.65)'); }
     refG.fillStyle = tint; refG.fillRect(0, 0, W, R);
     refG.globalCompositeOperation = 'source-over';
-    g.drawImage(refC, 0, 0, W, R, 0, wy, W, R);
+    // 倒影整体略糊一点：岸上任何一道硬边在水里都不该是一条贯穿全宽的细线
+    g.save(); g.filter = 'blur(1.6px)'; g.drawImage(refC, 0, 0, W, R, 0, wy, W, R); g.restore();
     // 水纹：生成的水面贴图淡淡叠上去，慢慢漂
     if (B.water) { g.globalAlpha = 0.28; tile(img(B.water), t * 0.25, wy, 0, R); g.globalAlpha = 1; }
     // 横向的亮纹：一道道短的波光，缓慢移动
@@ -421,10 +485,10 @@
     }
     g.restore();
     // 岸线：一条很淡的亮雾，把岸和水接起来
-    const sh = g.createLinearGradient(0, wy - 30, 0, wy + 70);
+    const sh = g.createLinearGradient(0, wy - 16, 0, wy + 40);
     const mc = night ? '120,130,150' : '238,234,222';
-    sh.addColorStop(0, 'rgba(' + mc + ',0)'); sh.addColorStop(0.3, 'rgba(' + mc + ',' + (night ? 0.2 : 0.5) + ')'); sh.addColorStop(1, 'rgba(' + mc + ',0)');
-    g.fillStyle = sh; g.fillRect(0, wy - 30, W, 100);
+    sh.addColorStop(0, 'rgba(' + mc + ',0)'); sh.addColorStop(0.3, 'rgba(' + mc + ',' + (night ? 0.12 : 0.2) + ')'); sh.addColorStop(1, 'rgba(' + mc + ',0)');
+    g.fillStyle = sh; g.fillRect(0, wy - 16, W, 56);
   }
   function drawLayer(k) {
     const L = LV[li], sl = scene.layers[k];
@@ -676,10 +740,69 @@
       gn.gain.setValueAtTime(v, now); gn.gain.exponentialRampToValueAtTime(0.0005, now + 0.12);
       o.connect(gn); gn.connect(master); o.start(); o.stop(now + 0.13);
     }
+    // ---- 环境声：水声底子（褐噪声低通、慢慢起伏）+ 每卷各自的点缀（春鸟、暮风、夜虫、冬风），
+    //      再加一把很稀的琴：隔几秒在低音区拨一个五声音，经过一道回声。全部现场合成，不用录音。
+    let bed = null, ambCh = 0, muted = false, echo = null;
+    function noiseBuf(a, sec, brown) {
+      const n = Math.floor(a.sampleRate * sec), b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0);
+      let s = 11, last = 0;
+      for (let i = 0; i < n; i++) { s = (s * 16807) % 2147483647; const w = (s / 2147483647) * 2 - 1; if (brown) { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; } else d[i] = w; }
+      return b;
+    }
+    function startBed(ch) {
+      const a = ensure(); if (!a) return;
+      if (!echo) {
+        echo = a.createDelay(2); echo.delayTime.value = 0.42; const fb = a.createGain(); fb.gain.value = 0.38; const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1600;
+        echo.connect(lp); lp.connect(fb); fb.connect(echo); lp.connect(master);
+      }
+      if (bed) { const old = bed; old.g.gain.setTargetAtTime(0, a.currentTime, 0.6); setTimeout(() => { try { old.src.stop(); old.wind && old.wind.stop(); } catch (e) { } }, 3000); }
+      const src = a.createBufferSource(); src.buffer = noiseBuf(a, 6, true); src.loop = true;
+      const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = ch === 4 ? 380 : 520;
+      const g = a.createGain(); g.gain.value = 0;
+      const lfo = a.createOscillator(), lg = a.createGain(); lfo.frequency.value = 0.13; lg.gain.value = 0.025; lfo.connect(lg); lg.connect(g.gain); lfo.start();
+      src.connect(lp); lp.connect(g); g.connect(master); src.start();
+      g.gain.setTargetAtTime(muted ? 0 : 0.07, a.currentTime, 1.2);
+      let wind = null;
+      if (ch === 2 || ch === 4) {      // 风：白噪声过一个慢慢游走的带通
+        wind = a.createBufferSource(); wind.buffer = noiseBuf(a, 5, false); wind.loop = true;
+        const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8; bp.frequency.value = 500;
+        const wl = a.createOscillator(), wg = a.createGain(); wl.frequency.value = 0.07; wg.gain.value = 260; wl.connect(wg); wg.connect(bp.frequency); wl.start();
+        const wv = a.createGain(); wv.gain.value = ch === 4 ? 0.035 : 0.018;
+        wind.connect(bp); bp.connect(wv); wv.connect(g); wind.start();
+      }
+      bed = { src, g, wind };
+    }
+    function chirp(f1, f2, dur, v, t0) {        // 鸟叫、虫鸣：一声短促的滑音
+      const a = ensure(); if (!a || muted) return;
+      const o = a.createOscillator(), g = a.createGain(), t = a.currentTime + (t0 || 0);
+      o.type = 'sine'; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + dur * 0.2); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.02);
+    }
+    const LOW = [98.0, 110.0, 130.81, 146.83, 164.81, 196.0, 220.0, 261.63];
+    let seed = 3, tickN = 0;
+    const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    function ambTick() {          // 每帧调一次
+      if (!ac || muted || !ambCh) return;
+      if (!bed) startBed(ambCh);
+      tickN++;
+      if (tickN % 30) return;     // 半秒判一次
+      const r = rand();
+      if (r < 0.09) {             // 琴：一两个低音，带回声
+        const f = LOW[Math.floor(rand() * LOW.length)], b = pluckBuf(f); if (!b) return;
+        const s = ac.createBufferSource(), gn = ac.createGain(); s.buffer = b; gn.gain.value = 0.13;
+        s.connect(gn); gn.connect(master); gn.connect(echo); s.start();
+        if (rand() < 0.4) { const f2 = LOW[Math.min(LOW.length - 1, LOW.indexOf(f) + 2)], s2 = ac.createBufferSource(), g2 = ac.createGain(); s2.buffer = pluckBuf(f2); g2.gain.value = 0.09; s2.connect(g2); g2.connect(master); g2.connect(echo); s2.start(ac.currentTime + 0.5); }
+      } else if (ambCh === 1 && r < 0.16) { for (let i = 0; i < 2 + Math.floor(rand() * 3); i++) chirp(2600 + rand() * 900, 3400 + rand() * 600, 0.09, 0.018, i * 0.13); }
+      else if (ambCh === 3 && r < 0.3) { for (let i = 0; i < 3; i++) chirp(4200, 4000, 0.04, 0.008, i * 0.07); }
+    }
+    addEventListener('keydown', e => { if (e.code === 'KeyM') { muted = !muted; if (bed && ac) bed.g.gain.setTargetAtTime(muted ? 0 : 0.07, ac.currentTime, 0.3); if (master) master.gain.value = muted ? 0 : 0.9; } });
     let step = 2;
     const up = () => { const f = PENT[Math.min(PENT.length - 1, step)]; step = Math.min(PENT.length - 1, step + 1); return f; };
     return {
-      wake: ensure,
+      wake() { ensure(); if (ambCh && !bed) startBed(ambCh); },
+      amb(ch) { ambCh = ch; if (ac) startBed(ch); },
+      tick: ambTick,
       reset() { step = 2; },
       ev(n, a) {
         if (n === 'settle') { if (a[1]) pluck(up(), 0.28); else knock(220, 0.05); }
